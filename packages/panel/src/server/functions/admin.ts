@@ -3,10 +3,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
-import { Node, Plugin, Server } from '~/db/entities';
+import { Node, Plugin, Server, User } from '~/db/entities';
 import { parsePlugin, type Plugin as PluginDefinition } from '@mojito/contract';
 import { requireUser, requireAdmin, HttpError } from '../session';
 import { encryptSecret } from '../crypto';
+import { agentHealth } from '../agent/client';
 import { createNodeSchema, deleteNodeSchema } from '~/validators/node';
 import {
   importPluginsSchema,
@@ -353,3 +354,90 @@ export const deletePluginFn = createServerFn({ method: 'POST' })
     await em.flush();
     return { deleted: true };
   });
+
+// ─── Overview (admin dashboard) ───────────────────────────────────────────────
+
+/** Timeout of one agent healthcheck — a dashboard load must stay snappy. */
+const AGENT_PING_TIMEOUT_MS = 2500;
+
+/**
+ * Admin dashboard data: global counters, node health (live agent ping of
+ * the public /health route — also refreshes status/lastSeenAt in DB) and
+ * the 5 most recent servers.
+ */
+export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAdmin();
+  const orm = await initOrm();
+  const em = orm.em.fork();
+
+  const [serverCount, nodeCount, userCount, pluginCount] = await Promise.all([
+    em.count(Server),
+    em.count(Node),
+    em.count(User),
+    em.count(Plugin),
+  ]);
+
+  const [servers, nodes, plugins, users] = await Promise.all([
+    em.find(Server, {}),
+    em.find(Node, {}),
+    em.find(Plugin, {}),
+    em.find(User, {}),
+  ]);
+
+  const runningCount = servers.filter((s) => s.status === 'running').length;
+  const installingCount = servers.filter((s) => s.status === 'installing').length;
+
+  // Live agent healthcheck (parallel, short timeout — an offline node
+  // must not slow the whole dashboard down)
+  const pings = await Promise.allSettled(
+    nodes.map((node) => agentHealth(node, { signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS) })),
+  );
+  const now = new Date();
+  nodes.forEach((node, index) => {
+    const ping = pings[index];
+    if (ping.status === 'fulfilled') {
+      node.status = 'online';
+      node.lastSeenAt = now;
+    } else {
+      node.status = 'offline';
+    }
+  });
+  if (nodes.length > 0) await em.flush();
+
+  const nodeDtos = nodes.map((node, index) => ({
+    id: node.id,
+    name: node.name,
+    fqdn: node.fqdn,
+    agentPort: node.agentPort,
+    status: node.status,
+    lastSeenAt: node.lastSeenAt,
+    agentVersion: pings[index].status === 'fulfilled' ? (pings[index].value.version ?? null) : null,
+    serverCount: servers.filter((s) => s.nodeId === node.id).length,
+  }));
+
+  const recentServers = [...servers]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5)
+    .map((server) => ({
+      id: server.id,
+      name: server.name,
+      status: server.status,
+      nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
+      pluginName: plugins.find((p) => p.id === server.pluginId)?.name ?? '—',
+      ownerEmail: users.find((u) => u.id === server.ownerId)?.email ?? '—',
+      createdAt: server.createdAt,
+    }));
+
+  return {
+    counts: {
+      servers: serverCount,
+      running: runningCount,
+      installing: installingCount,
+      nodes: nodeCount,
+      users: userCount,
+      plugins: pluginCount,
+    },
+    nodes: nodeDtos,
+    recentServers,
+  };
+});

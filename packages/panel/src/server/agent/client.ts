@@ -1,5 +1,5 @@
 import type { INode } from '~/db/types';
-import type { InstallStatus, ServerAction, FileObject } from '@mojito/contract';
+import type { HealthResponse, InstallStatus, ServerAction, FileObject } from '@mojito/contract';
 import { decryptSecret } from '../crypto';
 
 /**
@@ -12,6 +12,8 @@ import { decryptSecret } from '../crypto';
 interface AgentCallOptions {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
+  /** Abort the call (timeout, e.g. dashboard agent healthchecks). */
+  signal?: AbortSignal;
 }
 
 export class AgentError extends Error {
@@ -39,6 +41,7 @@ async function agentCall<T>(
       ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
@@ -83,8 +86,11 @@ export interface AgentActionResponse {
 
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
-export async function agentHealth(node: INode): Promise<{ status: string }> {
-  return agentCall(node, '/health');
+export async function agentHealth(
+  node: INode,
+  options: { signal?: AbortSignal } = {},
+): Promise<HealthResponse> {
+  return agentCall(node, '/health', options);
 }
 
 export async function agentInstallServer(

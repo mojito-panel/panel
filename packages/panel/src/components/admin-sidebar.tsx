@@ -28,7 +28,7 @@ import {
  * are still placeholders (roadmap view).
  */
 const adminItems = [
-  { title: 'Vue d’ensemble', url: '/admin', icon: LayoutDashboard, soon: true },
+  { title: 'Vue d’ensemble', url: '/admin', icon: LayoutDashboard, soon: false },
   { title: 'Serveurs', url: '/admin/servers', icon: Server, soon: true },
   { title: 'Nodes', url: '/admin/nodes', icon: Network, soon: false },
   { title: 'Plugins', url: '/admin/plugins', icon: Puzzle, soon: false },
