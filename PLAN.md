@@ -417,6 +417,7 @@ Navigateur ◀──auth-ok + logs stream───── Agent (chaque message e
 - AppContainer / isolation réseau
 - Multi-nodes avec scheduler de placement
 - Facturation/quotas par user
+- **Cache de runtimes partagé** : .bin global (java, steamcmd…) — extension du contract (nouvelle action `runtime` + var système `{{AGENT_BIN_DIR}}`) ; V1 = .bin par serveur (plugin minecraft déjà fait)
 - **Users Windows locaux + ACL NTFS** (isolation FS par serveur)
 
 ---

@@ -37,6 +37,26 @@ describe('plugin minecraft-vanilla', () => {
       'ONLINE_MODE',
       'VIEW_DISTANCE',
       'JVM_ARGS',
+      'JAVA_MAJOR',
     ]);
+  });
+
+  it('embarque un JRE portable dans .bin/java (pas de Java hôte requis)', () => {
+    const parsed = safeParsePlugin(raw);
+    if (!parsed.success) throw parsed.error;
+    const install = parsed.data.install;
+    // 3 premières étapes : download JRE → extract → cleanup zip
+    expect(install[0]).toMatchObject({ action: 'download', dest: '.bin/java.zip' });
+    expect(String(install[0].url)).toContain('api.adoptium.net');
+    expect(install[0].url).toContain('{{JAVA_MAJOR}}');
+    expect(install[1]).toMatchObject({
+      action: 'extract',
+      archive: '.bin/java.zip',
+      dest: '.bin/java',
+      stripComponents: 1,
+    });
+    const BS = String.fromCharCode(92);
+    expect(parsed.data.start.command).toContain('.bin' + BS + 'java' + BS + 'bin' + BS + 'java.exe');
+    expect(parsed.data.runtime).toBeUndefined();
   });
 });

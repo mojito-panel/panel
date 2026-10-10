@@ -3,14 +3,18 @@
   "id": "minecraft-vanilla",
   "name": "Minecraft Vanilla",
   "author": "Mojito Panel",
-  "description": "Serveur Minecraft officiel (vanilla) de Mojang. Le JAR est résolu depuis le manifeste piston-meta, toute version publiée ou 'latest' est supportée.",
-  "tags": ["minecraft", "vanilla", "mojang"],
-  "features": ["eula", "java_version"],
+  "description": "Serveur Minecraft officiel (vanilla) de Mojang. Le JAR est resolu depuis le manifeste piston-meta, toute version publiee ou 'latest' est supportee. Un JRE Temurin portable est telecharge dans .bin/java — aucun Java n'est requis sur l'hote.",
+  "tags": [
+    "minecraft",
+    "vanilla",
+    "mojang"
+  ],
+  "features": [
+    "eula",
+    "java_version"
+  ],
   "requirements": {
     "minRamMb": 1024
-  },
-  "runtime": {
-    "java": ">=17"
   },
   "variables": [
     {
@@ -94,9 +98,37 @@
       "sort": 7,
       "required": false,
       "pattern": "^$|^[-A-Za-z0-9_=:.%+ ]+$"
+    },
+    {
+      "env": "JAVA_MAJOR",
+      "name": "Version Java (JRE embarque)",
+      "description": "Version majeure du JRE Temurin telecharge dans .bin/java. Minecraft 1.20.5+ requiert 21 ; les serveurs 1.16-1.17.1 necessitent 17 ; avant 1.16, 8 ou 11.",
+      "type": "number",
+      "defaultValue": 21,
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 8,
+      "required": false,
+      "min": 8,
+      "max": 25
     }
   ],
   "install": [
+    {
+      "action": "download",
+      "url": "https://api.adoptium.net/v3/binary/latest/{{JAVA_MAJOR}}/ga/windows/x64/jre/hotspot/normal/eclipse?project=jdk",
+      "dest": ".bin/java.zip"
+    },
+    {
+      "action": "extract",
+      "archive": ".bin/java.zip",
+      "dest": ".bin/java",
+      "stripComponents": 1
+    },
+    {
+      "action": "command",
+      "command": "del .bin\\java.zip"
+    },
     {
       "action": "script",
       "shell": "powershell",
@@ -123,7 +155,7 @@
     }
   ],
   "start": {
-    "command": "java -Xms{{SERVER_MEMORY}}M -Xmx{{SERVER_MEMORY}}M {{JVM_ARGS}} -jar server.jar --port {{SERVER_PORT}} --nogui",
+    "command": ".bin\\java\\bin\\java.exe -Xms{{SERVER_MEMORY}}M -Xmx{{SERVER_MEMORY}}M {{JVM_ARGS}} -jar server.jar --port {{SERVER_PORT}} --nogui",
     "stop": {
       "type": "command",
       "value": "stop",
