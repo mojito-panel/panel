@@ -228,6 +228,12 @@ export const pluginSchema = z.object({
 
 export type Plugin = z.infer<typeof pluginSchema>;
 
+/** Type d'entrée du schéma plugin (champs avec defaults optionnels). */
+export type PluginInput = z.input<typeof pluginSchema>;
+
+/** Type d'entrée d'une action du runner (champs avec defaults optionnels). */
+export type RunnerActionInput = z.input<typeof runnerActionSchema>;
+
 // ─── Helpers de validation ────────────────────────────────────────────────────
 
 /**

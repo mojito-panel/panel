@@ -213,7 +213,8 @@ mojito-panel/
 
 ### Phase 1 — Cœur de l'agent (2–4 semaines)
 
-- [ ] Runner d'étapes : `download`, `write`, `extract`, `command`, `replace` + templating
+- [x] Runner d'étapes : `download`, `write`, `extract`, `command`, `replace`, `configFile`, `script` + templating `{{ENV_VAR}}`
+- [x] Route `POST /servers/install` (API agent) branchée sur le runner
 - [ ] node-pty : spawn + attach console, envoi de commandes, buffer de logs
 - [ ] Stop gracieux (command/signal + timeout → kill)
 - [ ] Cleanup : suppression dossier à la suppression du serveur

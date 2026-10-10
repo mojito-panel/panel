@@ -1,7 +1,15 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { AgentConfig } from '../config';
-import type { HealthResponse } from '@mojito/contract';
+import {
+  installServerRequestSchema,
+  pluginSchema,
+  serverAllocationSchema,
+  type HealthResponse,
+  type InstallServerRequest,
+} from '@mojito/contract';
+import { runInstall } from '../runner';
+import type { SystemVariables } from '../runner/templating';
 
 const startTime = Date.now();
 
@@ -24,6 +32,20 @@ function isAuthorized(request: FastifyRequest, expectedTokenHash: string): boole
   const b = Buffer.from(expectedTokenHash, 'hex');
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+/**
+ * Construit les variables système de l'agent depuis la requête d'installation.
+ */
+function buildSystemVariables(request: InstallServerRequest): SystemVariables {
+  return {
+    SERVER_UUID: request.serverId,
+    SERVER_NAME: request.name,
+    SERVER_MEMORY: request.allocation.memoryMb,
+    SERVER_PORT: request.allocation.port,
+    SERVER_IP: request.allocation.ip,
+    SERVER_INSTALL_DIR: request.installDir,
+  };
 }
 
 /**
@@ -52,12 +74,49 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     }
   });
 
-  // ─── Liste des serveurs (stub V1) ──────────────────────────────────────────
+  // ─── Installation d'un serveur (runner d'étapes du plugin) ─────────────────
+  app.post('/servers/install', async (request, reply) => {
+    const parsed = installServerRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'Requête invalide',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+    }
+
+    const pluginResult = pluginSchema.safeParse(parsed.data.plugin);
+    if (!pluginResult.success) {
+      return reply.code(400).send({
+        error: 'Plugin invalide',
+        details: pluginResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+    }
+
+    const result = await runInstall({
+      plugin: pluginResult.data,
+      variables: parsed.data.variables,
+      systemVariables: buildSystemVariables(parsed.data),
+      installDir: parsed.data.installDir,
+      // Progression temps réel via WS : phase 3. Pour l'instant, l'appel est synchrone.
+    });
+
+    if (!result.success) {
+      return reply.code(422).send({ error: result.error });
+    }
+
+    return {
+      serverId: parsed.data.serverId,
+      status: 'stopped',
+      message: 'Installation terminée',
+    };
+  });
+
+  // ─── Liste des serveurs (stub — persistance en phase 3) ────────────────────
   app.get('/servers', async () => {
     return { servers: [] };
   });
 
-  // ─── Info d'un serveur (stub V1) ───────────────────────────────────────────
+  // ─── Info d'un serveur (stub — process manager en phase 1) ─────────────────
   app.get<{ Params: { serverId: string } }>('/servers/:serverId', async (request) => {
     return {
       serverId: request.params.serverId,
@@ -71,3 +130,5 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
 
   return app;
 }
+
+export { serverAllocationSchema };

@@ -17,11 +17,22 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
 // ─── Server lifecycle (panel → agent) ─────────────────────────────────────────
 
+/** Allocation du serveur — source des variables système (SERVER_PORT, SERVER_MEMORY...). */
+export const serverAllocationSchema = z.object({
+  port: z.number().int().positive(),
+  memoryMb: z.number().int().positive(),
+  ip: z.string().default('0.0.0.0'),
+});
+
+export type ServerAllocationPayload = z.infer<typeof serverAllocationSchema>;
+
 export const installServerRequestSchema = z.object({
   serverId: z.string().uuid(),
+  name: z.string().min(1),
   plugin: z.unknown(), // Plugin validé côté panel, transmis tel quel
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   installDir: z.string().min(1),
+  allocation: serverAllocationSchema,
 });
 
 export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;

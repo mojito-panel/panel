@@ -8,7 +8,7 @@ import type {
   Plugin,
   Server,
   ServerAllocation,
-} from './entities.ts';
+} from './entities';
 
 // ─── Types inférés des entités MikroORM ───────────────────────────────────────
 

@@ -35,11 +35,27 @@ describe('installServerRequestSchema', () => {
   it('valide une requête d\'installation', () => {
     const result = installServerRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'mon-serveur',
       plugin: { id: 'minecraft' },
-      variables: { ram_mb: 2048, motd: 'Hello' },
+      variables: { RAM_MB: 2048, motd: 'Hello' },
       installDir: 'C:\\PanelData\\servers\\abc',
+      allocation: { port: 25565, memoryMb: 4096 },
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.allocation.ip).toBe('0.0.0.0'); // default
+    }
+  });
+
+  it('rejette une installation sans allocation', () => {
+    const result = installServerRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'mon-serveur',
+      plugin: {},
+      variables: {},
+      installDir: '/tmp',
+    });
+    expect(result.success).toBe(false);
   });
 
   it('rejette un serverId non-UUID', () => {

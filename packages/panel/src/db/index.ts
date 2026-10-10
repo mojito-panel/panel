@@ -11,7 +11,7 @@ import {
   Plugin,
   Server,
   ServerAllocation,
-} from './entities.ts';
+} from './entities';
 
 const dbPath = resolve(process.env.DATABASE_PATH ?? './data/mojito.db');
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -27,7 +27,7 @@ export const ormConfig = {
   entities: [User, Session, Account, Verification, Node, Plugin, Server, ServerAllocation],
   extensions: [Migrator],
   debug: process.env.NODE_ENV !== 'production',
-} as const;
+};
 
 let orm: MikroORM | null = null;
 
@@ -49,5 +49,5 @@ export function getOrm(): MikroORM {
   return orm;
 }
 
-export * from './entities.ts';
-export * from './types.ts';
+export * from './entities';
+export * from './types';
