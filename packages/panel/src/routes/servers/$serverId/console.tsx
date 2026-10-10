@@ -1,18 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { useEffect } from 'react';
 import { useState } from 'react';
 import { useRef } from 'react';
 import type { FormEvent } from 'react';
 import type { ConsoleClientMessage, ServerStatus } from '@mojito/contract';
 import {
   getServerFn,
+  getInstallStatusFn,
   serverActionFn,
   sendCommandFn,
 } from '~/server/functions/servers';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { XtermConsole } from '~/components/console/xterm-console';
+import { InstallPanel } from '~/components/console/install-panel';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
   component: ServerConsolePage,
@@ -46,6 +49,22 @@ function ServerConsolePage() {
     queryFn: () => getServer({ data: { serverId, after: 0 } }),
     refetchInterval: 5000,
   });
+
+  // Live install/reinstall progress — replaces the console while it runs
+  const getInstallStatus = useServerFn(getInstallStatusFn);
+  const installQuery = useQuery({
+    queryKey: ['install-status', serverId],
+    queryFn: () => getInstallStatus({ data: { serverId, after: 0 } }),
+    refetchInterval: (q) => (q.state.data?.status === 'installing' ? 1500 : false),
+  });
+
+  // Install finished → refresh the server (status stopped) and the list
+  useEffect(() => {
+    if (installQuery.data?.status === 'installed') {
+      void queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      void queryClient.invalidateQueries({ queryKey: ['servers'] });
+    }
+  }, [installQuery.data?.status, queryClient, serverId]);
 
   const action = useMutation({
     mutationFn: (a: 'start' | 'stop' | 'restart' | 'kill') =>
@@ -81,6 +100,16 @@ function ServerConsolePage() {
     }
     setCommand('');
   };
+
+  // Install (or reinstall) in progress / failed → dedicated panel
+  const installStatus = installQuery.data;
+  if (installStatus && (installStatus.status === 'installing' || installStatus.status === 'failed')) {
+    return (
+      <main className="mx-auto max-w-4xl p-8">
+        <InstallPanel serverId={serverId} status={installStatus} />
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-4xl p-8">

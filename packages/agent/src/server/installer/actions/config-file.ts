@@ -14,8 +14,9 @@ type ConfigFileAction = RunnerActionInput & { action: 'configFile' };
  * A missing file is CREATED with the `find` entries (parsers already
  * append missing keys at the end of the file) — e.g. server.properties does
  * not exist before the Minecraft server's first boot.
+ * Returns the resolved file path (install log).
  */
-export async function runConfigFile(action: ConfigFileAction, ctx: ActionContext): Promise<void> {
+export async function runConfigFile(action: ConfigFileAction, ctx: ActionContext): Promise<string> {
   const filePath = resolvePath(ctx.installDir, render(action.file, ctx.vars));
 
   let content = '';
@@ -33,4 +34,5 @@ export async function runConfigFile(action: ConfigFileAction, ctx: ActionContext
   const newContent = applyParser(action.parser, content, templatedFind);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, newContent, 'utf-8');
+  return filePath;
 }

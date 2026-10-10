@@ -47,8 +47,9 @@ export function resolveZipEntryPath(
 
 /**
  * `extract` action: extracts a zip archive into a destination directory.
+ * Returns the number of files extracted (install log).
  */
-export async function runExtract(action: ExtractAction, ctx: ActionContext): Promise<void> {
+export async function runExtract(action: ExtractAction, ctx: ActionContext): Promise<number> {
   const archivePath = resolvePath(ctx.installDir, render(action.archive, ctx.vars));
   const destDir = resolvePath(ctx.installDir, render(action.dest, ctx.vars));
 
@@ -56,11 +57,14 @@ export async function runExtract(action: ExtractAction, ctx: ActionContext): Pro
 
   const zip = new AdmZip(archivePath);
 
+  let files = 0;
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
 
     const targetPath = resolveZipEntryPath(destDir, entry.entryName, action.stripComponents);
     await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(targetPath, entry.getData());
+    files++;
   }
+  return files;
 }

@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket';
 import type { AgentConfig } from '../config';
 import { ServerManager } from '../server/manager';
 import { ServerStore } from '../internal/server-store';
+import { InstallRegistry } from '../server/installer/registry';
 import { registerAuthenticationHook, hashToken } from './middleware';
 import { registerSystemRoutes } from './router-system';
 import { registerServerRoutes } from './router-server';
@@ -40,6 +41,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
 
   const store = new ServerStore(config.dataDir);
   const manager = new ServerManager({ store });
+  const registry = new InstallRegistry();
 
   // ─── Authentication hook (except /health and the console WS) ────────────
   registerAuthenticationHook(app, hashToken(config.token));
@@ -48,7 +50,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
   registerSystemRoutes(app, config);
 
   // ─── Server routes (panel token) ─────────────────────────────────────────
-  registerServerRoutes(app, { config, manager, store });
+  registerServerRoutes(app, { config, manager, store, registry });
 
   // ─── Browser console WS (JWT auth, log streaming, commands, power) ──────
   // Own scope: the websocket plugin must be booted BEFORE the

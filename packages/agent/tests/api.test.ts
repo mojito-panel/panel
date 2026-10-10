@@ -18,6 +18,53 @@ const config: AgentConfig = {
   version: '0.1.0-test',
 };
 
+const SERVER_ID = '550e8400-e29b-41d4-a716-446655440000';
+const OTHER_ID = '660e8400-e29b-41d4-a716-446655440000';
+
+/**
+ * Installs run IN THE BACKGROUND since the tracked-install rework:
+ * POST /servers/install returns 202 immediately, the runner records every
+ * step in the registry. This helper polls the install status until the
+ * install completes (or fails) and returns the final status.
+ */
+async function waitForInstall(
+  app: FastifyInstance,
+  serverId: string,
+  auth: Record<string, string>,
+  timeoutMs = 10_000,
+): Promise<{ status: string; error: string | null; logs: { message: string; level: string }[] }> {
+  const startedAt = Date.now();
+  for (;;) {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/servers/${serverId}/install`,
+      headers: auth,
+    });
+    if (res.statusCode === 200) {
+      const body = res.json();
+      if (body.status === 'installed' || body.status === 'failed') {
+        return body;
+      }
+    }
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`L'installation de ${serverId} n'a pas terminé à temps`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+const validPlugin = (install: unknown[] = [
+  { action: 'write', file: 'marker.txt', content: 'port={{SERVER_PORT}}' },
+]) => ({
+  schemaVersion: 2,
+  id: 'test-plugin',
+  name: 'Test',
+  author: 'moi',
+  variables: [{ env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 }],
+  install,
+  start: { command: 'echo {{SERVER_PORT}}' },
+});
+
 describe('Agent API (Fastify)', () => {
   let app: FastifyInstance;
 
@@ -80,7 +127,7 @@ describe('Agent API (Fastify)', () => {
     it('retourne 404 pour un serveur inconnu', async () => {
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/550e8400-e29b-41d4-a716-446655440000',
+        url: `/servers/${OTHER_ID}`,
         headers: { authorization: `Bearer ${TEST_TOKEN}` },
       });
       expect(res.statusCode).toBe(404);
@@ -89,22 +136,12 @@ describe('Agent API (Fastify)', () => {
   });
 });
 
-// ─── POST /servers/install route (runner) ─────────────────────────────────────
+// ─── POST /servers/install route (runner, background) ────────────────────────
 
 describe('Agent API — POST /servers/install', () => {
   let app: FastifyInstance;
   let tmpDir: string;
   const auth = { authorization: `Bearer ${TEST_TOKEN}` };
-
-  const validPlugin = {
-    schemaVersion: 2,
-    id: 'test-plugin',
-    name: 'Test',
-    author: 'moi',
-    variables: [{ env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 }],
-    install: [{ action: 'write', file: 'marker.txt', content: 'port={{SERVER_PORT}}' }],
-    start: { command: 'echo {{SERVER_PORT}}' },
-  };
 
   beforeAll(async () => {
     app = createAgentServer(config);
@@ -118,9 +155,9 @@ describe('Agent API — POST /servers/install', () => {
   });
 
   const installBody = (overrides: Record<string, unknown> = {}) => ({
-    serverId: '550e8400-e29b-41d4-a716-446655440000',
+    serverId: SERVER_ID,
     name: 'mon-serveur',
-    plugin: validPlugin,
+    plugin: validPlugin(),
     variables: {},
     installDir: join(config.dataDir, 'srv'),
     allocation: { port: 25565, memoryMb: 2048 },
@@ -160,59 +197,103 @@ describe('Agent API — POST /servers/install', () => {
     expect(body.error).toBe('Plugin invalide');
   });
 
-  it('installe un serveur valide et exécute le runner', async () => {
+  it('retourne 422 (immédiat) si une variable du template est inconnue', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody({
+        plugin: validPlugin([
+          { action: 'write', file: 'x.txt', content: '{{UNKNOWN_VAR}}' },
+        ]),
+      }),
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toContain('UNKNOWN_VAR');
+  });
+
+  it('démarre l’installation en arrière-plan (202) puis l’exécute', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody(),
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(202);
     const body = res.json();
-    expect(body.serverId).toBe('550e8400-e29b-41d4-a716-446655440000');
-    expect(body.status).toBe('stopped');
+    expect(body.serverId).toBe(SERVER_ID);
+    expect(body.status).toBe('installing');
+
+    // The runner runs in the background — wait for completion
+    const status = await waitForInstall(app, SERVER_ID, auth);
+    expect(status.status).toBe('installed');
+    expect(status.error).toBeNull();
 
     // The runner did run the write action with the SERVER_PORT system variable
     const { readFile } = await import('node:fs/promises');
     const marker = await readFile(join(config.dataDir, 'srv', 'marker.txt'), 'utf-8');
     expect(marker).toBe('port=25565');
+
+    // The step-by-step trail is recorded (debugging aid)
+    const logText = status.logs.map((l) => l.message).join('\n');
+    expect(logText).toContain('Étape 1/1');
+    expect(logText).toContain('Écriture de marker.txt');
+    expect(logText).toContain('Installation terminée');
   });
 
-  it('retourne 422 si une étape du runner échoue', async () => {
+  it('enregistre la sortie des commandes (stdout) dans les logs d’installation', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody({
-        plugin: {
-          ...validPlugin,
-          install: [
-            { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
-          ],
-        },
+        plugin: validPlugin([
+          { action: 'command', command: 'echo mojito-install-output' },
+        ]),
       }),
     });
-    expect(res.statusCode).toBe(422);
-    const body = res.json();
-    expect(body.error).toContain('Étape 1');
+    expect(res.statusCode).toBe(202);
+
+    const status = await waitForInstall(app, SERVER_ID, auth);
+    expect(status.status).toBe('installed');
+    const logText = status.logs.map((l) => l.message).join('\n');
+    expect(logText).toContain('mojito-install-output');
+  });
+
+  it('échoue en arrière-plan si une étape du runner échoue (status failed)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody({
+        plugin: validPlugin([
+          { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
+        ]),
+      }),
+    });
+    // Accepted (validation OK) — the download failure is a RUNNER failure
+    expect(res.statusCode).toBe(202);
+
+    const status = await waitForInstall(app, SERVER_ID, auth);
+    expect(status.status).toBe('failed');
+    expect(status.error).toContain('Étape 1');
   });
 
   it('après install : GET 200 stopped, action 404/400, command 409 sans process', async () => {
-    // Install a valid server
+    // Install a valid server and wait for completion
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody(),
     });
-    expect(install.statusCode).toBe(200);
-
-    const serverId = '550e8400-e29b-41d4-a716-446655440000';
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
     // GET: known server → 200, stopped status
     const info = await app.inject({
       method: 'GET',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(info.statusCode).toBe(200);
@@ -221,7 +302,7 @@ describe('Agent API — POST /servers/install', () => {
     // Action on unknown server → 404
     const action404 = await app.inject({
       method: 'POST',
-      url: '/servers/660e8400-e29b-41d4-a716-446655440000/action',
+      url: `/servers/${OTHER_ID}/action`,
       headers: auth,
       payload: { action: 'start' },
     });
@@ -230,7 +311,7 @@ describe('Agent API — POST /servers/install', () => {
     // Invalid action → 400
     const action400 = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/action`,
+      url: `/servers/${SERVER_ID}/action`,
       headers: auth,
       payload: { action: 'explode' },
     });
@@ -239,7 +320,7 @@ describe('Agent API — POST /servers/install', () => {
     // Console command without a running process → 409
     const cmd = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/command`,
+      url: `/servers/${SERVER_ID}/command`,
       headers: auth,
       payload: { command: 'say hi' },
     });
@@ -249,29 +330,29 @@ describe('Agent API — POST /servers/install', () => {
     const list = await app.inject({ method: 'GET', url: '/servers', headers: auth });
     expect(list.statusCode).toBe(200);
     const ids = list.json().servers.map((s: { serverId: string }) => s.serverId);
-    expect(ids).toContain(serverId);
+    expect(ids).toContain(SERVER_ID);
   });
 
   it('DELETE : 404 inconnu, supprime store + dossier, GET → 404 ensuite', async () => {
-    const serverId = '550e8400-e29b-41d4-a716-446655440000';
     const { access } = await import('node:fs/promises');
 
     // DELETE on an unknown server → 404
     const del404 = await app.inject({
       method: 'DELETE',
-      url: '/servers/660e8400-e29b-41d4-a716-446655440000',
+      url: `/servers/${OTHER_ID}`,
       headers: auth,
     });
     expect(del404.statusCode).toBe(404);
 
-    // Install a server
+    // Install a server (and wait for completion)
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody(),
     });
-    expect(install.statusCode).toBe(200);
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
     // The folder exists
     await expect(access(join(config.dataDir, 'srv', 'marker.txt'))).resolves.toBeUndefined();
@@ -279,7 +360,7 @@ describe('Agent API — POST /servers/install', () => {
     // DELETE → 200, folder removed (installDir under dataDir)
     const del = await app.inject({
       method: 'DELETE',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(del.statusCode).toBe(200);
@@ -287,21 +368,23 @@ describe('Agent API — POST /servers/install', () => {
     await expect(access(join(config.dataDir, 'srv'))).rejects.toThrow();
 
     // The server is no longer known
-    const info = await app.inject({ method: 'GET', url: `/servers/${serverId}`, headers: auth });
+    const info = await app.inject({
+      method: 'GET',
+      url: `/servers/${SERVER_ID}`,
+      headers: auth,
+    });
     expect(info.statusCode).toBe(404);
 
     // DELETE again → 404
     const again = await app.inject({
       method: 'DELETE',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(again.statusCode).toBe(404);
   });
 
   it('DELETE : 409 si le process tourne, 200 après kill', async () => {
-    const serverId = '550e8400-e29b-41d4-a716-446655440000';
-
     // Install a server with a long-running process
     const install = await app.inject({
       method: 'POST',
@@ -309,17 +392,18 @@ describe('Agent API — POST /servers/install', () => {
       headers: auth,
       payload: installBody({
         plugin: {
-          ...validPlugin,
+          ...validPlugin(),
           start: { command: `"${process.execPath}" -e "setInterval(() => {}, 1000);"` },
         },
       }),
     });
-    expect(install.statusCode).toBe(200);
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
     // Start the process
     const start = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/action`,
+      url: `/servers/${SERVER_ID}/action`,
       headers: auth,
       payload: { action: 'start' },
     });
@@ -329,7 +413,7 @@ describe('Agent API — POST /servers/install', () => {
     // DELETE while running → 409
     const del409 = await app.inject({
       method: 'DELETE',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(del409.statusCode).toBe(409);
@@ -337,7 +421,7 @@ describe('Agent API — POST /servers/install', () => {
     // Kill then DELETE → 200
     const kill = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/action`,
+      url: `/servers/${SERVER_ID}/action`,
       headers: auth,
       payload: { action: 'kill' },
     });
@@ -345,7 +429,7 @@ describe('Agent API — POST /servers/install', () => {
 
     const del = await app.inject({
       method: 'DELETE',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(del.statusCode).toBe(200);
@@ -353,29 +437,28 @@ describe('Agent API — POST /servers/install', () => {
   });
 
   it('GET /servers/:id/logs : 404 inconnu, lignes incrémentales après install', async () => {
-    const serverId = '550e8400-e29b-41d4-a716-446655440000';
-
     // Unknown server → 404
     const unknown = await app.inject({
       method: 'GET',
-      url: '/servers/660e8400-e29b-41d4-a716-446655440000/logs',
+      url: `/servers/${OTHER_ID}/logs`,
       headers: auth,
     });
     expect(unknown.statusCode).toBe(404);
 
-    // Install
+    // Install (and wait for completion)
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody(),
     });
-    expect(install.statusCode).toBe(200);
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
     // Logs without a process → empty, next=0
     const logs = await app.inject({
       method: 'GET',
-      url: `/servers/${serverId}/logs?after=0`,
+      url: `/servers/${SERVER_ID}/logs?after=0`,
       headers: auth,
     });
     expect(logs.statusCode).toBe(200);
@@ -385,15 +468,15 @@ describe('Agent API — POST /servers/install', () => {
   });
 
   it('installDir relatif est résolu sous le dataDir de l agent', async () => {
-    // Does installBody send "servers/<uuid>"? No — here we check resolution:
-    // a relative "rel-xyz" installDir must land under config.dataDir
+    // A relative "rel-check" installDir must land under config.dataDir
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody({ installDir: 'rel-check' }),
     });
-    expect(install.statusCode).toBe(200);
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
     const { access } = await import('node:fs/promises');
     await expect(access(join(config.dataDir, 'rel-check', 'marker.txt'))).resolves.toBeUndefined();
@@ -401,7 +484,7 @@ describe('Agent API — POST /servers/install', () => {
     // Cleanup
     const del = await app.inject({
       method: 'DELETE',
-      url: '/servers/550e8400-e29b-41d4-a716-446655440000',
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(del.statusCode).toBe(200);
@@ -409,13 +492,11 @@ describe('Agent API — POST /servers/install', () => {
   });
 });
 
-// ─── POST /servers/:serverId/reinstall route ─────────────────────────────────
+// ─── POST /servers/:serverId/reinstall route (background) ─────────────────────
 
 describe('Agent API — POST /servers/:serverId/reinstall', () => {
   let app: FastifyInstance;
-  let tmpDir: string;
   const auth = { authorization: `Bearer ${TEST_TOKEN}` };
-  const serverId = '550e8400-e29b-41d4-a716-446655440000';
 
   const pluginWithContent = (content: string) => ({
     schemaVersion: 2,
@@ -428,7 +509,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
   });
 
   const installBody = (content: string) => ({
-    serverId,
+    serverId: SERVER_ID,
     name: 'mon-serveur',
     plugin: pluginWithContent(content),
     variables: {},
@@ -445,20 +526,18 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
   beforeAll(async () => {
     app = createAgentServer(config);
     await app.ready();
-    tmpDir = await mkdtemp(join(tmpdir(), 'mojito-api-'));
   });
 
   afterAll(async () => {
     // Cleanup: delete the installed server
-    await app.inject({ method: 'DELETE', url: `/servers/${serverId}`, headers: auth });
+    await app.inject({ method: 'DELETE', url: `/servers/${SERVER_ID}`, headers: auth });
     await app.close();
-    await rm(tmpDir, { recursive: true, force: true });
   });
 
   it('retourne 401 sans token', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/reinstall`,
+      url: `/servers/${SERVER_ID}/reinstall`,
       payload: reinstallBody(),
     });
     expect(res.statusCode).toBe(401);
@@ -467,7 +546,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
   it('retourne 404 pour un serveur inconnu', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/servers/660e8400-e29b-41d4-a716-446655440000/reinstall',
+      url: `/servers/${OTHER_ID}/reinstall`,
       headers: auth,
       payload: reinstallBody(),
     });
@@ -483,11 +562,12 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
       headers: auth,
       payload: installBody('port={{SERVER_PORT}}'),
     });
-    expect(install.statusCode).toBe(200);
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
     const res = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/reinstall`,
+      url: `/servers/${SERVER_ID}/reinstall`,
       headers: auth,
       payload: reinstallBody({ plugin: { foo: 'bar' } }),
     });
@@ -495,7 +575,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     expect(res.json().error).toBe('Plugin invalide');
   });
 
-  it('réinstalle : relance le runner dans le même dossier, statut stopped', async () => {
+  it('réinstalle en arrière-plan : relance le runner, statut installing puis stopped', async () => {
     // Install v1 → marker = port=25565
     const install = await app.inject({
       method: 'POST',
@@ -503,23 +583,26 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
       headers: auth,
       payload: installBody('port={{SERVER_PORT}}'),
     });
-    expect(install.statusCode).toBe(200);
+    expect(install.statusCode).toBe(202);
+    await waitForInstall(app, SERVER_ID, auth);
 
-    const { readFile, rm: rmFile } = await import('node:fs/promises');
+    const { readFile } = await import('node:fs/promises');
     const markerPath = join(config.dataDir, 'srv', 'marker.txt');
     expect(await readFile(markerPath, 'utf-8')).toBe('port=25565');
 
-    // Reinstall with a NEW plugin version (different install content)
+    // Reinstall with a NEW plugin version (different install content) — 202,
+    // the runner re-runs in the background
     const res = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/reinstall`,
+      url: `/servers/${SERVER_ID}/reinstall`,
       headers: auth,
       payload: reinstallBody(),
     });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.serverId).toBe(serverId);
-    expect(body.status).toBe('stopped');
+    expect(res.statusCode).toBe(202);
+    expect(res.json().status).toBe('installing');
+
+    const status = await waitForInstall(app, SERVER_ID, auth);
+    expect(status.status).toBe('installed');
 
     // The runner re-ran in the SAME installDir with the STORED allocation
     expect(await readFile(markerPath, 'utf-8')).toBe('reinstalled-port=25565');
@@ -527,19 +610,17 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     // The store kept the server (with the updated plugin)
     const info = await app.inject({
       method: 'GET',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(info.statusCode).toBe(200);
     expect(info.json().status).toBe('stopped');
-
-    await rmFile(markerPath);
   });
 
-  it('retourne 422 si une étape du runner échoue (état inchangé)', async () => {
+  it('échoue en arrière-plan si une étape du runner échoue (store inchangé)', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/servers/${serverId}/reinstall`,
+      url: `/servers/${SERVER_ID}/reinstall`,
       headers: auth,
       payload: reinstallBody({
         plugin: {
@@ -550,13 +631,16 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
         },
       }),
     });
-    expect(res.statusCode).toBe(422);
-    expect(res.json().error).toContain('Étape 1');
+    expect(res.statusCode).toBe(202);
+
+    const status = await waitForInstall(app, SERVER_ID, auth);
+    expect(status.status).toBe('failed');
+    expect(status.error).toContain('Étape 1');
 
     // The server is still known and stopped (store untouched)
     const info = await app.inject({
       method: 'GET',
-      url: `/servers/${serverId}`,
+      url: `/servers/${SERVER_ID}`,
       headers: auth,
     });
     expect(info.statusCode).toBe(200);

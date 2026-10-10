@@ -103,6 +103,36 @@ export const installProgressSchema = z.object({
 
 export type InstallProgress = z.infer<typeof installProgressSchema>;
 
+// ─── Install status & logs (panel → agent polling) ────────────────────────────
+
+/**
+ * Live status of a (re)install, with the full step log — each step's start
+ * message, command/script output and errors. The agent keeps it in memory
+ * for the last install of each server.
+ */
+export const installLogLineSchema = z.object({
+  timestamp: z.string().datetime(),
+  level: z.enum(['info', 'error']),
+  message: z.string(),
+});
+
+export type InstallLogLine = z.infer<typeof installLogLineSchema>;
+
+export const installStatusSchema = z.object({
+  serverId: z.string().uuid(),
+  status: z.enum(['installing', 'installed', 'failed']),
+  step: z.number().int().min(0),
+  totalSteps: z.number().int().min(0),
+  percent: z.number().min(0).max(100),
+  message: z.string(),
+  error: z.string().nullable(),
+  logs: z.array(installLogLineSchema),
+  startedAt: z.string().datetime().nullable(),
+  finishedAt: z.string().datetime().nullable(),
+});
+
+export type InstallStatus = z.infer<typeof installStatusSchema>;
+
 // ─── Live logs (agent → panel, via WS) ────────────────────────────────────────
 
 export const logLineSchema = z.object({
@@ -236,6 +266,7 @@ export const AGENT_ROUTES = {
   action: 'POST /servers/:serverId/action',
   command: 'POST /servers/:serverId/command',
   info: 'GET /servers/:serverId',
+  installStatus: 'GET /servers/:serverId/install',
   list: 'GET /servers',
   delete: 'DELETE /servers/:serverId',
   /** Browser-facing console socket — auth by console JWT (?token=), NOT the panel token. */

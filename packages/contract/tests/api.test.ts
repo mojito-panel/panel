@@ -16,6 +16,7 @@ import {
   consoleClientMessageSchema,
   consoleServerMessageSchema,
   consoleErrorSchema,
+  installStatusSchema,
   AGENT_ROUTES,
 } from '../src/api';
 
@@ -359,4 +360,59 @@ describe('consoleErrorSchema', () => {
       expect(consoleErrorSchema.safeParse(code).success).toBe(true);
     },
   );
+});
+
+// ─── installStatusSchema ─────────────────────────────────────────────────────
+
+describe('installStatusSchema', () => {
+  const valid = {
+    serverId: '550e8400-e29b-41d4-a716-446655440000',
+    status: 'installing',
+    step: 2,
+    totalSteps: 6,
+    percent: 33,
+    message: 'Étape 2/6 — Téléchargement de server.jar',
+    error: null,
+    logs: [
+      { timestamp: new Date().toISOString(), level: 'info', message: 'Installation démarrée' },
+      { timestamp: new Date().toISOString(), level: 'error', message: 'stderr: warning' },
+    ],
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+  };
+
+  it('valide un statut d’installation en cours', () => {
+    expect(installStatusSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('valide un statut échoué avec erreur', () => {
+    expect(
+      installStatusSchema.safeParse({
+        ...valid,
+        status: 'failed',
+        error: 'Étape 1 — Telechargement echoue (404 Not Found)',
+        finishedAt: new Date().toISOString(),
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejette un statut inconnu', () => {
+    expect(installStatusSchema.safeParse({ ...valid, status: 'kaboom' }).success).toBe(false);
+  });
+
+  it('rejette un niveau de log inconnu', () => {
+    expect(
+      installStatusSchema.safeParse({
+        ...valid,
+        logs: [{ timestamp: new Date().toISOString(), level: 'verbose', message: 'x' }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('AGENT_ROUTES', () => {
+  it('expose la route de statut d’installation', () => {
+    expect(AGENT_ROUTES.installStatus).toBe('GET /servers/:serverId/install');
+    expect(AGENT_ROUTES.reinstall).toBe('POST /servers/:serverId/reinstall');
+  });
 });

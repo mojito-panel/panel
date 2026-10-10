@@ -106,8 +106,9 @@ export function execProcess(
  * `command` action: runs a binary in the install directory.
  * Failure (non-zero code) = install error.
  * Resolved variables (plugin + system) are injected into the environment.
+ * Returns the exec result (stdout/stderr) for the install log.
  */
-export async function runCommand(action: CommandAction, ctx: ActionContext): Promise<void> {
+export async function runCommand(action: CommandAction, ctx: ActionContext): Promise<ExecResult> {
   const command = render(action.command, ctx.vars);
   const cwd = action.cwd
     ? resolvePath(ctx.installDir, render(action.cwd, ctx.vars))
@@ -127,14 +128,16 @@ export async function runCommand(action: CommandAction, ctx: ActionContext): Pro
       `Commande échouée (code ${result.code}) : ${command}${details ? `\n${details}` : ''}`,
     );
   }
+  return result;
 }
 
 /**
  * `script` action: runs a script via the requested shell (bash/powershell/cmd).
  * The content is templated then written to a temporary file.
  * Direct spawn with an argument array — never via cmd /c as a string (see execProcess).
+ * Returns the exec result (stdout/stderr) for the install log.
  */
-export async function runScript(action: ScriptAction, ctx: ActionContext): Promise<void> {
+export async function runScript(action: ScriptAction, ctx: ActionContext): Promise<ExecResult> {
   const content = render(action.content, ctx.vars);
 
   const scriptDir = await mkdtemp(join(tmpdir(), 'mojito-script-'));
@@ -169,6 +172,7 @@ export async function runScript(action: ScriptAction, ctx: ActionContext): Promi
       const details = result.stderr.trim() || result.stdout.trim();
       throw new Error(`Script échoué (code ${result.code})${details ? `\n${details}` : ''}`);
     }
+    return result;
   } finally {
     await rm(scriptDir, { recursive: true, force: true });
   }

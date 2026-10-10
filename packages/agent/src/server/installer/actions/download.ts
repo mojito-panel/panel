@@ -11,8 +11,9 @@ type DownloadAction = RunnerActionInput & { action: 'download' };
 /**
  * `download` action: downloads a file (templated URL) with optional
  * SHA-256 verification and atomic write (.tmp file then rename).
+ * Returns the number of bytes written (install log).
  */
-export async function runDownload(action: DownloadAction, ctx: ActionContext): Promise<void> {
+export async function runDownload(action: DownloadAction, ctx: ActionContext): Promise<number> {
   const url = render(action.url, ctx.vars);
   const dest = resolvePath(ctx.installDir, render(action.dest, ctx.vars));
 
@@ -48,4 +49,5 @@ export async function runDownload(action: DownloadAction, ctx: ActionContext): P
     await unlink(dest).catch(() => undefined);
     await rename(tmpPath, dest);
   }
+  return buffer.byteLength;
 }

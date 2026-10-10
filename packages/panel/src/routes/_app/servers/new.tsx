@@ -275,7 +275,7 @@ function NewServerPage() {
             )}
 
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Installation en cours…' : 'Créer et installer'}
+              {mutation.isPending ? 'Création…' : 'Créer et installer'}
             </Button>
           </form>
         </CardContent>

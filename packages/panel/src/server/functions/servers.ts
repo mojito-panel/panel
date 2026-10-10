@@ -10,6 +10,7 @@ import {
   agentInstallServer,
   agentGetServer,
   agentGetServerLogs,
+  agentGetInstallStatus,
   agentServerAction,
   agentSendCommand,
   agentDeleteServer,
@@ -23,7 +24,12 @@ import {
   serverLogsQuerySchema,
 } from '~/validators/server';
 
-type ServerStatusDb = 'installing' | 'stopped' | 'running' | 'crashed';
+type ServerStatusDb =
+  | 'installing'
+  | 'install_failed'
+  | 'stopped'
+  | 'running'
+  | 'crashed';
 
 /** Loads a server + checks ownership (admin = access to everything). */
 async function loadOwnedServer(serverId: string, userId: string, isAdmin: boolean) {
@@ -81,33 +87,17 @@ export const installServerFn = createServerFn({ method: 'POST' })
     if (!plugin) throw new HttpError(404, 'Plugin introuvable');
 
     const serverId = randomUUID();
-
-    // Install via the agent (installDir relative to the agent's dataDir)
-    try {
-      await agentInstallServer(node, {
-        serverId,
-        name: data.name,
-        plugin: plugin.json,
-        variables: data.variables,
-        installDir: `servers/${serverId}`,
-        allocation: { port: data.port, memoryMb: data.memoryMb },
-      });
-    } catch (err) {
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Installation échouée côté agent : ${err.message}`);
-      }
-      throw err;
-    }
-
-    // Panel persistence
     const now = new Date();
+
+    // 1. Persist FIRST with status 'installing' — the user is redirected to
+    //    the server console right away and follows the install live.
     const server = em.create(Server, {
       id: serverId,
       name: data.name,
       nodeId: data.nodeId,
       pluginId: data.pluginId,
       ownerId: user.id,
-      status: 'stopped',
+      status: 'installing',
       variables: data.variables,
       createdAt: now,
       updatedAt: now,
@@ -125,7 +115,132 @@ export const installServerFn = createServerFn({ method: 'POST' })
     em.persist(allocation);
     await em.flush();
 
+    // 2. Start the background install on the agent (fast — the agent only
+    //    validates, then runs the runner async and records every step).
+    // installDir relative to the agent's dataDir.
+    try {
+      await agentInstallServer(node, {
+        serverId,
+        name: data.name,
+        plugin: plugin.json,
+        variables: data.variables,
+        installDir: `servers/${serverId}`,
+        allocation: { port: data.port, memoryMb: data.memoryMb },
+      });
+    } catch (err) {
+      // The install could not even start → remove the rows and report
+      const em2 = orm.em.fork();
+      const dbAllocation = await em2.findOne(ServerAllocation, { serverId });
+      if (dbAllocation) em2.remove(dbAllocation);
+      const dbServer = await em2.findOne(Server, { id: serverId });
+      if (dbServer) em2.remove(dbServer);
+      await em2.flush();
+
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Installation refusée par l'agent : ${err.message}`);
+      }
+      throw err;
+    }
+
     return { id: serverId, name: server.name };
+  });
+
+// ─── Install status + logs (live install panel) ──────────────────────────────
+
+export const getInstallStatusFn = createServerFn({ method: 'GET' })
+  .validator(serverLogsQuerySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    try {
+      const status = await agentGetInstallStatus(node, server.id);
+
+      // Keep the DB status in sync with the install outcome
+      if (status.status === 'installed' && server.status === 'installing') {
+        server.status = 'stopped';
+        await em.flush();
+      } else if (status.status === 'failed' && server.status !== 'install_failed') {
+        server.status = 'install_failed';
+        await em.flush();
+      }
+      return status;
+    } catch {
+      // Agent unreachable (or the server predates install tracking) →
+      // derive the answer from the DB status
+      const status =
+        server.status === 'installing'
+          ? ('installing' as const)
+          : server.status === 'install_failed'
+            ? ('failed' as const)
+            : ('installed' as const);
+      return {
+        serverId: server.id,
+        status,
+        step: 0,
+        totalSteps: 0,
+        percent: status === 'installed' ? 100 : 0,
+        message:
+          status === 'installing'
+            ? 'Agent injoignable — statut inconnu'
+            : status === 'failed'
+              ? 'Installation échouée (logs indisponibles)'
+              : 'Installé',
+        error: null,
+        logs: [],
+        startedAt: null,
+        finishedAt: null,
+      };
+    }
+  });
+
+// ─── Install retry (after a failed install) ─────────────────────────────────
+
+export const retryInstallFn = createServerFn({ method: 'POST' })
+  .validator(serverLogsQuerySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    const plugin = await em.findOne(Plugin, { id: server.pluginId });
+    if (!plugin) throw new HttpError(500, 'Plugin introuvable');
+
+    const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
+    if (!allocation) throw new HttpError(500, 'Allocation introuvable');
+
+    try {
+      await agentInstallServer(node, {
+        serverId: server.id,
+        name: server.name,
+        plugin: plugin.json,
+        variables: server.variables,
+        installDir: `servers/${server.id}`,
+        allocation: { port: allocation.port, memoryMb: allocation.maxRamMb },
+      });
+      server.status = 'installing';
+      await em.flush();
+      return { id: server.id, status: 'installing' };
+    } catch (err) {
+      server.status = 'install_failed';
+      await em.flush();
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Nouvelle tentative refusée par l'agent : ${err.message}`);
+      }
+      throw err;
+    }
   });
 
 // ─── Detail (DB + actual agent runtime state) ─────────────────────────────
@@ -252,12 +367,14 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
         plugin: plugin.json,
         variables: server.variables,
       });
-      server.status = result.status as ServerStatusDb;
+      // The reinstall now runs in the background — the console shows the
+      // live install panel (steps + logs) while it goes
+      server.status = 'installing';
       await em.flush();
-      return { id: server.id, status: result.status, message: result.message };
+      return { id: server.id, status: 'installing', message: result.message };
     } catch (err) {
       if (err instanceof AgentError) {
-        throw new HttpError(502, `Réinstallation échouée côté agent : ${err.message}`);
+        throw new HttpError(502, `Réinstallation refusée côté agent : ${err.message}`);
       }
       throw err;
     }

@@ -1,10 +1,9 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import type { ServerStatus } from '@mojito/contract';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { ServerSidebar } from '~/components/server-sidebar';
+import { ServerSidebar, type PanelServerStatus } from '~/components/server-sidebar';
 import { getServerFn } from '~/server/functions/servers';
 
 /**
@@ -33,7 +32,7 @@ function ServerLayout() {
   });
 
   const server = query.data;
-  const status: ServerStatus | undefined = server?.status;
+  const status: PanelServerStatus | undefined = server?.status;
 
   return (
     <TooltipProvider>
@@ -48,7 +47,7 @@ function ServerLayout() {
                 className={
                   status === 'running'
                     ? 'rounded-full bg-green-100 px-3 py-1 text-xs text-green-700'
-                    : status === 'crashed'
+                    : status === 'crashed' || status === 'install_failed'
                       ? 'rounded-full bg-red-100 px-3 py-1 text-xs text-red-700'
                       : 'rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground'
                 }

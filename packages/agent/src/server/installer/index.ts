@@ -12,7 +12,7 @@ import { runReplace } from './actions/replace';
 import { runConfigFile } from './actions/config-file';
 import { runDownload } from './actions/download';
 import { runExtract } from './actions/extract';
-import { runCommand, runScript } from './actions/exec';
+import { runCommand, runScript, type ExecResult } from './actions/exec';
 
 export interface InstallOptions {
   plugin: Plugin;
@@ -24,6 +24,8 @@ export interface InstallOptions {
   installDir: string;
   /** Progress callback (compatible with the contract's installProgress). */
   onProgress?: (progress: InstallProgress) => void;
+  /** Detailed install events — step starts, command output, results. */
+  onEvent?: (event: InstallEvent) => void;
 }
 
 export interface InstallProgress {
@@ -32,6 +34,12 @@ export interface InstallProgress {
   message: string;
   percent: number;
 }
+
+/** Fine-grained install event (debug trail streamed to the panel). */
+export type InstallEvent =
+  | { type: 'step-start'; step: number; totalSteps: number; message: string }
+  | { type: 'step-output'; step: number; stream: 'stdout' | 'stderr'; text: string }
+  | { type: 'step-done'; step: number; message: string };
 
 export interface InstallResult {
   success: boolean;
@@ -59,77 +67,125 @@ function describeAction(action: RunnerAction): string {
   }
 }
 
-/**
- * Runs a plugin's install actions, step by step,
- * with strict variable validation before starting.
- */
-export async function runInstall(options: InstallOptions): Promise<InstallResult> {
-  const { plugin, variables, systemVariables, installDir, onProgress } = options;
+function formatBytes(bytes: number): string {
+  return bytes >= 1048576
+    ? `${(bytes / 1048576).toFixed(1)} Mo`
+    : `${bytes} octets`;
+}
 
-  // 1. Strict validation: unknown variable = install error
+/**
+ * Upfront validation (unknown variables + values) — the router calls this
+ * BEFORE starting a background install so the panel gets an immediate
+ * 400/422 instead of a delayed failure.
+ */
+export function validateInstall(
+  plugin: Plugin,
+  variables: Record<string, string | number | boolean>,
+): string | null {
   const unknown = findUnknownVariables(plugin);
   if (unknown.length > 0) {
-    return {
-      success: false,
-      error: `Variables inconnues dans le plugin : ${unknown.join(', ')}`,
-      resolvedVars: new Map(),
-    };
+    return `Variables inconnues dans le plugin : ${unknown.join(', ')}`;
   }
 
-  // 2. Validate variable values
   for (const variable of plugin.variables) {
     const value = variables[variable.env];
     if (value !== undefined) {
       const error = validateVariableValue(variable, value);
       if (error) {
-        return { success: false, error, resolvedVars: new Map() };
+        return error;
       }
     }
   }
+  return null;
+}
 
-  // 3. Resolve variables
+/** Emits command/script output as step-output events (non-empty lines only). */
+function emitExecOutput(
+  onEvent: InstallOptions['onEvent'],
+  step: number,
+  result: ExecResult,
+): void {
+  for (const line of result.stdout.split(/\r?\n/)) {
+    if (line.trim()) onEvent?.({ type: 'step-output', step, stream: 'stdout', text: line });
+  }
+  for (const line of result.stderr.split(/\r?\n/)) {
+    if (line.trim()) onEvent?.({ type: 'step-output', step, stream: 'stderr', text: line });
+  }
+}
+
+/**
+ * Runs a plugin's install actions, step by step,
+ * with strict variable validation before starting.
+ */
+export async function runInstall(options: InstallOptions): Promise<InstallResult> {
+  const { plugin, variables, systemVariables, installDir, onProgress, onEvent } = options;
+
+  // 1. Strict validation: unknown variable = install error
+  const upfrontError = validateInstall(plugin, variables);
+  if (upfrontError) {
+    return { success: false, error: upfrontError, resolvedVars: new Map() };
+  }
+
+  // 2. Resolve variables
   const resolvedVars = resolveVariables(plugin, variables, systemVariables);
 
-  // 4. Prepare the install directory
+  // 3. Prepare the install directory
   await mkdir(installDir, { recursive: true });
 
   const ctx: ActionContext = { installDir, vars: resolvedVars };
   const totalSteps = plugin.install.length;
 
-  // 5. Run the actions
+  // 4. Run the actions
   for (let step = 0; step < totalSteps; step++) {
     const action = plugin.install[step];
+    const startMessage = render(describeAction(action), resolvedVars);
     onProgress?.({
       step,
       totalSteps,
-      message: render(describeAction(action), resolvedVars),
+      message: startMessage,
       percent: Math.round((step / Math.max(totalSteps, 1)) * 100),
     });
+    onEvent?.({ type: 'step-start', step, totalSteps, message: startMessage });
 
     try {
+      let doneMessage: string;
       switch (action.action) {
-        case 'download':
-          await runDownload(action, ctx);
+        case 'download': {
+          const bytes = await runDownload(action, ctx);
+          doneMessage = formatBytes(bytes);
           break;
-        case 'extract':
-          await runExtract(action, ctx);
+        }
+        case 'extract': {
+          const files = await runExtract(action, ctx);
+          doneMessage = `${files} fichier(s) extrait(s)`;
           break;
-        case 'write':
-          await runWrite(action, ctx);
+        }
+        case 'write': {
+          doneMessage = await runWrite(action, ctx);
           break;
-        case 'replace':
-          await runReplace(action, ctx);
+        }
+        case 'replace': {
+          doneMessage = await runReplace(action, ctx);
           break;
-        case 'configFile':
-          await runConfigFile(action, ctx);
+        }
+        case 'configFile': {
+          doneMessage = await runConfigFile(action, ctx);
           break;
-        case 'command':
-          await runCommand(action, ctx);
+        }
+        case 'command': {
+          const result = await runCommand(action, ctx);
+          emitExecOutput(onEvent, step, result);
+          doneMessage = `terminé (code ${result.code})`;
           break;
-        case 'script':
-          await runScript(action, ctx);
+        }
+        case 'script': {
+          const result = await runScript(action, ctx);
+          emitExecOutput(onEvent, step, result);
+          doneMessage = `terminé (code ${result.code})`;
           break;
+        }
       }
+      onEvent?.({ type: 'step-done', step, message: doneMessage });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: `Étape ${step + 1} — ${message}`, resolvedVars };

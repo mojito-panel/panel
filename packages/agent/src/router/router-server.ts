@@ -10,8 +10,9 @@ import {
 } from '@mojito/contract';
 import type { AgentConfig } from '../config';
 import { ServerManager, PowerActionError } from '../server/manager';
-import { runInstall } from '../server/installer';
-import { buildSystemVariables } from '../server/variables';
+import { validateInstall } from '../server/installer';
+import { startTrackedInstall } from '../server/installer/tracked';
+import type { InstallRegistry } from '../server/installer/registry';
 import { toPanelStatus } from '../environment/states';
 import type { ServerStore } from '../internal/server-store';
 
@@ -19,6 +20,7 @@ export interface ServerRoutesOptions {
   config: AgentConfig;
   manager: ServerManager;
   store: ServerStore;
+  registry: InstallRegistry;
 }
 
 /** Maps server errors to HTTP responses. */
@@ -32,9 +34,9 @@ function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
 
 /** Server routes (≈ wings router_server.go). All behind the panel token. */
 export function registerServerRoutes(app: FastifyInstance, options: ServerRoutesOptions): void {
-  const { config, manager, store } = options;
+  const { config, manager, store, registry } = options;
 
-  // ─── Server install (plugin step runner) ───────────────────────────────
+  // ─── Server install (background, tracked step by step) ────────────────
   app.post('/servers/install', async (request, reply) => {
     const parsed = installServerRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -52,6 +54,13 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       });
     }
 
+    // Upfront validation (unknown variables, invalid values) — the panel
+    // gets an immediate 422 instead of a delayed background failure
+    const validationError = validateInstall(pluginResult.data, parsed.data.variables);
+    if (validationError) {
+      return reply.code(422).send({ error: validationError });
+    }
+
     // installDir: used as-is when absolute, otherwise resolved under the agent's dataDir
     // (the panel typically sends "servers/<uuid>" — this guarantees DELETE
     // can remove the folder within our scope)
@@ -60,42 +69,59 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       ? rawInstallDir
       : resolve(config.dataDir, rawInstallDir);
 
-    const result = await runInstall({
-      plugin: pluginResult.data,
-      variables: parsed.data.variables,
-      systemVariables: buildSystemVariables(
-        parsed.data.serverId,
-        parsed.data.name,
-        installDir,
-        parsed.data.allocation,
-      ),
-      installDir,
-      // Real-time progress via WS: phase 3. For now the call is synchronous.
-    });
-
-    if (!result.success) {
-      return reply.code(422).send({ error: result.error });
-    }
-
-    // Persist the installed server → start only needs the serverId
-    await store.save({
+    // The install runs IN THE BACKGROUND — every step, command output and
+    // error is recorded in the registry; the panel follows via
+    // GET /servers/:serverId/install and can retry on failure
+    startTrackedInstall({
+      registry,
+      store,
       serverId: parsed.data.serverId,
       name: parsed.data.name,
       plugin: pluginResult.data,
       variables: parsed.data.variables,
       installDir,
       allocation: parsed.data.allocation,
-      installedAt: new Date().toISOString(),
     });
 
-    return {
+    return reply.code(202).send({
       serverId: parsed.data.serverId,
-      status: 'stopped',
-      message: 'Installation terminée',
-    };
+      status: 'installing',
+      message: 'Installation démarrée',
+    });
   });
 
-  // ─── Server reinstall (re-run the plugin's install script in place) ────
+  // ─── Install status + logs (panel live progress) ───────────────────────
+  app.get<{ Params: { serverId: string } }>(
+    '/servers/:serverId/install',
+    async (request, reply) => {
+      const { serverId } = request.params;
+      const state = registry.get(serverId);
+      if (state) {
+        return state;
+      }
+
+      // No install ran since the agent started — but the server exists
+      const stored = await store.get(serverId);
+      if (stored) {
+        return {
+          serverId,
+          status: 'installed' as const,
+          step: 0,
+          totalSteps: 0,
+          percent: 100,
+          message: 'Installé',
+          error: null,
+          logs: [],
+          startedAt: null,
+          finishedAt: null,
+        };
+      }
+
+      return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+    },
+  );
+
+  // ─── Server reinstall (background: stop + re-run the install script) ───
   app.post<{ Params: { serverId: string } }>(
     '/servers/:serverId/reinstall',
     async (request, reply) => {
@@ -119,50 +145,47 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
         });
       }
 
+      const validationError = validateInstall(pluginResult.data, parsed.data.variables);
+      if (validationError) {
+        return reply.code(422).send({ error: validationError });
+      }
+
       const stored = await store.get(parsed.data.serverId);
       if (!stored) {
         return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
       }
 
-      // Pelican semantics: reinstall stops the server first
-      if (manager.isRunning(parsed.data.serverId)) {
-        try {
-          await manager.handlePowerAction(parsed.data.serverId, 'stop');
-        } catch (err) {
-          return powerErrorReply(err, reply);
-        }
+      if (registry.isInstalling(parsed.data.serverId)) {
+        return reply.code(409).send({
+          error: 'Une installation est déjà en cours',
+          code: 'already_installing',
+        });
       }
 
-      // Re-run the install runner in the SAME directory with the SAME
-      // allocation (stored) but the LATEST plugin/variables
-      const result = await runInstall({
+      // Background reinstall — Pelican semantics: stops the server first,
+      // then re-runs the runner in the SAME directory with the STORED
+      // allocation but the LATEST plugin/variables. Follow along via
+      // GET /servers/:serverId/install.
+      startTrackedInstall({
+        registry,
+        store,
+        serverId: stored.serverId,
+        name: stored.name,
         plugin: pluginResult.data,
         variables: parsed.data.variables,
-        systemVariables: buildSystemVariables(
-          stored.serverId,
-          stored.name,
-          stored.installDir,
-          stored.allocation,
-        ),
         installDir: stored.installDir,
+        allocation: stored.allocation,
+        existing: stored,
+        before: manager.isRunning(stored.serverId)
+          ? () => manager.handlePowerAction(stored.serverId, 'stop')
+          : undefined,
       });
 
-      if (!result.success) {
-        return reply.code(422).send({ error: result.error });
-      }
-
-      await store.save({
-        ...stored,
-        plugin: pluginResult.data,
-        variables: parsed.data.variables,
-        installedAt: new Date().toISOString(),
+      return reply.code(202).send({
+        serverId: stored.serverId,
+        status: 'installing',
+        message: 'Réinstallation démarrée',
       });
-
-      return {
-        serverId: parsed.data.serverId,
-        status: 'stopped',
-        message: 'Réinstallation terminée',
-      };
     },
   );
 
@@ -173,7 +196,9 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       servers: stored.map((s) => ({
         serverId: s.serverId,
         name: s.name,
-        status: toPanelStatus(manager.getState(s.serverId), false),
+        status: registry.isInstalling(s.serverId)
+          ? ('installing' as const)
+          : toPanelStatus(manager.getState(s.serverId), false),
       })),
     };
   });
@@ -189,7 +214,9 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
     return {
       serverId: stored.serverId,
       name: stored.name,
-      status: toPanelStatus(state, false),
+      status: registry.isInstalling(stored.serverId)
+        ? ('installing' as const)
+        : toPanelStatus(state, false),
       runtimeState: state,
       pid: null, // metrics in phase 2
       ramMb: null,
@@ -258,6 +285,15 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       const stored = await store.get(serverId);
       if (!stored) {
         return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+      }
+
+      // Refuse while an install/reinstall is running — the runner may be
+      // writing to the install directory
+      if (registry.isInstalling(serverId)) {
+        return reply.code(409).send({
+          error: 'Une installation est en cours',
+          code: 'installing',
+        });
       }
 
       // Refuse while the process runs — the panel must stop/kill first

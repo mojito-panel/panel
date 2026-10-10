@@ -93,7 +93,7 @@ function ServersPage() {
                 className={
                   server.status === 'running'
                     ? 'text-sm text-green-600'
-                    : server.status === 'crashed'
+                    : server.status === 'crashed' || server.status === 'install_failed'
                       ? 'text-sm text-destructive'
                       : 'text-sm text-muted-foreground'
                 }

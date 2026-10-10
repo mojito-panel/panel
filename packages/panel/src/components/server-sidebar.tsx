@@ -1,6 +1,9 @@
 import { Link, useParams } from '@tanstack/react-router';
 import { Terminal, Settings, Server } from 'lucide-react';
 import type { ServerStatus } from '@mojito/contract';
+
+/** Panel-side status (contract status + the install_failed state). */
+export type PanelServerStatus = ServerStatus | 'install_failed';
 import {
   Sidebar,
   SidebarContent,
@@ -20,11 +23,12 @@ const serverItems = [
 ];
 
 /** Status dot colors (same palette as the console header badge). */
-function statusClass(status: ServerStatus | undefined): string {
+function statusClass(status: PanelServerStatus | undefined): string {
   switch (status) {
     case 'running':
       return 'bg-green-500';
     case 'crashed':
+    case 'install_failed':
       return 'bg-destructive';
     default:
       return 'bg-muted-foreground';
@@ -33,7 +37,7 @@ function statusClass(status: ServerStatus | undefined): string {
 
 interface ServerSidebarProps {
   name?: string;
-  status?: ServerStatus;
+  status?: PanelServerStatus;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import {
@@ -33,6 +33,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 function ServerSettingsPage() {
   const { serverId } = Route.useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const getServer = useServerFn(getServerFn);
   const reinstall = useServerFn(reinstallServerFn);
@@ -48,6 +49,8 @@ function ServerSettingsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
+      // The reinstall runs in the background — follow it on the console
+      await navigate({ to: '/servers/$serverId/console', params: { serverId } });
     },
   });
 
@@ -130,13 +133,8 @@ function ServerSettingsPage() {
             onClick={confirmReinstall}
             disabled={reinstallMutation.isPending}
           >
-            {reinstallMutation.isPending ? 'Réinstallation…' : 'Réinstaller'}
+            {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
           </Button>
-          {reinstallMutation.isSuccess && (
-            <span className="text-sm text-green-600">
-              Réinstallation terminée — le serveur est prêt à démarrer.
-            </span>
-          )}
           {reinstallMutation.isError && (
             <span className="text-sm text-destructive">
               {reinstallMutation.error.message}

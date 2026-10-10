@@ -8,9 +8,9 @@ type ReplaceAction = RunnerActionInput & { action: 'replace' };
 
 /**
  * `replace` action: replaces a string (or regex) in an existing file.
- * `find` and `replace` are templated.
+ * `find` and `replace` are templated. Returns the file path (install log).
  */
-export async function runReplace(action: ReplaceAction, ctx: ActionContext): Promise<void> {
+export async function runReplace(action: ReplaceAction, ctx: ActionContext): Promise<string> {
   const filePath = resolvePath(ctx.installDir, render(action.file, ctx.vars));
   const content = await readFile(filePath, 'utf-8');
   const find = render(action.find, ctx.vars);
@@ -21,4 +21,5 @@ export async function runReplace(action: ReplaceAction, ctx: ActionContext): Pro
     : content.split(find).join(replaceWith);
 
   await writeFile(filePath, newContent, 'utf-8');
+  return filePath;
 }

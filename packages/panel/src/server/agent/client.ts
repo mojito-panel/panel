@@ -1,5 +1,5 @@
 import type { INode } from '~/db/types';
-import type { ServerAction } from '@mojito/contract';
+import type { InstallStatus, ServerAction } from '@mojito/contract';
 import { decryptSecret } from '../crypto';
 
 /**
@@ -103,6 +103,14 @@ export async function agentInstallServer(
 
 export async function agentGetServer(node: INode, serverId: string): Promise<AgentServerInfo> {
   return agentCall(node, `/servers/${serverId}`);
+}
+
+/** Live (re)install status + step logs (poll while status === 'installing'). */
+export async function agentGetInstallStatus(
+  node: INode,
+  serverId: string,
+): Promise<InstallStatus> {
+  return agentCall(node, `/servers/${serverId}/install`);
 }
 
 export interface AgentReinstallResponse {
