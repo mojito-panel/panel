@@ -1,6 +1,7 @@
 import type { Plugin, ServerAllocationPayload } from '@mojito/contract';
 import type { ServerStore, StoredServer } from '../../internal/server-store';
 import { buildSystemVariables } from '../variables';
+import { countToolSteps } from '../../tools';
 import { runInstall } from './index';
 import type { InstallRegistry } from './registry';
 
@@ -32,7 +33,7 @@ export interface TrackedInstallOptions {
  */
 export function startTrackedInstall(options: TrackedInstallOptions): void {
   const { registry, store, serverId, name, plugin, variables, installDir, allocation } = options;
-  const totalSteps = plugin.install.length;
+  const totalSteps = countToolSteps(plugin) + plugin.install.length;
 
   registry.start(serverId, `Installation de « ${name} » démarrée (${totalSteps} étapes)`);
   registry.update(serverId, { totalSteps });

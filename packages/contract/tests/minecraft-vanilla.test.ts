@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { safeParsePlugin, findUnknownVariables } from '../src/plugin-schema';
+import { safeParsePlugin, findUnknownVariables, findToolFeatureErrors } from '../src/plugin-schema';
 
 const pluginPath = join(
   fileURLToPath(new URL('.', import.meta.url)),
@@ -37,26 +37,21 @@ describe('plugin minecraft-vanilla', () => {
       'ONLINE_MODE',
       'VIEW_DISTANCE',
       'JVM_ARGS',
-      'JAVA_MAJOR',
+      'JAVA_VERSION',
     ]);
   });
 
-  it('embarque un JRE portable dans .bin/java (pas de Java hôte requis)', () => {
+  it('declare la feature java — JDK préchargé par l’agent dans le .bin du serveur (pas de Java hôte requis)', () => {
     const parsed = safeParsePlugin(raw);
     if (!parsed.success) throw parsed.error;
-    const install = parsed.data.install;
-    // 3 premières étapes : download JRE → extract → cleanup zip
-    expect(install[0]).toMatchObject({ action: 'download', dest: '.bin/java.zip' });
-    expect(String(install[0].url)).toContain('aka.ms/download-jdk/microsoft-jdk-{{JAVA_MAJOR}}-windows-x64.zip');
-    expect(install[0].url).toContain('{{JAVA_MAJOR}}');
-    expect(install[1]).toMatchObject({
-      action: 'extract',
-      archive: '.bin/java.zip',
-      dest: '.bin/java',
-      stripComponents: 1,
-    });
-    const BS = String.fromCharCode(92);
-    expect(parsed.data.start.command).toContain('.bin' + BS + 'java' + BS + 'bin' + BS + 'java.exe');
+    expect(parsed.data.features).toContain('java');
+    // Le JDK est fourni par l'agent (feature java + variable JAVA_VERSION) :
+    // plus aucune étape download/extract dans le script d'installation
+    expect(parsed.data.install.some((a) => a.action === 'download' || a.action === 'extract')).toBe(false);
+    // La commande de démarrage appelle java via le PATH injecté
+    expect(parsed.data.start.command).toContain('java -Xms');
     expect(parsed.data.runtime).toBeUndefined();
+    // findToolFeatureErrors : feature java + variable JAVA_VERSION déclarée → OK
+    expect(findToolFeatureErrors(parsed.data)).toEqual([]);
   });
 });

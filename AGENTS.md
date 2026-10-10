@@ -88,9 +88,9 @@ src/
 - **Actions runner** : `download`, `extract`, `write`, `replace`, `configFile` (parsers `properties`/`ini`/`yaml`/`json` — équivalent `config.files` Pelican), `command`, `script` (fallback ouvert : shell `bash`/`powershell`/`cmd`).
 - **Codes de sortie** : une action `command` peut déclarer `successCodes` (codes de sortie acceptés comme succès, défaut `[0]`). Ex : steamcmd sort avec 7 après son auto-update alors que le job a réussi.
 - **Progression en direct** : une action `command` peut déclarer `tail` (`file`, `filter` regex optionnel, `intervalMs`) — l'agent suit le fichier et streame les nouvelles lignes pendant l'exécution. Requis pour les outils console (steamcmd) qui n'impriment leur progression que sur un vrai terminal, jamais sur un pipe.
-- **Chaîne d'outils embarquée** : un plugin embarque ses outils dans `.bin/<outil>` (JDK dans `.bin/java`, SteamCMD dans `.bin/steamcmd`) — la feature correspondante (`java_version`, `steamcmd`) est déclarative, rien ne l'interprète côté agent.
+- **Features outils** (interprétées par l'agent, les autres features restent des flags descriptifs) : `java` → JDK Microsoft Build of OpenJDK préchargé par l'agent dans le `.bin/` DU SERVEUR (isolé par serveur), version depuis la variable `JAVA_VERSION` (requise, surchargeable par serveur) ; `steamcmd` → SteamCMD préchargé dans `.bin/steamcmd` +, si la variable `STEAM_APP_ID` est déclarée, installation automatique du contenu (`+login anonymous`, `+app_update` puis passe `validate`, `STEAM_MOD` optionnel pour `+app_set_config`). Les bin dirs sont injectés en tête du `PATH` (`JAVA_HOME` inclus) pour les actions d'installation ET au spawn. Validation amont : `findToolFeatureErrors` (contract) — feature sans variable requise = erreur avant installation.
 - **start** : `command`, `stop` (command/signal + `timeoutMs` → kill), `ready` (`pattern` + `strip` — équivalent `config.startup` Pelican), `workingDirectory`.
-- **Autres** : `logs` (mode stdout/file + stripAnsi), `runtime` (contraintes hôte, remplace `docker_images`, ex: `{ "java": ">=21" }`), `features` (flags Pelican-style), `updateUrl`.
+- **Autres** : `logs` (mode stdout/file + stripAnsi), `runtime` (contraintes hôte, remplace `docker_images`, ex: `{ "java": ">=21" }`), `features` (flags Pelican-style ; `java` et `steamcmd` sont interprétés — voir ci-dessus), `updateUrl`.
 - Résolution du templating : variables système > variables du serveur > defaults du plugin > env fixe.
 - Variable inconnue dans un template = erreur à l'installation (`findUnknownVariables`).
 - Schémas Zod pour : requêtes/réponses API panel ↔ agent, messages WS.
@@ -99,7 +99,7 @@ src/
 ## Tests
 
 - Vitest dans chaque package (`tests/` à côté de `src/`).
-- Après tout changement : `npm test` doit passer (54 tests actuellement).
+- Après tout changement : `npm test` doit passer (278 tests actuellement).
 
 ## V2 reporté (ne PAS faire en V1)
 

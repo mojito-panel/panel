@@ -214,6 +214,52 @@ export const logsConfigSchema = z.object({
 
 export type LogsConfig = z.infer<typeof logsConfigSchema>;
 
+// ─── Tool features (interpreted by the agent, prebuilt into .bin/) ──────────
+
+/**
+ * Feature flags that trigger tool provisioning by the agent (the others —
+ * eula, pid_limit… — stay descriptive). Each tool is prebuilt inside the
+ * SERVER's own `.bin/` (isolated per server) and injected into PATH at
+ * install and start.
+ */
+export const TOOL_FEATURES = ['java', 'steamcmd'] as const;
+
+export type ToolFeature = (typeof TOOL_FEATURES)[number];
+
+/** Variable required by the `java` feature: JDK major version (11, 17, 21…). */
+export const JAVA_VERSION_ENV = 'JAVA_VERSION';
+
+/** Variable read by the `steamcmd` feature: app ID the agent auto-installs. */
+export const STEAM_APP_ID_ENV = 'STEAM_APP_ID';
+
+/** Optional variable read by the `steamcmd` feature: GoldSrc/Source mod. */
+export const STEAM_MOD_ENV = 'STEAM_MOD';
+
+/**
+ * Upfront validation of the tool features (checked by the agent before any
+ * install, and by the panel editor on save). Returns user-readable errors:
+ * - `java` without a declared `JAVA_VERSION` variable
+ * - a tool feature variable used but NOT declared
+ */
+export function findToolFeatureErrors(plugin: Plugin): string[] {
+  const errors: string[] = [];
+  const declared = new Set(plugin.variables.map((v) => v.env));
+  const hasFeature = (name: ToolFeature) => plugin.features.includes(name);
+
+  if (hasFeature('java') && !declared.has(JAVA_VERSION_ENV)) {
+    errors.push(`La feature « java » requiert une variable « ${JAVA_VERSION_ENV} » déclarée`);
+  }
+  if (!hasFeature('java') && declared.has(JAVA_VERSION_ENV)) {
+    errors.push(`La variable « ${JAVA_VERSION_ENV} » ne sert à rien sans la feature « java »`);
+  }
+  if (!hasFeature('steamcmd') && (declared.has(STEAM_APP_ID_ENV) || declared.has(STEAM_MOD_ENV))) {
+    errors.push(
+      `Les variables « ${STEAM_APP_ID_ENV} »/« ${STEAM_MOD_ENV} » ne servent à rien sans la feature « steamcmd »`,
+    );
+  }
+  return errors;
+}
+
 // ─── Runtime (replaces Pelican's docker_images — checked by the agent) ───────
 
 /**
@@ -244,7 +290,7 @@ export const pluginSchema = z.object({
   author: z.string().min(1),
   description: z.string().optional(),
   tags: z.array(z.string()).default([]),
-  /** Pelican-style feature flags: eula, java_version, pid_limit... */
+  /** Pelican-style feature flags: eula, pid_limit… and tool features (java, steamcmd). */
   features: z.array(z.string()).default([]),
   /** URL of a plugin update JSON (Pelican's meta.update_url equivalent). */
   updateUrl: z.string().url().optional(),

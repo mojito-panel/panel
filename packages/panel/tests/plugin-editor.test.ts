@@ -173,6 +173,31 @@ describe('pluginEditorValueToPlugin', () => {
     const back = pluginToEditorValue(parsed);
     expect(pluginEditorValueToPlugin(back).plugin).toEqual(plugin);
   });
+
+  it('signale la feature java sans variable JAVA_VERSION (validation agent)', () => {
+    const value = fullEditorValue();
+    value.features = ['java'];
+    const { plugin, issues } = pluginEditorValueToPlugin(value);
+    expect(plugin).toBeUndefined();
+    expect(issues?.length).toBe(1);
+    expect(issues?.[0]).toContain('JAVA_VERSION');
+  });
+
+  it('accepte la feature java avec la variable JAVA_VERSION déclarée', () => {
+    const value = fullEditorValue();
+    value.features = ['eula', 'java'];
+    value.variables.push({
+      ...newVariableValue(2),
+      name: 'Java',
+      env: 'JAVA_VERSION',
+      type: 'string',
+      defaultValue: '21',
+      options: ['17', '21'],
+    });
+    const { plugin, issues } = pluginEditorValueToPlugin(value);
+    expect(plugin).toBeDefined();
+    expect(issues).toBeUndefined();
+  });
 });
 
 describe('findUnknownVariablesInEditorValue', () => {

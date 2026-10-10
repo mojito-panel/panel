@@ -142,7 +142,7 @@ export function execProcess(
 }
 
 /**
- * Tails a log file while a command runs and streams new lines via onLine.
+ * Generic log-file tailer: polls `filePath` and streams new lines via onLine.
  *
  * Why: console tools like steamcmd stay SILENT when stdout is a pipe (they
  * only print progress on a real terminal) but write it to a log file as it
@@ -154,14 +154,13 @@ export function execProcess(
  * - only complete lines are emitted (a partial trailing line is carried
  *   until its newline arrives, flushed once when the command exits)
  */
-function startLogTail(
-  tail: NonNullable<CommandAction['tail']>,
-  ctx: ActionContext,
+export function createFileTail(
+  filePath: string,
+  options: { filter?: string; intervalMs?: number },
   onLine: ExecOptions['onLine'],
 ): { stop: () => Promise<void> } {
-  const filePath = resolvePath(ctx.installDir, render(tail.file, ctx.vars));
-  const filter = tail.filter ? new RegExp(tail.filter) : null;
-  const intervalMs = tail.intervalMs ?? 1000;
+  const filter = options.filter ? new RegExp(options.filter) : null;
+  const intervalMs = options.intervalMs ?? 1000;
 
   // Pre-existing file → only stream what the command APPENDS
   let offset = existsSync(filePath) ? statSync(filePath).size : 0;
@@ -214,6 +213,19 @@ function startLogTail(
 }
 
 /**
+ * Tails the log file declared by a `command` action (relative to the
+ * install dir, templated) while the command runs.
+ */
+function startLogTail(
+  tail: NonNullable<CommandAction['tail']>,
+  ctx: ActionContext,
+  onLine: ExecOptions['onLine'],
+): { stop: () => Promise<void> } {
+  const filePath = resolvePath(ctx.installDir, render(tail.file, ctx.vars));
+  return createFileTail(filePath, tail, onLine);
+}
+
+/**
  * `command` action: runs a binary in the install directory.
  * Failure (non-success code) = install error.
  * Resolved variables (plugin + system) are injected into the environment.
@@ -228,7 +240,7 @@ export async function runCommand(
   const cwd = action.cwd
     ? resolvePath(ctx.installDir, render(action.cwd, ctx.vars))
     : ctx.installDir;
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = { ...ctx.toolEnv };
   for (const [key, value] of Object.entries(action.env ?? {})) {
     env[key] = render(value, ctx.vars);
   }
@@ -282,7 +294,7 @@ export async function runScript(
   await writeFile(scriptPath, fileContent, 'utf-8');
 
   try {
-    const options: ExecOptions = { cwd: ctx.installDir, timeoutMs: action.timeoutMs, onLine };
+    const options: ExecOptions = { cwd: ctx.installDir, timeoutMs: action.timeoutMs, onLine, env: ctx.toolEnv };
     let result: ExecResult;
     if (action.shell === 'powershell') {
       result = await execProcess(

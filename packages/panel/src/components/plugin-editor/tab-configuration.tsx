@@ -144,7 +144,7 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
               <FieldShell
                 id="plugin-features"
                 label="Features"
-                hint="Flags à la Pelican (eula, java_version…), séparés par des virgules."
+                hint="Flags à la Pelican (eula…). « java » et « steamcmd » sont interprétés par l'agent : outil préchargé dans le .bin du serveur, injecté dans le PATH (variables JAVA_VERSION / STEAM_APP_ID / STEAM_MOD)."
                 errors={field.state.meta.errors}
               >
                 <TagsInput

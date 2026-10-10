@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { safeParsePlugin, findUnknownVariables } from '../src/plugin-schema';
+import { safeParsePlugin, findUnknownVariables, findToolFeatureErrors } from '../src/plugin-schema';
 
 const pluginPath = join(
   fileURLToPath(new URL('.', import.meta.url)),
@@ -30,6 +30,8 @@ describe('plugin ricochet', () => {
     if (!parsed.success) throw parsed.error;
     const envs = parsed.data.variables.map((v) => v.env);
     expect(envs).toEqual([
+      'STEAM_APP_ID',
+      'STEAM_MOD',
       'RICOCHET_MAP',
       'MAX_PLAYERS',
       'RCON_PASSWORD',
@@ -37,53 +39,28 @@ describe('plugin ricochet', () => {
     ]);
   });
 
-  it('declare la feature steamcmd et embarque SteamCMD dans .bin/steamcmd (pas de client Steam hote requis)', () => {
+  it('declare la feature steamcmd — SteamCMD et le contenu gérés par l’agent (pas de client Steam hôte requis)', () => {
     const parsed = safeParsePlugin(raw);
     if (!parsed.success) throw parsed.error;
-    const install = parsed.data.install;
-    // 3 premières étapes : download SteamCMD → extract → cleanup zip
-    expect(install[0]).toMatchObject({ action: 'download', dest: '.bin/steamcmd.zip' });
-    expect(String(install[0].url)).toBe('https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip');
-    expect(install[1]).toMatchObject({
-      action: 'extract',
-      archive: '.bin/steamcmd.zip',
-      dest: '.bin/steamcmd',
-    });
-    expect(install[2]).toMatchObject({ action: 'command', command: 'del .bin\\steamcmd.zip' });
-
     expect(parsed.data.features).toContain('steamcmd');
     expect(parsed.data.runtime).toBeUndefined();
 
-    // SteamCMD : warmup auto-update (exit 7 attendu) + HLDS (app 90) + mod
-    // ricochet, login anonymous, installé deux fois (bug GoldSrc). Le code 7
-    // (relance après auto-update SteamCMD) est toléré via successCodes.
-    const BS = String.fromCharCode(92);
-    const steamcmdExe = '.bin' + BS + 'steamcmd' + BS + 'steamcmd.exe';
-    const commands = install.flatMap((a) => (a.action === 'command' ? [a.command] : []));
-    expect(commands.length).toBe(4);
+    // La feature steamcmd délègue tout à l'agent : préchargement du binaire
+    // dans le .bin du serveur, auto-install du contenu (app_update 90 +
+    // passe validate, login anonymous, +app_set_config mod ricochet).
+    // Le script d'installation ne contient plus AUCUNE étape steamcmd.
+    expect(parsed.data.install.every((a) => a.action !== 'command')).toBe(true);
+    expect(
+      parsed.data.install.some((a) => a.action === 'download' || a.action === 'extract'),
+    ).toBe(false);
 
-    // Étape 4 (install[3]) : warmup — auto-update SteamCMD seul
-    const warmup = install[3];
-    if (warmup.action !== 'command') throw new Error('l’étape 4 doit être la warmup steamcmd');
-    expect(warmup.command).toBe(steamcmdExe + ' +quit');
-    expect(warmup.successCodes).toEqual([0, 7]);
+    // Paramètres lus par l'agent : variables dédiées (defaults sains)
+    const variables = Object.fromEntries(parsed.data.variables.map((v) => [v.env, v]));
+    expect(variables.STEAM_APP_ID.defaultValue).toBe('90');
+    expect(variables.STEAM_MOD.defaultValue).toBe('ricochet');
 
-    // Étapes suivantes : installation HLDS en deux passes
-    for (const action of install) {
-      if (action.action !== 'command' || !action.command.includes('+app_update 90')) continue;
-      expect(action.successCodes).toEqual([0, 7]);
-      expect(action.command).toContain(steamcmdExe);
-      expect(action.command).toContain('+force_install_dir "{{SERVER_INSTALL_DIR}}"');
-      expect(action.command).toContain('+login anonymous');
-      expect(action.command).toContain('+app_set_config 90 mod ricochet');
-      expect(action.command).toContain('+app_update 90');
-      // SteamCMD n'imprime pas sa progression sur un pipe → tail de son log
-      expect(action.tail).toMatchObject({
-        file: '.bin/steamcmd/logs/content_log.txt',
-        filter: 'state changed|update started|Fully Installed',
-      });
-    }
-    expect(commands[3]).toContain('validate');
+    // findToolFeatureErrors : feature steamcmd + variables déclarées → OK
+    expect(findToolFeatureErrors(parsed.data)).toEqual([]);
   });
 
   it('demarre hlds.exe avec le mod ricochet sur le port alloue', () => {

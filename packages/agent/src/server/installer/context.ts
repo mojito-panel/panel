@@ -7,6 +7,8 @@ export interface ActionContext {
   installDir: string;
   /** Resolved variables (system + server + defaults + fixed env). */
   vars: ResolvedVariables;
+  /** Agent prebuilt tools (PATH + JAVA_HOME…) — injected into command/script env. */
+  toolEnv?: Record<string, string>;
 }
 
 /**

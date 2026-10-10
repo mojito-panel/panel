@@ -26,8 +26,10 @@ export interface ServerRoutesOptions {
 /** Maps server errors to HTTP responses. */
 function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
   if (err instanceof PowerActionError) {
-    const code = err.code === 'not_found' ? 404 : 409;
-    return reply.code(code).send({ error: err.message, code: err.code });
+    if (err.code === 'not_found') return reply.code(404).send({ error: err.message, code: err.code });
+    if (err.code === 'start_failed')
+      return reply.code(500).send({ error: err.message, code: err.code });
+    return reply.code(409).send({ error: err.message, code: err.code });
   }
   return reply.code(500).send({ error: 'Erreur interne' });
 }

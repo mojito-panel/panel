@@ -5,8 +5,12 @@ import {
   safeParsePlugin,
   extractTemplateVars,
   findUnknownVariables,
+  findToolFeatureErrors,
   validateVariableValue,
   RESERVED_ENV_NAMES,
+  JAVA_VERSION_ENV,
+  STEAM_APP_ID_ENV,
+  STEAM_MOD_ENV,
   type Plugin,
 } from '../src/plugin-schema';
 
@@ -256,6 +260,72 @@ describe('findUnknownVariables', () => {
       ],
     });
     expect(findUnknownVariables(plugin)).toEqual(['NOT_DECLARED']);
+  });
+});
+
+describe('findToolFeatureErrors (features java/steamcmd interprétées par l’agent)', () => {
+  const base = {
+    schemaVersion: 2 as const,
+    id: 'tool-plugin',
+    name: 'Tools',
+    author: 'moi',
+    start: { command: 'java -jar app.jar' },
+  };
+
+  it('accepte la feature java avec la variable JAVA_VERSION déclarée', () => {
+    const plugin = parsePlugin({
+      ...base,
+      features: ['java'],
+      variables: [{ env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' }],
+    });
+    expect(findToolFeatureErrors(plugin)).toEqual([]);
+  });
+
+  it('rejette la feature java sans variable JAVA_VERSION', () => {
+    const plugin = parsePlugin({ ...base, features: ['java'] });
+    const errors = findToolFeatureErrors(plugin);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain(JAVA_VERSION_ENV);
+  });
+
+  it('signale une variable JAVA_VERSION sans la feature java', () => {
+    const plugin = parsePlugin({
+      ...base,
+      variables: [{ env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' }],
+    });
+    expect(findToolFeatureErrors(plugin).length).toBe(1);
+  });
+
+  it('accepte la feature steamcmd avec STEAM_APP_ID et STEAM_MOD déclarées', () => {
+    const plugin = parsePlugin({
+      ...base,
+      features: ['steamcmd'],
+      variables: [
+        { env: STEAM_APP_ID_ENV, name: 'App', type: 'string', defaultValue: '90' },
+        { env: STEAM_MOD_ENV, name: 'Mod', type: 'string', defaultValue: 'ricochet' },
+      ],
+    });
+    expect(findToolFeatureErrors(plugin)).toEqual([]);
+  });
+
+  it('accepte la feature steamcmd seule (binaire sur le PATH, sans auto-install)', () => {
+    const plugin = parsePlugin({ ...base, features: ['steamcmd'] });
+    expect(findToolFeatureErrors(plugin)).toEqual([]);
+  });
+
+  it('signale STEAM_APP_ID sans la feature steamcmd', () => {
+    const plugin = parsePlugin({
+      ...base,
+      variables: [{ env: STEAM_APP_ID_ENV, name: 'App', type: 'string', defaultValue: '90' }],
+    });
+    const errors = findToolFeatureErrors(plugin);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain('steamcmd');
+  });
+
+  it('ne remonte rien pour un plugin sans features ni variables outils', () => {
+    const plugin = parsePlugin({ ...base, features: ['eula'] });
+    expect(findToolFeatureErrors(plugin)).toEqual([]);
   });
 });
 

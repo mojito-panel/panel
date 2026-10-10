@@ -4,6 +4,7 @@ import type { ServerInstance } from './server';
 import { PowerActionError } from './errors';
 import { resolveVariables, render } from './templating';
 import { buildSystemVariables } from './variables';
+import { buildToolEnv, ensurePluginTools, resolvePluginTools } from '../tools';
 
 /**
  * Power actions (≈ wings server/power.go): start/stop/restart/kill.
@@ -35,7 +36,7 @@ async function executePowerAction(
       if (instance.manager.isAlive()) {
         throw new PowerActionError('Le serveur est déjà en cours d’exécution', 'already_running');
       }
-      spawnServer(instance, stored);
+      await spawnServer(instance, stored);
       return;
 
     case 'stop':
@@ -44,7 +45,7 @@ async function executePowerAction(
 
     case 'restart':
       await instance.manager.stop();
-      spawnServer(instance, stored);
+      await spawnServer(instance, stored);
       return;
 
     case 'kill':
@@ -53,8 +54,13 @@ async function executePowerAction(
   }
 }
 
-/** Builds the templated command and spawns the process. */
-function spawnServer(instance: ServerInstance, stored: StoredServer): void {
+/**
+ * Builds the templated command and spawns the process.
+ * The plugin's tool features (java, steamcmd) are ensured in the server's
+ * `.bin/` and injected into the environment: PATH + JAVA_HOME — the start
+ * command can simply call `java`, whatever the host has installed.
+ */
+async function spawnServer(instance: ServerInstance, stored: StoredServer): Promise<void> {
   const plugin = stored.plugin;
   const systemVars = buildSystemVariables(
     stored.serverId,
@@ -66,6 +72,15 @@ function spawnServer(instance: ServerInstance, stored: StoredServer): void {
   const env: Record<string, string> = {};
   for (const [key, value] of resolved) {
     env[key] = value;
+  }
+
+  try {
+    const tools = resolvePluginTools(plugin, resolved);
+    const runtimes = await ensurePluginTools(tools, stored.installDir);
+    Object.assign(env, buildToolEnv(runtimes));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new PowerActionError(`Impossible de préparer les outils du serveur : ${message}`, 'start_failed');
   }
 
   instance.manager.spawn({

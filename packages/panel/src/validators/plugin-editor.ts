@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   RESERVED_ENV_NAMES,
+  findToolFeatureErrors,
   safeParsePlugin,
   type Plugin,
   type RunnerActionInput,
@@ -668,6 +669,11 @@ export function pluginEditorValueToPlugin(value: PluginEditorValue): {
 
   const parsed = safeParsePlugin(plugin);
   if (parsed.success) {
+    // Tool features (java, steamcmd) — same upfront check the agent runs at install
+    const toolErrors = findToolFeatureErrors(parsed.data);
+    if (toolErrors.length > 0) {
+      return { issues: toolErrors };
+    }
     return { plugin: parsed.data };
   }
   return {

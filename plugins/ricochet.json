@@ -3,7 +3,7 @@
   "id": "ricochet",
   "name": "Ricochet (Valve)",
   "author": "Mojito Panel",
-  "description": "Serveur dedie Ricochet de Valve (GoldSrc). SteamCMD est telecharge dans .bin/steamcmd — aucun client Steam n'est requis sur l'hote — puis s'auto-met a jour (premiere execution, exit code 7 attendu) avant d'installer HLDS (app 90) avec le mod ricochet via un login anonymous. Le code de sortie 7 de SteamCMD (relance apres auto-update) est tolere via successCodes. SteamCMD n'imprime pas sa progression sur un pipe : la progression est streamee en suivant son propre log (logs/content_log.txt) via la propriete tail. L'app 90 etant partielle au premier telechargement (bug SteamCMD connu), l'installation est lancee deux fois avec validate.",
+  "description": "Serveur dedie Ricochet de Valve (GoldSrc). La feature steamcmd fait precharger SteamCMD par l'agent dans le .bin du serveur (aucun client Steam n'est requis sur l'hote) puis installe automatiquement HLDS (app 90, mod ricochet) via un login anonymous : app_update puis une passe validate (l'app 90 etant partielle au premier telechargement, bug SteamCMD connu).",
   "tags": [
     "ricochet",
     "valve",
@@ -18,6 +18,29 @@
     "minDiskMb": 1500
   },
   "variables": [
+    {
+      "env": "STEAM_APP_ID",
+      "name": "App Steam (HLDS)",
+      "description": "ID de l'application Steam installee par l'agent via SteamCMD (90 = Half-Life Dedicated Server, moteur GoldSrc).",
+      "type": "string",
+      "defaultValue": "90",
+      "userViewable": false,
+      "userEditable": false,
+      "sort": 0,
+      "required": false,
+      "pattern": "^[0-9]+$"
+    },
+    {
+      "env": "STEAM_MOD",
+      "name": "Mod GoldSrc",
+      "description": "Mod passe a app_set_config pour l'app 90 (ricochet, cstrike, dmc…).",
+      "type": "string",
+      "defaultValue": "ricochet",
+      "userViewable": false,
+      "userEditable": false,
+      "sort": 1,
+      "required": false
+    },
     {
       "env": "RICOCHET_MAP",
       "name": "Carte de depart",
@@ -70,46 +93,6 @@
     }
   ],
   "install": [
-    {
-      "action": "download",
-      "url": "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
-      "dest": ".bin/steamcmd.zip"
-    },
-    {
-      "action": "extract",
-      "archive": ".bin/steamcmd.zip",
-      "dest": ".bin/steamcmd"
-    },
-    {
-      "action": "command",
-      "command": "del .bin\\steamcmd.zip"
-    },
-    {
-      "action": "command",
-      "command": ".bin\\steamcmd\\steamcmd.exe +quit",
-      "successCodes": [0, 7],
-      "timeoutMs": 600000
-    },
-    {
-      "action": "command",
-      "command": ".bin\\steamcmd\\steamcmd.exe +force_install_dir \"{{SERVER_INSTALL_DIR}}\" +login anonymous +app_set_config 90 mod ricochet +app_update 90 +quit",
-      "successCodes": [0, 7],
-      "tail": {
-        "file": ".bin/steamcmd/logs/content_log.txt",
-        "filter": "state changed|update started|Fully Installed"
-      },
-      "timeoutMs": 1800000
-    },
-    {
-      "action": "command",
-      "command": ".bin\\steamcmd\\steamcmd.exe +force_install_dir \"{{SERVER_INSTALL_DIR}}\" +login anonymous +app_set_config 90 mod ricochet +app_update 90 validate +quit",
-      "successCodes": [0, 7],
-      "tail": {
-        "file": ".bin/steamcmd/logs/content_log.txt",
-        "filter": "state changed|update started|Fully Installed"
-      },
-      "timeoutMs": 1800000
-    },
     {
       "action": "write",
       "file": "ricochet/server.cfg",

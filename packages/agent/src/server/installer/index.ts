@@ -1,4 +1,5 @@
 import {
+  findToolFeatureErrors,
   findUnknownVariables,
   validateVariableValue,
   type Plugin,
@@ -6,6 +7,14 @@ import {
 } from '@mojito/contract';
 import { mkdir } from 'node:fs/promises';
 import { resolveVariables, render, type SystemVariables } from '../templating';
+import {
+  buildToolEnv,
+  countToolSteps,
+  ensureTool,
+  resolvePluginTools,
+  runSteamcmdContentInstall,
+} from '../../tools';
+import type { EnsureToolResult } from '../../tools';
 import type { ActionContext } from './context';
 import { runWrite } from './actions/write';
 import { runReplace } from './actions/replace';
@@ -91,6 +100,11 @@ export function validateInstall(
     return `Variables inconnues dans le plugin : ${unknown.join(', ')}`;
   }
 
+  const toolErrors = findToolFeatureErrors(plugin);
+  if (toolErrors.length > 0) {
+    return toolErrors.join(' ; ');
+  }
+
   for (const variable of plugin.variables) {
     const value = variables[variable.env];
     if (value !== undefined) {
@@ -131,20 +145,84 @@ export async function runInstall(options: InstallOptions): Promise<InstallResult
   // 3. Prepare the install directory
   await mkdir(installDir, { recursive: true });
 
-  const ctx: ActionContext = { installDir, vars: resolvedVars };
-  const totalSteps = plugin.install.length;
+  const toolStepCount = countToolSteps(plugin);
+  const totalSteps = toolStepCount + plugin.install.length;
 
-  // 4. Run the actions
-  for (let step = 0; step < totalSteps; step++) {
-    const action = plugin.install[step];
-    const startMessage = render(describeAction(action), resolvedVars);
+  const emitStepStart = (step: number, message: string) => {
     onProgress?.({
       step,
       totalSteps,
-      message: startMessage,
+      message,
       percent: Math.round((step / Math.max(totalSteps, 1)) * 100),
     });
-    onEvent?.({ type: 'step-start', step, totalSteps, message: startMessage });
+    onEvent?.({ type: 'step-start', step, totalSteps, message });
+  };
+
+  // 4. Prebuilt tools (agent cache, shared between servers): ensure present,
+  //    then steamcmd installs the game content itself (+app_update <appId>)
+  let toolEnv: Record<string, string> | undefined;
+  let step = 0;
+  if (toolStepCount > 0) {
+    const tools = resolvePluginTools(plugin, resolvedVars);
+    const runtimes: EnsureToolResult[] = [];
+    try {
+      for (const tool of tools) {
+        emitStepStart(step, `Préparation de l'outil ${tool.label}`);
+        const runtime = await ensureTool(tool, {
+          installDir,
+          onLine: stepOutputEmitter(onEvent, step),
+        });
+        runtimes.push(runtime);
+        onEvent?.({
+          type: 'step-done',
+          step,
+          message: runtime.installed ? 'installé dans .bin du serveur' : 'déjà installé',
+        });
+        step++;
+      }
+
+      const steamIndex = tools.findIndex((t) => t.name === 'steamcmd' && t.steamcmd);
+      if (steamIndex !== -1) {
+        const { appId, mod } = tools[steamIndex].steamcmd!;
+        const steamRuntime = runtimes[steamIndex];
+        // Two passes: the first download can be partial (well-known SteamCMD
+        // bug, GoldSrc app 90 in particular) — the `validate` pass completes
+        // and integrity-checks the content
+        const passes: { validate: boolean; message: string }[] = [
+          { validate: false, message: `Installation du contenu Steam (app ${appId})` },
+          { validate: true, message: `Vérification du contenu Steam (app ${appId})` },
+        ];
+        for (const pass of passes) {
+          emitStepStart(step, pass.message);
+          await runSteamcmdContentInstall(
+            { appId, mod, validate: pass.validate },
+            steamRuntime.binDir,
+            {
+              installDir,
+              onLine: stepOutputEmitter(onEvent, step),
+            },
+          );
+          onEvent?.({ type: 'step-done', step, message: 'contenu installé' });
+          step++;
+        }
+      }
+
+      toolEnv = buildToolEnv(runtimes);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Outil — ${message}`, resolvedVars };
+    }
+  }
+
+  const ctx: ActionContext = { installDir, vars: resolvedVars, toolEnv };
+
+  // 5. Run the actions (numbering continues after the actually-consumed tool steps)
+  const actionOffset = step;
+  for (let actionStep = 0; actionStep < plugin.install.length; actionStep++) {
+    const action = plugin.install[actionStep];
+    step = actionOffset + actionStep;
+    const startMessage = render(describeAction(action), resolvedVars);
+    emitStepStart(step, startMessage);
 
     try {
       let doneMessage: string;
