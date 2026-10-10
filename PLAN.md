@@ -84,11 +84,27 @@ mojito-panel/
     │       │   ├── auth.ts       # getSession (SSR), signOutFn
     │       │   └── health.ts     # healthcheck DB
     │       └── router.tsx        # getRouter + RouterContext (queryClient, staleTime 60s)
-    └── agent/                # @mojito/agent — Fastify daemon
+    └── agent/                # @mojito/agent — Fastify daemon (architecture alignée wings)
         └── src/
-            ├── api/index.ts      # Fastify + Bearer token (SHA-256, timing-safe) + /health
-            ├── config.ts         # Config Zod (env vars)
-            └── index.ts          # Entrypoint
+            ├── index.ts              # Entrypoint (≈ wings.go / cmd/)
+            ├── config/               # Config Zod (env vars)
+            ├── environment/          # Process environment (≈ environment/ : spawn, stdin, stop gracieux, états, events)
+            ├── server/               # Domaine serveur (≈ server/)
+            │   ├── server.ts          # ServerInstance : power lock, crash timestamp, listeners console
+            │   ├── manager.ts          # ServerManager : collection des instances + events wiring
+            │   ├── power.ts           # Actions start/stop/restart/kill (≈ power.go)
+            │   ├── crash.ts           # Crash detection + anti-crash-loop (≈ crash.go)
+            │   ├── variables.ts        # Variables système (SERVER_UUID…)
+            │   ├── templating.ts        # Résolution {{VAR}}
+            │   └── installer/          # Étapes d’install (≈ installer/) : actions download/write/configFile…
+            ├── parser/               # Parsers properties/ini/yaml/json (≈ parser/)
+            ├── router/               # HTTP + WS (≈ router/)
+            │   ├── middleware.ts       # Hook Bearer token (SHA-256, timing-safe)
+            │   ├── router-system.ts   # /health
+            │   ├── router-server.ts   # /servers/* (install, action, logs, delete, command)
+            │   ├── tokens/            # Vérification JWT console (≈ tokens/parser.go + websocket.go)
+            │   └── websocket/         # Socket console navigateur (≈ websocket/websocket.go)
+            └── internal/             # Persistance locale (server-store.json)
 ```
 
 ---
