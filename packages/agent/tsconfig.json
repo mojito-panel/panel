@@ -5,6 +5,7 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": false,
     "strict": true,
+    "erasableSyntaxOnly": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "declaration": false,

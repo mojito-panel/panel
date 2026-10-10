@@ -26,6 +26,8 @@ npm run build                  # Build panel (vite, client + SSR)
 | Techno | Contraintes |
 |---|---|
 | Node.js 24 | `node:sqlite` — PAS de better-sqlite3 (ne compile pas sur Windows) |
+| TypeScript | `erasableSyntaxOnly: true` partout — PAS de parameter properties, enums, namespaces |
+| Visibilité | Champs/méthodes privés avec `#` (syntaxe JS native) — JAMAIS `private`/`public`/`protected` |
 | React 19.3 | PAS de `useCallback`/`useMemo`/`forwardRef` — React Compiler activé |
 | MikroORM v7 | `defineEntity`/`p` (decorator-less) — PAS de EntitySchema ni de décorateurs |
 | better-auth | `node:sqlite` direct, plugin `tanstackStartCookies` — PAS d'adaptateur MikroORM |
