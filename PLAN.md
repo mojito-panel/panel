@@ -91,39 +91,73 @@ mojito-panel/
 
 ---
 
-## Schéma des plugins JSON (V1)
+## Schéma des plugins JSON (V2 — à parité avec les eggs Pelican)
 
 ```json
 {
-  "schemaVersion": 1,
-  "id": "minecraft-vanilla",
-  "name": "Minecraft Vanilla",
-  "author": "moi",
+  "schemaVersion": 2,
+  "id": "minecraft-paper",
+  "name": "Paper",
+  "author": "papermc",
+  "description": "High performance Spigot fork.",
   "tags": ["minecraft", "java"],
-  "requirements": { "minRamMb": 512 },
+  "features": ["eula", "java_version"],
+  "runtime": { "java": ">=21" },
+  "requirements": { "minRamMb": 512, "requiredCommands": ["java"] },
   "variables": [
-    { "id": "ram_mb", "type": "number", "default": 2048, "label": "RAM (Mo)", "min": 512, "max": 16384 },
-    { "id": "motd",   "type": "string", "default": "Mon serveur", "label": "MOTD" },
-    { "id": "version","type": "string", "default": "1.21.4", "label": "Version" }
+    {
+      "env": "MINECRAFT_VERSION",
+      "name": "Minecraft Version",
+      "type": "string",
+      "defaultValue": "latest",
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 0,
+      "required": true
+    },
+    {
+      "env": "SERVER_JARFILE",
+      "name": "Server Jar File",
+      "type": "string",
+      "defaultValue": "server.jar",
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 1,
+      "pattern": "^([\\w\\d._-]+)(\\.jar)$"
+    }
   ],
   "install": [
-    { "action": "download", "url": "https://.../server-{{version}}.jar", "dest": "server.jar" },
+    {
+      "action": "download",
+      "url": "https://api.papermc.io/v2/.../server.jar",
+      "dest": "{{SERVER_JARFILE}}",
+      "checksum": "sha256..."
+    },
     { "action": "write", "file": "eula.txt", "content": "eula=true" },
-    { "action": "replace", "file": "server.properties", "find": "motd=", "replace": "motd={{motd}}" }
+    {
+      "action": "configFile",
+      "file": "server.properties",
+      "parser": "properties",
+      "find": { "server-port": "{{SERVER_PORT}}", "server-ip": "{{SERVER_IP}}" }
+    }
   ],
   "start": {
-    "command": "java -Xms{{ram_mb}}M -Xmx{{ram_mb}}M -jar server.jar nogui",
-    "stop": { "type": "command", "value": "stop" },
-    "readyPattern": "Done \([0-9.]+s\)! For help"
+    "command": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}",
+    "stop": { "type": "command", "value": "stop", "timeoutMs": 30000 },
+    "ready": { "pattern": "Done \\([0-9.]+s\\)! For help", "strip": "\\[.*?\\] " }
   },
+  "logs": { "mode": "stdout", "stripAnsi": true },
   "env": { "JAVA_OPTS": "-XX:+UseG1GC" }
 }
 ```
 
-**Actions du runner V1 :** `download`, `extract`, `write`, `replace`, `command`
+**Actions du runner :** `download`, `extract`, `write`, `replace`, `configFile` (parsers properties/ini/yaml/json), `command`, `script` (fallback shell bash/powershell/cmd — pour tout le reste)
 
-**Templating `{{variable}}`** appliqué partout. Validation stricte : variable inconnue = erreur à l'installation.
+**Variables système** fournies par l'agent : `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`
 
+**Templating `{{ENV_VAR}}`** (UPPERCASE) appliqué partout. Résolution : variables système > variables du serveur > defaults du plugin > env fixe. Variable inconnue = erreur à l'installation.
+
+> Format à parité de features avec les eggs Pelican (PTDL_v2) : variables env + user_viewable/user_editable + validation, config files avec parsers, ready detection avec strip, logs config, features flags, update_url. Différence clé : déclaratif et Windows-first (pas de Docker, pas de script bash obligatoire — l'action `script` sert de soupape).
 ---
 
 ## Entités MikroORM (v7, defineEntity)

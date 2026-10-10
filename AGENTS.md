@@ -75,9 +75,16 @@ src/
 
 ## Conventions contract (packages/contract)
 
-- Schémas Zod pour : plugin JSON (eggs), requêtes/réponses API, messages WS.
-- Templating `{{variable}}` — une variable non déclarée = erreur à l'installation.
-- `schemaVersion` obligatoire dans chaque plugin JSON.
+- **Plugin format v2** — à parité de features avec les eggs Pelican (PTDL_v2), mais déclaratif et Windows-first (pas de Docker, pas de script bash obligatoire).
+- **Variables** : `env` UPPERCASE (`MINECRAFT_VERSION`) + templating `{{ENV_VAR}}` partout. Champs : `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (validation regex, équivalent des `rules` Laravel de Pelican), `options`.
+- **Variables système réservées** (fournies par l'agent, non déclarables) : `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`.
+- **Actions runner** : `download`, `extract`, `write`, `replace`, `configFile` (parsers `properties`/`ini`/`yaml`/`json` — équivalent `config.files` Pelican), `command`, `script` (fallback ouvert : shell `bash`/`powershell`/`cmd`).
+- **start** : `command`, `stop` (command/signal + `timeoutMs` → kill), `ready` (`pattern` + `strip` — équivalent `config.startup` Pelican), `workingDirectory`.
+- **Autres** : `logs` (mode stdout/file + stripAnsi), `runtime` (contraintes hôte, remplace `docker_images`, ex: `{ "java": ">=21" }`), `features` (flags Pelican-style), `updateUrl`.
+- Résolution du templating : variables système > variables du serveur > defaults du plugin > env fixe.
+- Variable inconnue dans un template = erreur à l'installation (`findUnknownVariables`).
+- Schémas Zod pour : requêtes/réponses API panel ↔ agent, messages WS.
+- `schemaVersion` obligatoire dans chaque plugin JSON (v2 uniquement).
 
 ## Tests
 

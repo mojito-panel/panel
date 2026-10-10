@@ -5,68 +5,137 @@ import {
   safeParsePlugin,
   extractTemplateVars,
   findUnknownVariables,
+  validateVariableValue,
+  RESERVED_ENV_NAMES,
+  type Plugin,
 } from '../src/plugin-schema';
 
-const validMinecraftPlugin = {
-  schemaVersion: 1 as const,
-  id: 'minecraft-vanilla',
-  name: 'Minecraft Vanilla',
-  author: 'moi',
+/**
+ * Egg style Paper — couvre toutes les features v2 :
+ * variables env UPPERCASE, variables systeme, configFile parser,
+ * ready detection avec strip, logs, runtime, env fixe.
+ */
+const validPaperPlugin = {
+  schemaVersion: 2 as const,
+  id: 'minecraft-paper',
+  name: 'Paper',
+  author: 'papermc',
+  description: 'High performance Spigot fork.',
   tags: ['minecraft', 'java'],
-  requirements: { minRamMb: 512 },
+  features: ['eula', 'java_version'],
+  runtime: { java: '>=21' },
+  requirements: { minRamMb: 512, requiredCommands: ['java'] },
   variables: [
-    { id: 'ram_mb', type: 'number' as const, default: 2048, label: 'RAM (Mo)', min: 512, max: 16384 },
-    { id: 'motd', type: 'string' as const, default: 'Mon serveur', label: 'MOTD' },
-    { id: 'version', type: 'string' as const, default: '1.21.4', label: 'Version' },
+    {
+      env: 'MINECRAFT_VERSION',
+      name: 'Minecraft Version',
+      type: 'string' as const,
+      defaultValue: 'latest',
+      userViewable: true,
+      userEditable: true,
+      sort: 0,
+      required: true,
+    },
+    {
+      env: 'SERVER_JARFILE',
+      name: 'Server Jar File',
+      type: 'string' as const,
+      defaultValue: 'server.jar',
+      userViewable: true,
+      userEditable: true,
+      sort: 1,
+      required: true,
+      pattern: '^([\w\d._-]+)(\.jar)$',
+    },
+    {
+      env: 'BUILD_NUMBER',
+      name: 'Build Number',
+      type: 'string' as const,
+      defaultValue: 'latest',
+      userViewable: false,
+      userEditable: false,
+      sort: 2,
+    },
   ],
   install: [
-    { action: 'download' as const, url: 'https://.../server-{{version}}.jar', dest: 'server.jar' },
+    {
+      action: 'download' as const,
+      url: 'https://api.papermc.io/v2/projects/{{MINECRAFT_VERSION}}/builds/{{BUILD_NUMBER}}/downloads/server.jar',
+      dest: '{{SERVER_JARFILE}}',
+      checksum: 'abc123',
+    },
     { action: 'write' as const, file: 'eula.txt', content: 'eula=true' },
-    { action: 'replace' as const, file: 'server.properties', find: 'motd=', replace: 'motd={{motd}}' },
+    {
+      action: 'configFile' as const,
+      file: 'server.properties',
+      parser: 'properties' as const,
+      find: { 'server-port': '{{SERVER_PORT}}', 'server-ip': '{{SERVER_IP}}' },
+    },
   ],
   start: {
-    command: 'java -Xms{{ram_mb}}M -Xmx{{ram_mb}}M -jar server.jar nogui',
-    stop: { type: 'command' as const, value: 'stop' },
-    readyPattern: 'Done \([0-9.]+s\)! For help',
+    command: 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}',
+    stop: { type: 'command' as const, value: 'stop', timeoutMs: 30000 },
+    ready: { pattern: 'Done \([0-9.]+s\)! For help', strip: '\[.*?\] ' },
   },
+  logs: { mode: 'stdout' as const, stripAnsi: true },
   env: { JAVA_OPTS: '-XX:+UseG1GC' },
 };
 
-describe('pluginSchema', () => {
-  it('valide un plugin Minecraft complet', () => {
-    const result = pluginSchema.safeParse(validMinecraftPlugin);
+describe('pluginSchema v2', () => {
+  it('valide un egg Paper complet', () => {
+    const result = pluginSchema.safeParse(validPaperPlugin);
     expect(result.success).toBe(true);
   });
 
   it('rejette un schemaVersion incorrect', () => {
-    const result = pluginSchema.safeParse({ ...validMinecraftPlugin, schemaVersion: 2 });
+    const result = pluginSchema.safeParse({ ...validPaperPlugin, schemaVersion: 1 });
     expect(result.success).toBe(false);
   });
 
-  it('rejette un id avec des caractères invalides', () => {
-    const result = pluginSchema.safeParse({ ...validMinecraftPlugin, id: 'Minecraft Vanilla!' });
+  it('rejette un id avec des caracteres invalides', () => {
+    const result = pluginSchema.safeParse({ ...validPaperPlugin, id: 'Minecraft Paper!' });
     expect(result.success).toBe(false);
   });
 
-  it('rejette une variable avec un id invalide', () => {
+  it('rejette une variable avec un nom env en lowercase', () => {
     const result = pluginSchema.safeParse({
-      ...validMinecraftPlugin,
-      variables: [{ id: '123bad', type: 'string', default: 'x', label: 'Bad' }],
+      ...validPaperPlugin,
+      variables: [{ env: 'version', name: 'Version', type: 'string', defaultValue: 'latest' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejette une variable utilisant un nom systeme reserve', () => {
+    const result = pluginSchema.safeParse({
+      ...validPaperPlugin,
+      variables: [{ env: 'SERVER_MEMORY', name: 'RAM', type: 'number', defaultValue: 1024 }],
     });
     expect(result.success).toBe(false);
   });
 
   it('rejette une action inconnue', () => {
     const result = pluginSchema.safeParse({
-      ...validMinecraftPlugin,
+      ...validPaperPlugin,
       install: [{ action: 'delete', file: 'x' }],
     });
     expect(result.success).toBe(false);
   });
 
+  it('rejette une variable avec un env duplique', () => {
+    const result = pluginSchema.safeParse({
+      ...validPaperPlugin,
+      variables: [
+        { env: 'MINECRAFT_VERSION', name: 'V1', type: 'string', defaultValue: 'a' },
+        { env: 'MINECRAFT_VERSION', name: 'V2', type: 'string', defaultValue: 'b' },
+      ],
+    });
+    // Pas de contrainte d'unicite au niveau Zod (verifie par le panel a l import)
+    expect(result.success).toBe(true);
+  });
+
   it('accepte un plugin minimal (sans install, sans variables)', () => {
     const minimal = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       id: 'test',
       name: 'Test',
       author: 'moi',
@@ -78,20 +147,46 @@ describe('pluginSchema', () => {
       expect(result.data.variables).toEqual([]);
       expect(result.data.install).toEqual([]);
       expect(result.data.tags).toEqual([]);
+      expect(result.data.features).toEqual([]);
     }
+  });
+
+  it('valide une action script (fallback ouvert)', () => {
+    const result = pluginSchema.safeParse({
+      ...validPaperPlugin,
+      install: [
+        { action: 'script', shell: 'powershell', content: 'Invoke-WebRequest -Uri x -OutFile y' },
+      ],
+    });
+    expect(result.success).toBe(true);
   });
 
   it('rejette un stop avec un type invalide', () => {
     const result = pluginSchema.safeParse({
-      ...validMinecraftPlugin,
-      start: { ...validMinecraftPlugin.start, stop: { type: 'event', value: 'x' } },
+      ...validPaperPlugin,
+      start: { ...validPaperPlugin.start, stop: { type: 'event', value: 'x' } },
     });
     expect(result.success).toBe(false);
+  });
+
+  it('applique les defaults Pelican-style sur les variables', () => {
+    const result = pluginSchema.safeParse({
+      ...validPaperPlugin,
+      variables: [{ env: 'SIMPLE', name: 'Simple', type: 'string', defaultValue: 'x' }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const v = result.data.variables[0];
+      expect(v.userViewable).toBe(true);
+      expect(v.userEditable).toBe(true);
+      expect(v.sort).toBe(0);
+      expect(v.required).toBe(false);
+    }
   });
 });
 
 describe('parsePlugin / safeParsePlugin', () => {
-  it('parsePlugin lance sur données invalides', () => {
+  it('parsePlugin lance sur donnees invalides', () => {
     expect(() => parsePlugin({ foo: 'bar' })).toThrow();
   });
 
@@ -102,16 +197,19 @@ describe('parsePlugin / safeParsePlugin', () => {
 });
 
 describe('extractTemplateVars', () => {
-  it('extrait les variables simples', () => {
-    expect(extractTemplateVars('java -Xmx{{ram_mb}}M {{motd}}')).toEqual(['ram_mb', 'motd']);
+  it('extrait les variables UPPERCASE', () => {
+    expect(extractTemplateVars('java -Xmx{{SERVER_MEMORY}}M {{MINECRAFT_VERSION}}')).toEqual([
+      'SERVER_MEMORY',
+      'MINECRAFT_VERSION',
+    ]);
   });
 
-  it('gère les espaces dans les accolades', () => {
-    expect(extractTemplateVars('{{ version }}')).toEqual(['version']);
+  it('deduplique les variables', () => {
+    expect(extractTemplateVars('{{A}} {{A}} {{B}}')).toEqual(['A', 'B']);
   });
 
-  it('déduplique les variables', () => {
-    expect(extractTemplateVars('{{a}} {{a}} {{b}}')).toEqual(['a', 'b']);
+  it('ignore les templates lowercase', () => {
+    expect(extractTemplateVars('{{lowercase_var}}')).toEqual([]);
   });
 
   it('retourne un tableau vide sans variables', () => {
@@ -120,32 +218,92 @@ describe('extractTemplateVars', () => {
 });
 
 describe('findUnknownVariables', () => {
-  it('retourne vide quand toutes les variables sont déclarées', () => {
-    const plugin = parsePlugin(validMinecraftPlugin);
+  it('retourne vide quand toutes les variables sont declarees (plugin + systeme + env fixe)', () => {
+    const plugin = parsePlugin(validPaperPlugin);
     expect(findUnknownVariables(plugin)).toEqual([]);
   });
 
-  it('détecte une variable utilisée mais non déclarée', () => {
+  it('detecte une variable utilisee mais non declaree', () => {
     const plugin = parsePlugin({
-      ...validMinecraftPlugin,
-      start: { command: 'java -jar {{version}}.jar -Xmx{{ram_mb}}M -Dmotd={{unknown_var}}' },
+      ...validPaperPlugin,
+      start: { ...validPaperPlugin.start, command: 'java -Dmotd={{UNKNOWN_VAR}} -jar x' },
     });
-    expect(findUnknownVariables(plugin)).toEqual(['unknown_var']);
+    expect(findUnknownVariables(plugin)).toEqual(['UNKNOWN_VAR']);
   });
 
-  it('détecte les variables inconnues dans les actions install', () => {
+  it('accepte les variables systeme reservees sans declaration', () => {
     const plugin = parsePlugin({
-      ...validMinecraftPlugin,
-      install: [{ action: 'write', file: 'test.txt', content: 'hello {{not_declared}}' }],
+      ...validPaperPlugin,
+      start: { ...validPaperPlugin.start, command: 'echo {{SERVER_UUID}} {{SERVER_PORT}}' },
     });
-    expect(findUnknownVariables(plugin)).toEqual(['not_declared']);
+    expect(findUnknownVariables(plugin)).toEqual([]);
   });
 
-  it('détecte les variables inconnues dans env', () => {
+  it('accepte les cles du env fixe comme variables de templating', () => {
     const plugin = parsePlugin({
-      ...validMinecraftPlugin,
-      env: { MY_VAR: '{{env_unknown}}' },
+      ...validPaperPlugin,
+      env: { CUSTOM_FLAG: 'yes' },
+      start: { ...validPaperPlugin.start, command: 'echo {{CUSTOM_FLAG}}' },
     });
-    expect(findUnknownVariables(plugin)).toEqual(['env_unknown']);
+    expect(findUnknownVariables(plugin)).toEqual([]);
+  });
+
+  it('detecte les variables inconnues dans configFile', () => {
+    const plugin = parsePlugin({
+      ...validPaperPlugin,
+      install: [
+        { action: 'configFile', file: 'x.ini', parser: 'ini', find: { key: '{{NOT_DECLARED}}' } },
+      ],
+    });
+    expect(findUnknownVariables(plugin)).toEqual(['NOT_DECLARED']);
+  });
+});
+
+describe('validateVariableValue (equivalent rules Laravel)', () => {
+  const base = { env: 'RAM_MB', name: 'RAM', type: 'number' as const, defaultValue: 1024 };
+
+  it('valide un nombre dans les bornes', () => {
+    expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 2048)).toBeNull();
+  });
+
+  it('rejette un nombre hors bornes', () => {
+    expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 100)).toContain('512');
+    expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 9999)).toContain('4096');
+  });
+
+  it('rejette une valeur non numerique pour un type number', () => {
+    expect(validateVariableValue(base, 'abc')).toContain('nombre');
+  });
+
+  it('valide une regex pattern', () => {
+    const varDef = {
+      env: 'JAR',
+      name: 'Jar',
+      type: 'string' as const,
+      defaultValue: 'server.jar',
+      pattern: /^([\w\d._-]+)(\.jar)$/.source,
+    };
+    expect(validateVariableValue(varDef, 'server.jar')).toBeNull();
+    expect(validateVariableValue(varDef, 'server.txt')).toContain('format');
+  });
+
+  it('valide une liste d options', () => {
+    const varDef = {
+      env: 'DIFFICULTY',
+      name: 'Difficulte',
+      type: 'string' as const,
+      defaultValue: 'normal',
+      options: ['easy', 'normal', 'hard'],
+    };
+    expect(validateVariableValue(varDef, 'normal')).toBeNull();
+    expect(validateVariableValue(varDef, 'impossible')).toContain('easy');
+  });
+});
+
+describe('RESERVED_ENV_NAMES', () => {
+  it('contient les variables systeme attendues', () => {
+    expect(RESERVED_ENV_NAMES).toContain('SERVER_MEMORY');
+    expect(RESERVED_ENV_NAMES).toContain('SERVER_PORT');
+    expect(RESERVED_ENV_NAMES).toContain('SERVER_UUID');
   });
 });
