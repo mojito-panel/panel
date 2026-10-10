@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
+import websocket from '@fastify/websocket';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
@@ -15,8 +16,19 @@ import { buildSystemVariables } from '../process/system-vars';
 import { ProcessRegistry, PowerActionError } from '../process/registry';
 import { ServerStore } from '../process/store';
 import { toPanelStatus } from '../process/states';
+import { registerConsoleWs } from './console-ws';
 
 const startTime = Date.now();
+
+/** Browser console WS route — authenticated by console JWT, NOT by the panel token. */
+const CONSOLE_WS_PATH = /^\/servers\/[^/]+\/ws$/;
+
+/**
+ * The console JWT travels in the query string — redact it from every log line.
+ */
+function redactTokenFromUrl(url: string): string {
+  return url.replace(/([?&])token=[^&]*/g, '$1token=[redacted]');
+}
 
 /**
  * SHA-256 hash of the token for constant-time comparison.
@@ -54,11 +66,32 @@ function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
  * - All other routes require `Authorization: Bearer <token>`
  */
 export function createAgentServer(config: AgentConfig): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: {
+      level: 'info',
+      serializers: {
+        req(request) {
+          return {
+            method: request.method,
+            url: redactTokenFromUrl(request.url),
+            remoteAddress: request.ip,
+          };
+        },
+      },
+    },
+  });
   const expectedTokenHash = hashToken(config.token);
 
   const store = new ServerStore(config.dataDir);
   const registry = new ProcessRegistry({ store });
+
+  // ─── Browser console WS (JWT auth, log streaming, commands, power) ──────
+  // Own scope: the websocket plugin must be booted BEFORE the
+  // `{ websocket: true }` route is registered.
+  app.register(async (instance) => {
+    await instance.register(websocket);
+    registerConsoleWs(instance, { config, registry });
+  });
 
   // ─── Healthcheck (public) ──────────────────────────────────────────────────
   app.get('/health', async (): Promise<HealthResponse> => {
@@ -69,9 +102,10 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Authentication hook (except /health) ────────────────────────────────
+  // ─── Authentication hook (except /health and the console WS) ────────────
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     if (request.url === '/health') return;
+    if (CONSOLE_WS_PATH.test(request.url.split('?')[0])) return; // console JWT, not panel token
     if (!isAuthorized(request, expectedTokenHash)) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }

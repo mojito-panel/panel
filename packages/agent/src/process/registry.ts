@@ -13,6 +13,16 @@ export interface RegistryOptions {
   createEvents?: (serverId: string) => ProcessEvents;
 }
 
+/**
+ * Live listener on a server's process (console WS streaming).
+ * `onLog` receives every log line as it is piped, `onState` every runtime
+ * state change. Returns from `ProcessRegistry.subscribe`.
+ */
+export interface RegistryListener {
+  onLog?: (line: string, stream: 'stdout' | 'stderr') => void;
+  onState?: (state: ProcessState) => void;
+}
+
 interface ServerEntry {
   manager: ServerProcessManager;
   /** Promise chain = per-server power lock (sequential actions). */
@@ -37,6 +47,8 @@ export class PowerActionError extends Error {
  */
 export class ProcessRegistry {
   readonly #servers = new Map<string, ServerEntry>();
+  /** Live console listeners (WS sockets) — fan-out at log/state time. */
+  readonly #listeners = new Map<string, Set<RegistryListener>>();
   readonly #store: ServerStore;
   readonly #crashLoopMs: number;
   readonly #createEvents: ((serverId: string) => ProcessEvents) | undefined;
@@ -61,10 +73,42 @@ export class ProcessRegistry {
     const custom = this.#createEvents?.(serverId);
     return {
       ...custom,
+      onLog: (line, stream) => {
+        custom?.onLog?.(line, stream);
+        for (const listener of this.#listeners.get(serverId) ?? []) {
+          listener.onLog?.(line, stream);
+        }
+      },
+      onStateChange: (state) => {
+        custom?.onStateChange?.(state);
+        for (const listener of this.#listeners.get(serverId) ?? []) {
+          listener.onState?.(state);
+        }
+      },
       onExit: (code, clean) => {
         custom?.onExit?.(code, clean);
         void this.#handleExit(serverId, code, clean);
       },
+    };
+  }
+
+  /**
+   * Subscribes to a server's live logs/state (console WS).
+   * Multiple listeners per server are allowed — each socket subscribes itself.
+   * Returns the unsubscribe function.
+   */
+  subscribe(serverId: string, listener: RegistryListener): () => void {
+    let listeners = this.#listeners.get(serverId);
+    if (!listeners) {
+      listeners = new Set();
+      this.#listeners.set(serverId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      const set = this.#listeners.get(serverId);
+      if (!set) return;
+      set.delete(listener);
+      if (set.size === 0) this.#listeners.delete(serverId);
     };
   }
 

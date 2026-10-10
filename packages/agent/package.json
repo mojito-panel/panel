@@ -12,16 +12,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fastify/websocket": "^11.3.4",
     "@mojito/contract": "*",
     "@types/adm-zip": "^0.5.8",
     "adm-zip": "^0.6.1",
     "dotenv": "^17.4.2",
     "fastify": "^5.6.1",
+    "ws": "^8.22.0",
     "yaml": "^2.9.1",
     "zod": "^4.1.11"
   },
   "devDependencies": {
     "@types/node": "^24.7.0",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
