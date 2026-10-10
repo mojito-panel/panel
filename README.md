@@ -74,6 +74,10 @@ packages/
 └── agent/        # Agent daemon (Fastify, 1 par machine Windows)
 ```
 
+## Documentation
+
+- [Communications Panel ↔ Agent ↔ Client web](docs/communications.md) — flux détaillés avec diagrammes Mermaid : authentification, installation suivie en direct, console WS (JWT), actions power, réinstallation, cycle de vie des statuts.
+
 ## Configuration
 
 Les fichiers `.env.default` sont copiés en `.env` par `mise run setup:dev` (ou `node scripts/copy-env.mjs`).
