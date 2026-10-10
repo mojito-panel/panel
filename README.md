@@ -91,10 +91,28 @@ Les fichiers `.env.default` sont copiés en `.env` par `mise run setup:dev` (ou 
 | Variable | Défaut | Description |
 |---|---|---|
 | `AGENT_TOKEN` | — | **Requis** — token Bearer (32+ caractères) |
+| `AGENT_JWT_SECRET` | — | **Requis** — identique à `PANEL_JWT_SECRET`, vérifie les JWT console |
 | `AGENT_PORT` | `8080` | Port d'écoute |
 | `AGENT_HOST` | `0.0.0.0` | Interface d'écoute |
 | `AGENT_DATA_DIR` | `C:\PanelData` | Dossier de données des serveurs |
 | `PANEL_URL` | — | URL du panel (pour connexion WS sortante) |
+
+### Console live & JWT (navigateur ↔ agent direct)
+
+La console streame les logs **directement depuis l'agent** (type Pelican) — le panel
+ne relaie plus les logs. Le navigateur obtient un JWT court auprès du panel,
+l'agent valide ce JWT et gate chaque action sur les permissions du payload :
+
+```
+Navigateur ──POST createConsoleToken──▶ Panel (requireUser + ownership)
+Navigateur ◀──{ token, wsUrl }───────── Panel (JWT HS256, TTL 5 min, permissions V1 = toutes)
+Navigateur ──WS wsUrl?token=jwt───────▶ Agent (vérifie signature/aud/exp/serverId)
+Navigateur ◀──auth-ok + logs stream──── Agent (permissions re-validées à CHAQUE message)
+```
+
+- `PANEL_JWT_SECRET` (panel) et `AGENT_JWT_SECRET` (agent) doivent être **identiques**.
+- Fallback : si le WS échoue à l'ouverture, la console retombe sur le polling des logs (`GET /logs?after=N`).
+- Le JWT (query string) et le token agent ne sont JAMAIS loggés (redaction du logger agent).
 
 ### Base de données (Docker)
 
@@ -125,6 +143,7 @@ npm run db:migrate:up -w @mojito/panel
 - **Phase 2** — Bridage : Job Objects (RAM/CPU) — *V2*
 - **Phase 3** — Panel & liaison : CRUD, console live, WS
 - **Phase 4** — SEA & distribution : packaging agent en `.exe`
+- **Phase 5** — Console WS directe navigateur ↔ agent + JWT + permissions (terminée)
 
 > Les Job Objects et l'isolation des users Windows sont volontairement reportés en V2.
 
