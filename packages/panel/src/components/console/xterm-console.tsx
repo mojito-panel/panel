@@ -1,22 +1,48 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
-import { getServerLogsFn } from '~/server/functions/servers';
-import { Button } from '~/components/ui/button';
+import type { ConsoleClientMessage, ConsoleServerMessage } from '@mojito/contract';
+import { getServerLogsFn, createConsoleTokenFn } from '~/server/functions/servers';
 
 interface XtermConsoleProps {
   serverId: string;
   isRunning: boolean;
+  /**
+   * Called when the direct agent WS connects/disconnects.
+   * Non-null = live WS sender usable for console commands/power (bypasses the
+   * panel); null = fall back to the panel server functions.
+   */
+  onConnection?: (send: ((message: ConsoleClientMessage) => void) | null) => void;
+  /** Runtime status pushed by the agent over the WS. */
+  onStatus?: (status: ConsoleServerMessage & { type: 'status' }) => void;
 }
 
+/** WS attempts before giving up and degrading to polling. */
+const WS_MAX_ATTEMPTS = 3;
+/** Reconnect backoff cap (ms). */
+const WS_BACKOFF_CAP_MS = 5000;
+
 /**
- * Live server console: xterm.js fed by polling
- * the agent's incremental logs (GET /servers/:id/logs?after=N).
+ * Live server console (xterm.js), fed by a DIRECT WebSocket to the agent
+ * (Pelican-style): the panel issues a short-lived console JWT, the browser
+ * opens `ws://agent/servers/:id/ws?token=<jwt>` and streams logs.
+ * Fallback: if the WS cannot be established (proxy without WS, old agent),
+ * degrade to the polling of incremental logs (GET /servers/:id/logs?after=N).
  * The terminal is created dynamically in a useEffect (SSR-safe).
  */
-export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
+export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: XtermConsoleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
   const getLogs = useServerFn(getServerLogsFn);
+  const createToken = useServerFn(createConsoleTokenFn);
+  const [mode, setMode] = useState<'connecting' | 'ws' | 'polling'>('connecting');
+
+  // Callbacks via refs: the WS connection must not be torn down on re-renders
+  const onConnectionRef = useRef(onConnection);
+  const onStatusRef = useRef(onStatus);
+  useEffect(() => {
+    onConnectionRef.current = onConnection;
+    onStatusRef.current = onStatus;
+  });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -24,8 +50,106 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
     let disposed = false;
     let term: import('@xterm/xterm').Terminal | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let fitRaf: number | null = null;
+    let socket: WebSocket | null = null;
+
+    // ─── Polling fallback (agent incremental logs) ────────────────────────
+    const startPolling = () => {
+      if (disposed || pollTimer) return;
+      setMode('polling');
+      term?.reset(); // avoid duplicating lines already streamed via WS
+      cursorRef.current = 0;
+
+      const poll = async () => {
+        try {
+          const chunk = await getLogs({ data: { serverId, after: cursorRef.current } });
+          if (disposed || !term) return;
+          if (chunk.lines.length > 0) {
+            for (const line of chunk.lines) {
+              term.writeln(line);
+            }
+          }
+          cursorRef.current = chunk.next;
+        } catch {
+          // Agent unreachable — the next tick will retry
+        }
+      };
+
+      void poll();
+      pollTimer = setInterval(poll, 2000);
+    };
+
+    // ─── Direct WS to the agent (console JWT issued by the panel) ────────
+    const notifyConnection = (send: ((message: ConsoleClientMessage) => void) | null) => {
+      onConnectionRef.current?.(send);
+    };
+
+    const connect = async (attempt: number) => {
+      if (disposed) return;
+
+      // Fresh token at every attempt (short TTL — never reuse an old one)
+      let token: string;
+      let wsUrl: string;
+      try {
+        ({ token, wsUrl } = await createToken({ data: { serverId, after: 0 } }));
+      } catch {
+        // Panel unreachable / ownership refused → degrade to polling
+        if (attempt >= WS_MAX_ATTEMPTS - 1) return startPolling();
+        reconnectTimer = setTimeout(() => void connect(attempt + 1), 1000 * (attempt + 1));
+        return;
+      }
+      if (disposed) return;
+
+      let authenticated = false;
+      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
+      socket = ws;
+
+      ws.onmessage = (event) => {
+        if (disposed) return;
+        const message = JSON.parse(event.data.toString()) as ConsoleServerMessage;
+        if (message.type === 'auth-ok') {
+          authenticated = true;
+          setMode('ws');
+          notifyConnection((clientMessage) => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify(clientMessage));
+            }
+          });
+          return;
+        }
+        if (message.type === 'log') {
+          for (const line of message.lines) {
+            term?.writeln(line);
+          }
+          return;
+        }
+        if (message.type === 'status') {
+          onStatusRef.current?.(message);
+          return;
+        }
+        if (message.type === 'error') {
+          term?.writeln(`\x1b[31m[${message.code}]\x1b[0m`);
+        }
+      };
+
+      ws.onclose = () => {
+        if (socket === ws) socket = null;
+        notifyConnection(null);
+        if (disposed) return;
+
+        if (!authenticated && attempt >= WS_MAX_ATTEMPTS - 1) {
+          // WS not usable at all — degrade to polling, not an error
+          startPolling();
+          return;
+        }
+        // Reconnect with a fresh token (short TTL), capped backoff
+        const delay = Math.min(1000 * (attempt + 1), WS_BACKOFF_CAP_MS);
+        reconnectTimer = setTimeout(() => void connect(attempt + 1), delay);
+      };
+      // onerror → onclose follows, nothing to do here
+    };
 
     const boot = async () => {
       const [{ Terminal }, { FitAddon: FitAddonClass }] = await Promise.all([
@@ -68,23 +192,7 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
       resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(containerRef.current);
 
-      const poll = async () => {
-        try {
-          const chunk = await getLogs({ data: { serverId, after: cursorRef.current } });
-          if (disposed || !term) return;
-          if (chunk.lines.length > 0) {
-            for (const line of chunk.lines) {
-              term.writeln(line);
-            }
-          }
-          cursorRef.current = chunk.next;
-        } catch {
-          // Agent unreachable — the next tick will retry
-        }
-      };
-
-      await poll();
-      pollTimer = setInterval(poll, 2000);
+      await connect(0);
     };
 
     void boot();
@@ -92,18 +200,25 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
     return () => {
       disposed = true;
       if (pollTimer) clearInterval(pollTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (resizeObserver) resizeObserver.disconnect();
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);
+      socket?.close();
       term?.dispose();
     };
-  }, [serverId, getLogs]);
+  }, [serverId, getLogs, createToken]);
+
+  const caption =
+    mode === 'ws'
+      ? 'Console live (WebSocket direct agent)'
+      : mode === 'polling'
+        ? 'Console live (WS indisponible — rafraîchie toutes les 2 s)'
+        : 'Connexion à la console…';
 
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        {isRunning
-          ? 'Console live (rafraîchie toutes les 2 s)'
-          : 'Console — le serveur est arrêté'}
+        {isRunning ? caption : 'Console — le serveur est arrêté'}
       </p>
       <div
         ref={containerRef}

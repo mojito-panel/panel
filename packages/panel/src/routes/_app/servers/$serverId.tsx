@@ -1,8 +1,10 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
+import { useRef } from 'react';
 import type { FormEvent } from 'react';
+import type { ConsoleClientMessage, ServerStatus } from '@mojito/contract';
 import {
   getServerFn,
   serverActionFn,
@@ -25,6 +27,20 @@ function ServerDetailPage() {
   const sendCommand = useServerFn(sendCommandFn);
 
   const [command, setCommand] = useState('');
+  // Live agent WS (set by XtermConsole): when connected, commands and power
+  // actions go DIRECTLY to the agent (JWT-gated); otherwise via the panel.
+  const wsSendRef = useRef<((message: ConsoleClientMessage) => void) | null>(null);
+
+  const handleConsoleConnection = (
+    send: ((message: ConsoleClientMessage) => void) | null,
+  ) => {
+    wsSendRef.current = send;
+  };
+
+  const handleConsoleStatus = (status: ServerStatus) => {
+    // Runtime status pushed by the agent → refresh the query (DB sync)
+    void queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+  };
 
   const query = useQuery({
     queryKey: ['server', serverId],
@@ -44,13 +60,26 @@ function ServerDetailPage() {
     mutationFn: (cmd: string) => sendCommand({ data: { serverId, command: cmd } }),
   });
 
+  const runAction = (a: 'start' | 'stop' | 'restart' | 'kill') => {
+    if (wsSendRef.current) {
+      wsSendRef.current({ type: 'power', action: a });
+      return;
+    }
+    action.mutate(a);
+  };
+
   const server = query.data;
   const isRunning = server?.status === 'running';
 
   const handleCommand = (e: FormEvent) => {
     e.preventDefault();
     if (!command.trim()) return;
-    submitCommand.mutate(command.trim());
+    const cmd = command.trim();
+    if (wsSendRef.current) {
+      wsSendRef.current({ type: 'command', command: cmd });
+    } else {
+      submitCommand.mutate(cmd);
+    }
     setCommand('');
   };
 
@@ -86,21 +115,21 @@ function ServerDetailPage() {
       {/* Power actions */}
       <div className="mt-6 flex flex-wrap gap-2">
         <Button
-          onClick={() => action.mutate('start')}
+          onClick={() => runAction('start')}
           disabled={action.isPending || isRunning}
         >
           Démarrer
         </Button>
         <Button
           variant="secondary"
-          onClick={() => action.mutate('stop')}
+          onClick={() => runAction('stop')}
           disabled={action.isPending || !isRunning}
         >
           Arrêter
         </Button>
         <Button
           variant="outline"
-          onClick={() => action.mutate('restart')}
+          onClick={() => runAction('restart')}
           disabled={action.isPending || !isRunning}
         >
           Redémarrer
@@ -108,7 +137,7 @@ function ServerDetailPage() {
         <Button
           variant="destructive"
           onClick={() => {
-            if (confirm('Forcer l’arrêt du process ?')) action.mutate('kill');
+            if (confirm('Forcer l’arrêt du process ?')) runAction('kill');
           }}
           disabled={action.isPending || !isRunning}
         >
@@ -121,7 +150,12 @@ function ServerDetailPage() {
 
       {/* Console */}
       <div className="mt-8">
-        <XtermConsole serverId={serverId} isRunning={isRunning} />
+        <XtermConsole
+          serverId={serverId}
+          isRunning={isRunning}
+          onConnection={handleConsoleConnection}
+          onStatus={(message) => handleConsoleStatus(message.status)}
+        />
 
         {/* Send commands (process stdin) */}
         <form onSubmit={handleCommand} className="mt-3 flex gap-2">
