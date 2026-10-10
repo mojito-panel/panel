@@ -21,6 +21,12 @@ npm run build                  # Build panel (vite, client + SSR)
 - Le contrat panel ↔ agent est défini dans `@mojito/contract` (schémas Zod partagés).
 - L'agent est un daemon générique — rien de spécifique aux jeux dans son code.
 
+## Langue
+
+- **Commentaires de code** : en ANGLAIS, dans tous les packages (`src/` comme `tests/`).
+- **Tests** : en ANGLAIS — descriptions, messages d'assertion, noms de variables dans les fixtures.
+- Les messages d'erreur runtime adressés à l'utilisateur final (ex : `PowerActionError('Serveur inconnu')`) restent en français.
+
 ## Stack & versions
 
 | Techno | Contraintes |
@@ -79,6 +85,7 @@ src/
 - `/health` public, tout le reste derrière l'auth.
 - Config Zod depuis les variables d'environnement (`AGENT_TOKEN` requis, 32+ caractères).
 - NE JAMAIS logger le token.
+- **Redémarrage de l'agent** (≈ wings cmd/root.go) : état runtime + PID persistés dans `states.json` (dataDir, écrit à chaque transition d'état via `ServerManager`). Au boot, `restoreServers` (hook `onReady`) : état running/starting + PID vivant → « adopted » (marqué running SANS console live, le process n'est jamais tué juste pour plaire à l'agent) ; PID mort → start rejoué (`handlePowerAction('start')`). Un serveur adopté : `sendCommand` refuse, stop/kill → `taskkill /T /F` sur le PID, mort inattendue → détection de crash normale. PAS de persistance de l'historique console : le ring buffer repart vide à chaque boot de l'agent (l'historique figé serait perturbant). La suppression d'un serveur efface aussi son entrée `states.json`.
 
 ## Conventions contract (packages/contract)
 
@@ -99,7 +106,7 @@ src/
 ## Tests
 
 - Vitest dans chaque package (`tests/` à côté de `src/`).
-- Après tout changement : `npm test` doit passer (278 tests actuellement).
+- Après tout changement : `npm test` doit passer (319 tests actuellement).
 
 ## V2 reporté (ne PAS faire en V1)
 
