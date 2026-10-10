@@ -1,0 +1,20 @@
+{
+  "name": "mojito-panel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Panel d'hébergement de serveurs de jeux, natif Windows, sans Docker",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @mojito/panel",
+    "dev:agent": "npm run dev -w @mojito/agent",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:watch": "npm run test:watch --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

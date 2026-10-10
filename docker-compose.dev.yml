@@ -1,0 +1,23 @@
+name: mojito-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: mojito-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mojito
+      POSTGRES_PASSWORD: mojito
+      POSTGRES_DB: mojito
+    ports:
+      - "5432:5432"
+    volumes:
+      - mojito-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mojito -d mojito"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mojito-postgres-data:

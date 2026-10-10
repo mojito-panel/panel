@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.output/
+*.local
+.env
+.env.*
+!.env.default
+*.db
+*.sqlite
+.DS_Store
+data/
+*.db-wal
+*.db-shm
+.tanstack/
