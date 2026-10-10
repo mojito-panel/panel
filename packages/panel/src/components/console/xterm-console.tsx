@@ -25,6 +25,7 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
     let term: import('@xterm/xterm').Terminal | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let resizeObserver: ResizeObserver | null = null;
+    let fitRaf: number | null = null;
 
     const boot = async () => {
       const [{ Terminal }, { FitAddon: FitAddonClass }] = await Promise.all([
@@ -54,7 +55,17 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
       term.open(containerRef.current);
       fit.fit();
 
-      resizeObserver = new ResizeObserver(() => fit.fit());
+      // Le conteneur a une hauteur fixe (h-[400px]) : le fit ne peut pas
+      // agrandir le conteneur, donc pas de boucle ResizeObserver → fit → resize.
+      // Debounce rAF pour coalescer les resize en cascade.
+      const scheduleFit = () => {
+        if (fitRaf !== null) return;
+        fitRaf = requestAnimationFrame(() => {
+          fitRaf = null;
+          if (!disposed) fit.fit();
+        });
+      };
+      resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(containerRef.current);
 
       const poll = async () => {
@@ -82,6 +93,7 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
       disposed = true;
       if (pollTimer) clearInterval(pollTimer);
       if (resizeObserver) resizeObserver.disconnect();
+      if (fitRaf !== null) cancelAnimationFrame(fitRaf);
       term?.dispose();
     };
   }, [serverId, getLogs]);
@@ -95,7 +107,7 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
       </p>
       <div
         ref={containerRef}
-        className="min-h-[400px] overflow-hidden rounded-md border bg-[#0d1117] p-2"
+        className="h-[400px] overflow-hidden rounded-md border bg-[#0d1117] p-2"
       />
     </div>
   );
