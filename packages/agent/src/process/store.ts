@@ -1,0 +1,80 @@
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import type { Plugin } from '@mojito/contract';
+
+/** Entrée persistée pour un serveur installé sur cet agent. */
+export interface StoredServer {
+  serverId: string;
+  name: string;
+  plugin: Plugin;
+  variables: Record<string, string | number | boolean>;
+  installDir: string;
+  allocation: { port: number; memoryMb: number; ip: string };
+  installedAt: string;
+}
+
+/**
+ * Registre local des serveurs installés (JSON dans AGENT_DATA_DIR).
+ * Écriture atomique (.tmp → rename). Un process start n'a besoin que du serverId.
+ */
+export class ServerStore {
+  private readonly filePath: string;
+  private cache: Map<string, StoredServer> | null = null;
+
+  constructor(dataDir: string) {
+    this.filePath = join(dataDir, 'servers.json');
+  }
+
+  private async load(): Promise<Map<string, StoredServer>> {
+    if (this.cache) return this.cache;
+
+    const map = new Map<string, StoredServer>();
+    if (existsSync(this.filePath)) {
+      try {
+        const raw = JSON.parse(await readFile(this.filePath, 'utf-8')) as StoredServer[];
+        for (const entry of raw) {
+          map.set(entry.serverId, entry);
+        }
+      } catch {
+        // Fichier corrompu → repartir vide plutôt que de bloquer l'agent
+      }
+    }
+    this.cache = map;
+    return map;
+  }
+
+  private async persist(map: Map<string, StoredServer>): Promise<void> {
+    const entries = [...map.values()];
+    await mkdir(dirname(this.filePath), { recursive: true });
+    const tmp = `${this.filePath}.tmp`;
+    await writeFile(tmp, JSON.stringify(entries, null, 2), 'utf-8');
+    try {
+      await rename(tmp, this.filePath);
+    } catch {
+      await writeFile(this.filePath, JSON.stringify(entries, null, 2), 'utf-8');
+    }
+  }
+
+  async get(serverId: string): Promise<StoredServer | null> {
+    return (await this.load()).get(serverId) ?? null;
+  }
+
+  async list(): Promise<StoredServer[]> {
+    return [...(await this.load()).values()];
+  }
+
+  async save(entry: StoredServer): Promise<void> {
+    const map = await this.load();
+    map.set(entry.serverId, entry);
+    await this.persist(map);
+  }
+
+  async delete(serverId: string): Promise<boolean> {
+    const map = await this.load();
+    if (!map.has(serverId)) return false;
+    map.delete(serverId);
+    await this.persist(map);
+    return true;
+  }
+}

@@ -215,9 +215,28 @@ mojito-panel/
 
 - [x] Runner d'étapes : `download`, `write`, `extract`, `command`, `replace`, `configFile`, `script` + templating `{{ENV_VAR}}`
 - [x] Route `POST /servers/install` (API agent) branchée sur le runner
-- [ ] node-pty : spawn + attach console, envoi de commandes, buffer de logs
-- [ ] Stop gracieux (command/signal + timeout → kill)
+- [x] Process manager + registry (spec alignée wings)
+- [x] Console : envoi de commandes, buffer de logs (ring buffer)
+- [x] Stop gracieux (command/signal + timeout → poll → kill)
+- [x] Crash detection minimale + anti-crash-loop
 - [ ] Cleanup : suppression dossier à la suppression du serveur
+
+#### Spec process manager (alignée sur wings — server/power.go, environment/docker/power.go)
+
+- **Power actions** : `start` / `stop` / `restart` / `kill` (identique `serverActionSchema`).
+- **Power lock par serveur** : file d'actions séquentielle par serverId (pas de double start, pas de restart pendant un stop). `kill` force-passe le verrou (un process coincé doit toujours être tuable). Refus si `installing`.
+- **États runtime** (dans l'agent, distincts des états panel) : `offline` / `starting` / `running` / `stopping`.
+  - `starting` → `running` dès le spawn (comme wings — le `ready.pattern` émet un event `ready` séparé, utilisé pour la progression d'install).
+  - Passer par `stopping` AVANT `offline` lors d'un stop → ne pas déclencher la crash detection.
+- **Séquence stop** (comme wings) :
+  1. état → `stopping`
+  2. `command` → écrit sur stdin du process ; `signal` → kill direct
+  3. attente de sortie pendant `stop.timeoutMs` (défaut 30s ; wings attend jusqu'à 10 min)
+  4. toujours vivant → kill forcé (kill de l'arbre de process sous Windows : `taskkill /T /F`)
+- **Crash detection minimale** (comme wings crash.go) : exit code non-nul ET état ≠ `stopping` → `crashed`. Anti-crash-loop : si dernier crash < N secondes (défaut 60s), pas de restart auto. Restart auto → repasse par le power lock.
+- **Sortie console** : stdout/stderr pipés → ring buffer en mémoire (limite ~1000 lignes) + callbacks pour le streaming WS (phase 3).
+- **Persistance locale** : registre JSON dans `AGENT_DATA_DIR` (serverId → plugin, variables, installDir, allocation) rempli à l'install — le start n'a besoin que du serverId.
+- **Note écart wings** : wings re-applique `config.files` à chaque boot (`UpdateConfigurationFiles` dans onBeforeStart). Chez nous les actions `configFile` sont install-only pour l'instant — à reconsidérer en phase 3 (édition des variables sans réinstall).
 
 ### Phase 2 — Bridage (V2 — pas en V1)
 

@@ -4,12 +4,15 @@ import type { AgentConfig } from '../config';
 import {
   installServerRequestSchema,
   pluginSchema,
-  serverAllocationSchema,
+  serverActionRequestSchema,
+  sendCommandRequestSchema,
   type HealthResponse,
-  type InstallServerRequest,
 } from '@mojito/contract';
 import { runInstall } from '../runner';
-import type { SystemVariables } from '../runner/templating';
+import { fromInstallRequest } from '../process/system-vars';
+import { ProcessRegistry, PowerActionError } from '../process/registry';
+import { ServerStore } from '../process/store';
+import { toPanelStatus } from '../process/states';
 
 const startTime = Date.now();
 
@@ -34,18 +37,13 @@ function isAuthorized(request: FastifyRequest, expectedTokenHash: string): boole
   return timingSafeEqual(a, b);
 }
 
-/**
- * Construit les variables système de l'agent depuis la requête d'installation.
- */
-function buildSystemVariables(request: InstallServerRequest): SystemVariables {
-  return {
-    SERVER_UUID: request.serverId,
-    SERVER_NAME: request.name,
-    SERVER_MEMORY: request.allocation.memoryMb,
-    SERVER_PORT: request.allocation.port,
-    SERVER_IP: request.allocation.ip,
-    SERVER_INSTALL_DIR: request.installDir,
-  };
+/** Mappe les erreurs du registry en réponses HTTP. */
+function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
+  if (err instanceof PowerActionError) {
+    const code = err.code === 'not_found' ? 404 : 409;
+    return reply.code(code).send({ error: err.message, code: err.code });
+  }
+  return reply.code(500).send({ error: 'Erreur interne' });
 }
 
 /**
@@ -56,6 +54,9 @@ function buildSystemVariables(request: InstallServerRequest): SystemVariables {
 export function createAgentServer(config: AgentConfig): FastifyInstance {
   const app = Fastify({ logger: true });
   const expectedTokenHash = hashToken(config.token);
+
+  const store = new ServerStore(config.dataDir);
+  const registry = new ProcessRegistry({ store });
 
   // ─── Healthcheck (public) ──────────────────────────────────────────────────
   app.get('/health', async (): Promise<HealthResponse> => {
@@ -95,7 +96,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     const result = await runInstall({
       plugin: pluginResult.data,
       variables: parsed.data.variables,
-      systemVariables: buildSystemVariables(parsed.data),
+      systemVariables: fromInstallRequest(parsed.data),
       installDir: parsed.data.installDir,
       // Progression temps réel via WS : phase 3. Pour l'instant, l'appel est synchrone.
     });
@@ -104,6 +105,17 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       return reply.code(422).send({ error: result.error });
     }
 
+    // Persister le serveur installé → start n'a besoin que du serverId
+    await store.save({
+      serverId: parsed.data.serverId,
+      name: parsed.data.name,
+      plugin: pluginResult.data,
+      variables: parsed.data.variables,
+      installDir: parsed.data.installDir,
+      allocation: parsed.data.allocation,
+      installedAt: new Date().toISOString(),
+    });
+
     return {
       serverId: parsed.data.serverId,
       status: 'stopped',
@@ -111,24 +123,96 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Liste des serveurs (stub — persistance en phase 3) ────────────────────
+  // ─── Liste des serveurs installés ──────────────────────────────────────────
   app.get('/servers', async () => {
-    return { servers: [] };
-  });
-
-  // ─── Info d'un serveur (stub — process manager en phase 1) ─────────────────
-  app.get<{ Params: { serverId: string } }>('/servers/:serverId', async (request) => {
+    const stored = await store.list();
     return {
-      serverId: request.params.serverId,
-      status: 'stopped',
-      pid: null,
-      ramMb: null,
-      cpuPercent: null,
-      startedAt: null,
+      servers: stored.map((s) => ({
+        serverId: s.serverId,
+        name: s.name,
+        status: toPanelStatus(registry.getState(s.serverId), false),
+      })),
     };
   });
 
+  // ─── Info d'un serveur (état runtime réel + logs récents) ───────────────────
+  app.get<{ Params: { serverId: string } }>('/servers/:serverId', async (request, reply) => {
+    const stored = await store.get(request.params.serverId);
+    if (!stored) {
+      return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+    }
+
+    const state = registry.getState(request.params.serverId);
+    return {
+      serverId: stored.serverId,
+      name: stored.name,
+      status: toPanelStatus(state, false),
+      runtimeState: state,
+      pid: null, // métriques en phase 2
+      ramMb: null,
+      cpuPercent: null,
+      startedAt: null,
+      logs: registry.getLogs(request.params.serverId).slice(-50),
+    };
+  });
+
+  // ─── Action power (start/stop/restart/kill) ────────────────────────────────
+  app.post<{ Params: { serverId: string } }>(
+    '/servers/:serverId/action',
+    async (request, reply) => {
+      const parsed = serverActionRequestSchema.safeParse({
+        serverId: request.params.serverId,
+        ...(request.body as object),
+      });
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'Requête invalide',
+          details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        });
+      }
+
+      try {
+        await registry.handlePowerAction(parsed.data.serverId, parsed.data.action);
+        return {
+          serverId: parsed.data.serverId,
+          action: parsed.data.action,
+          status: toPanelStatus(registry.getState(parsed.data.serverId), false),
+        };
+      } catch (err) {
+        return powerErrorReply(err, reply);
+      }
+    },
+  );
+
+  // ─── Commande console (stdin) ───────────────────────────────────────────────
+  app.post<{ Params: { serverId: string } }>(
+    '/servers/:serverId/command',
+    async (request, reply) => {
+      const parsed = sendCommandRequestSchema.safeParse({
+        serverId: request.params.serverId,
+        ...(request.body as object),
+      });
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'Requête invalide',
+          details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        });
+      }
+
+      try {
+        const sent = await registry.sendCommand(parsed.data.serverId, parsed.data.command);
+        if (!sent) {
+          return reply.code(409).send({
+            error: 'Le serveur n’est pas en cours d’exécution',
+            code: 'not_running',
+          });
+        }
+        return { serverId: parsed.data.serverId, sent: true };
+      } catch (err) {
+        return powerErrorReply(err, reply);
+      }
+    },
+  );
+
   return app;
 }
-
-export { serverAllocationSchema };

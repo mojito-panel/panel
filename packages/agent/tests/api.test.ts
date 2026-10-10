@@ -12,7 +12,7 @@ const config: AgentConfig = {
   port: 0,
   host: '127.0.0.1',
   token: TEST_TOKEN,
-  dataDir: 'C:\PanelData',
+  dataDir: join(tmpdir(), 'mojito-api-data-' + process.pid),
   version: '0.1.0-test',
 };
 
@@ -75,17 +75,14 @@ describe('Agent API (Fastify)', () => {
   });
 
   describe('GET /servers/:serverId (authentifié)', () => {
-    it('retourne un statut stopped par défaut', async () => {
+    it('retourne 404 pour un serveur inconnu', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/servers/550e8400-e29b-41d4-a716-446655440000',
         headers: { authorization: `Bearer ${TEST_TOKEN}` },
       });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.serverId).toBe('550e8400-e29b-41d4-a716-446655440000');
-      expect(body.status).toBe('stopped');
-      expect(body.pid).toBeNull();
+      expect(res.statusCode).toBe(404);
+      expect(res.json().code).toBe('not_found');
     });
   });
 });
@@ -196,5 +193,60 @@ describe('Agent API — POST /servers/install', () => {
     expect(res.statusCode).toBe(422);
     const body = res.json();
     expect(body.error).toContain('Étape 1');
+  });
+
+  it('après install : GET 200 stopped, action 404/400, command 409 sans process', async () => {
+    // Installe un serveur valide
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody(),
+    });
+    expect(install.statusCode).toBe(200);
+
+    const serverId = '550e8400-e29b-41d4-a716-446655440000';
+
+    // GET : serveur connu → 200, statut stopped
+    const info = await app.inject({
+      method: 'GET',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(info.statusCode).toBe(200);
+    expect(info.json().status).toBe('stopped');
+
+    // Action sur serveur inconnu → 404
+    const action404 = await app.inject({
+      method: 'POST',
+      url: '/servers/660e8400-e29b-41d4-a716-446655440000/action',
+      headers: auth,
+      payload: { action: 'start' },
+    });
+    expect(action404.statusCode).toBe(404);
+
+    // Action invalide → 400
+    const action400 = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/action`,
+      headers: auth,
+      payload: { action: 'explode' },
+    });
+    expect(action400.statusCode).toBe(400);
+
+    // Commande console sans process running → 409
+    const cmd = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/command`,
+      headers: auth,
+      payload: { command: 'say hi' },
+    });
+    expect(cmd.statusCode).toBe(409);
+
+    // Liste des serveurs contient le serveur installé
+    const list = await app.inject({ method: 'GET', url: '/servers', headers: auth });
+    expect(list.statusCode).toBe(200);
+    const ids = list.json().servers.map((s: { serverId: string }) => s.serverId);
+    expect(ids).toContain(serverId);
   });
 });
