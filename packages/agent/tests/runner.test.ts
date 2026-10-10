@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import AdmZip from 'adm-zip';
@@ -15,6 +15,7 @@ import { runReplace } from '../src/runner/actions/replace';
 import { runConfigFile } from '../src/runner/actions/config-file';
 import { runExtract, resolveZipEntryPath } from '../src/runner/actions/extract';
 import { exec } from '../src/runner/actions/exec';
+import { runScript } from '../src/runner/actions/exec';
 
 let tmpRoot: string;
 let httpServer: ReturnType<typeof createServer>;
@@ -128,6 +129,24 @@ describe('action replace', () => {
 // ─── Action configFile ────────────────────────────────────────────────────────
 
 describe('action configFile (parsers)', () => {
+  it('crée le fichier s il n existe pas (server.properties avant 1er boot)', async () => {
+    const file = join(tmpRoot, 'sub', 'server.properties');
+    const plugin = makePlugin();
+    const vars = resolveVariables(plugin, {}, systemVars);
+    await runConfigFile(
+      {
+        action: 'configFile',
+        file: 'sub/server.properties',
+        parser: 'properties',
+        find: { 'server-port': '{{SERVER_PORT}}', 'motd': 'Salut' },
+      },
+      { installDir: tmpRoot, vars },
+    );
+    const content = await readFile(file, 'utf-8');
+    expect(content).toContain('server-port=25565');
+    expect(content).toContain('motd=Salut');
+  });
+
   it('parser properties : remplace et ajoute des clés', async () => {
     const file = join(tmpRoot, 'server.properties');
     await writeFile(file, '# comment\nmotd=Hello\nmax-players=20\n');
@@ -254,6 +273,30 @@ describe('exec', () => {
     const isWindows = process.platform === 'win32';
     const sleepCmd = isWindows ? 'ping -n 10 127.0.0.1' : 'sleep 10';
     await expect(exec(sleepCmd, { timeoutMs: 500 })).rejects.toThrow('expirée');
+  });
+});
+
+// ─── action script (spawn direct, quoting Windows) ───────────────────────────
+
+describe('action script', () => {
+  it('exécute un script powershell (chemin avec espaces + accents UTF-8)', async () => {
+    if (process.platform !== 'win32') return;
+
+    const plugin = makePlugin();
+    const vars = resolveVariables(plugin, {}, systemVars);
+    // Dossier avec espaces : l'ancien passage via cmd /c en chaîne corrompait
+    // le quoting de -File (« Caractères non conformes dans le chemin d'accès »).
+    const installDir = join(tmpRoot, 'dossier avec espaces');
+    await mkdir(installDir, { recursive: true });
+
+    await runScript(
+      {
+        action: 'script',
+        shell: 'powershell',
+        content: 'Write-Output "Installation réussie — {{SERVER_NAME}}"',
+      },
+      { installDir, vars },
+    );
   });
 });
 

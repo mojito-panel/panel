@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { z } from 'zod';
 import { parse, stringify } from 'yaml';
 import type { runnerActionSchema, RunnerActionInput } from '@mojito/contract';
@@ -11,10 +12,19 @@ type ConfigFileAction = RunnerActionInput & { action: 'configFile' };
  * Action `configFile` : modification typée d'un fichier de config via un parser
  * (properties, ini, yaml, json). Équivalent `config.files` de Pelican.
  * Chaque valeur de `find` est templatisée avant écriture.
+ * Un fichier absent est CRÉÉ avec les entrées de `find` (les parsers ajoutent
+ * déjà les clés manquantes en fin de fichier) — ex: server.properties n'existe
+ * pas avant le premier démarrage du serveur Minecraft.
  */
 export async function runConfigFile(action: ConfigFileAction, ctx: ActionContext): Promise<void> {
   const filePath = resolvePath(ctx.installDir, render(action.file, ctx.vars));
-  const content = await readFile(filePath, 'utf-8');
+
+  let content = '';
+  try {
+    content = await readFile(filePath, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
 
   const templatedFind: Record<string, string> = {};
   for (const [key, value] of Object.entries(action.find)) {
@@ -22,6 +32,7 @@ export async function runConfigFile(action: ConfigFileAction, ctx: ActionContext
   }
 
   const newContent = await applyParser(action.parser, content, templatedFind);
+  await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, newContent, 'utf-8');
 }
 

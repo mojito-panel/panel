@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,26 +19,21 @@ export interface ExecResult {
 }
 
 /**
- * Exécute une commande dans un shell, avec timeout optionnel.
- * Sous Windows : cmd /c ; sinon : /bin/sh -c.
- * Utilisé par le runner d'installation pour les actions `command` et `script`
- * des plugins (ex: java, steamcmd, powershell).
+ * Spawn un processus, capture stdout/stderr, kill au timeout.
+ * Base partagée de exec() (via shell) et execProcess() (spawn direct).
  */
-export function exec(
-  command: string,
-  options: { cwd?: string; env?: Record<string, string>; timeoutMs?: number } = {},
+function spawnChild(
+  file: string,
+  args: string[],
+  options: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
 ): Promise<ExecResult> {
+  const child = spawn(file, args, {
+    cwd: options.cwd,
+    env: { ...process.env, ...options.env },
+    windowsHide: true,
+  });
+
   return new Promise((resolve, reject) => {
-    const isWindows = process.platform === 'win32';
-    const shell = isWindows ? process.env.ComSpec ?? 'cmd.exe' : '/bin/sh';
-    const shellArgs = isWindows ? ['/c', command] : ['-c', command];
-
-    const child = spawn(shell, shellArgs, {
-      cwd: options.cwd,
-      env: { ...process.env, ...options.env },
-      windowsHide: true,
-    });
-
     let stdout = '';
     let stderr = '';
     let settled = false;
@@ -47,7 +43,7 @@ export function exec(
           if (!settled) {
             child.kill('SIGKILL');
             settled = true;
-            reject(new Error(`Commande expirée après ${options.timeoutMs}ms : ${command}`));
+            reject(new Error(`Commande expirée après ${options.timeoutMs}ms : ${file} ${args.join(' ')}`));
           }
         }, options.timeoutMs)
       : null;
@@ -71,6 +67,39 @@ export function exec(
       resolve({ code, stdout, stderr });
     });
   });
+}
+
+/**
+ * Exécute une commande dans un shell, avec timeout optionnel.
+ * Sous Windows : cmd /c ; sinon : /bin/sh -c.
+ * Utilisé par le runner d'installation pour les actions `command` et `script`
+ * des plugins (ex: java, steamcmd, powershell).
+ */
+export function exec(
+  command: string,
+  options: { cwd?: string; env?: Record<string, string>; timeoutMs?: number } = {},
+): Promise<ExecResult> {
+  const isWindows = process.platform === 'win32';
+  const shell = isWindows ? process.env.ComSpec ?? 'cmd.exe' : '/bin/sh';
+  const shellArgs = isWindows ? ['/c', command] : ['-c', command];
+  return spawnChild(shell, shellArgs, options);
+}
+
+/**
+ * Exécute un binaire avec ses arguments (spawn direct, SANS shell).
+ * Node échappe les guillemets à la mode MSVCRT (`\"`) dans les arguments —
+ * cmd.exe ne comprend pas cet échappement. Passer une commande shell en
+ * chaîne corrompt donc les chemins cités (ex: `powershell -File "C:\…"` →
+ * « Caractères non conformes dans le chemin d'accès »). Avec un tableau
+ * d'arguments, chaque argument est cité proprement : les chemins avec
+ * espaces ou guillemets passent intacts.
+ */
+export function execProcess(
+  file: string,
+  args: string[],
+  options: { cwd?: string; env?: Record<string, string>; timeoutMs?: number } = {},
+): Promise<ExecResult> {
+  return spawnChild(file, args, options);
 }
 
 /**
@@ -103,6 +132,7 @@ export async function runCommand(action: CommandAction, ctx: ActionContext): Pro
 /**
  * Action `script` : exécute un script via le shell demandé (bash/powershell/cmd).
  * Le contenu est templatisé puis écrit dans un fichier temporaire.
+ * Spawn direct avec tableau d'arguments — jamais via cmd /c en chaîne (cf. execProcess).
  */
 export async function runScript(action: ScriptAction, ctx: ActionContext): Promise<void> {
   const content = render(action.content, ctx.vars);
@@ -114,19 +144,27 @@ export async function runScript(action: ScriptAction, ctx: ActionContext): Promi
     cmd: '.cmd',
   };
   const scriptPath = join(scriptDir, `script${extensions[action.shell] ?? '.txt'}`);
-  await writeFile(scriptPath, content, 'utf-8');
+
+  // Windows PowerShell 5.1 lit un .ps1 sans BOM comme de l'ANSI — un contenu
+  // UTF-8 avec accents (messages FR) serait corrompu. BOM UTF-8 pour powershell.
+  const fileContent = action.shell === 'powershell' ? `\ufeff${content}` : content;
+  await writeFile(scriptPath, fileContent, 'utf-8');
 
   try {
-    let command: string;
-    if (action.shell === 'bash') {
-      command = `bash "${scriptPath}"`;
-    } else if (action.shell === 'powershell') {
-      command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`;
+    const options = { cwd: ctx.installDir, timeoutMs: action.timeoutMs };
+    let result: ExecResult;
+    if (action.shell === 'powershell') {
+      result = await execProcess(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+        options,
+      );
+    } else if (action.shell === 'bash') {
+      result = await execProcess('bash', [scriptPath], options);
     } else {
-      command = `"${scriptPath}"`;
+      result = await execProcess(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', scriptPath], options);
     }
 
-    const result = await exec(command, { cwd: ctx.installDir, timeoutMs: action.timeoutMs });
     if (result.code !== 0) {
       const details = result.stderr.trim() || result.stdout.trim();
       throw new Error(`Script échoué (code ${result.code})${details ? `\n${details}` : ''}`);
