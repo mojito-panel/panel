@@ -226,6 +226,7 @@ describe('consoleTokenPayloadSchema', () => {
     sub: 'user_123',
     serverId: '550e8400-e29b-41d4-a716-446655440000',
     permissions: [...ALL_PERMISSIONS],
+    scope: 'websocket',
     iat: 1760000000,
     exp: 1760000000 + CONSOLE_TOKEN_TTL_SECONDS,
     jti: 'tok_abc',
@@ -256,11 +257,16 @@ describe('consoleTokenPayloadSchema', () => {
     ).toBe(false);
   });
 
-  it('rejette un payload sans serverId ni jti', () => {
-    const { serverId, jti, ...without } = validPayload;
-    expect(consoleTokenPayloadSchema.safeParse(without).success).toBe(false);
-    expect(serverId).toBeDefined();
-    expect(jti).toBeDefined();
+  it('rejette un serverId non-uuid', () => {
+    expect(
+      consoleTokenPayloadSchema.safeParse({ ...validPayload, serverId: 'abc' }).success,
+    ).toBe(false);
+  });
+
+  it('rejette un scope autre que websocket', () => {
+    expect(
+      consoleTokenPayloadSchema.safeParse({ ...validPayload, scope: 'file-upload' }).success,
+    ).toBe(false);
   });
 });
 
@@ -280,6 +286,19 @@ describe('consoleTokenResponseSchema', () => {
 });
 
 describe('consoleClientMessageSchema', () => {
+  it('valide le message auth (handshake JWT)', () => {
+    expect(
+      consoleClientMessageSchema.safeParse({
+        type: 'auth',
+        token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejette un auth sans token', () => {
+    expect(consoleClientMessageSchema.safeParse({ type: 'auth' }).success).toBe(false);
+  });
+
   it('valide une commande console', () => {
     expect(
       consoleClientMessageSchema.safeParse({ type: 'command', command: 'say hello' }).success,

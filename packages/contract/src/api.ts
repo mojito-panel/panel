@@ -140,8 +140,10 @@ export const ALL_PERMISSIONS: readonly Permission[] = permissionSchema.options;
 export const CONSOLE_TOKEN_TTL_SECONDS = 300;
 
 /**
- * Payload of the console JWT (HS256, signed by the panel, verified by the agent).
- * `serverId` must match the WS route parameter; `permissions` gate every message.
+ * Payload of the console JWT (HS256, signed by the panel with the node's agent
+ * token, verified by the agent with its own token — Pelican-style single
+ * per-node secret). `serverId` must match the WS route parameter; `permissions`
+ * gate every message; `scope` ties the token to the websocket flow only.
  */
 export const consoleTokenPayloadSchema = z.object({
   iss: z.literal('mojito-panel'),
@@ -149,6 +151,7 @@ export const consoleTokenPayloadSchema = z.object({
   sub: z.string().min(1), // user id
   serverId: z.string().uuid(),
   permissions: z.array(permissionSchema),
+  scope: z.literal('websocket'),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
   jti: z.string().min(1),
@@ -166,8 +169,16 @@ export type ConsoleTokenResponse = z.infer<typeof consoleTokenResponseSchema>;
 
 // ─── Console WebSocket messages (browser ↔ agent) ─────────────────────────────
 
-/** Browser → agent. */
+/**
+ * Browser → agent. Pelican-style handshake: the socket opens UNauthenticated
+ * and the JWT travels as the first `auth` message — never in the URL/query
+ * string. Re-sending `auth` refreshes the token without reconnecting.
+ */
 export const consoleClientMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('auth'),
+    token: z.string().min(1).max(4096),
+  }),
   z.object({
     type: z.literal('command'),
     command: z.string().min(1).max(1000),
