@@ -236,7 +236,55 @@ sequenceDiagram
 
 ---
 
-## 6. Cycle de vie d'un serveur (statuts)
+## 6. Édition des variables (page Variables)
+
+La page `/servers/$serverId/variables` (ex-« Démarrage ») édite les variables du plugin
+après l'installation. La **DB panel est la source de vérité** (colonne `server.variables`) ;
+l'agent ne garde qu'un **cache** (`servers.json`) utilisé au start. Comme wings tire sa
+config du panel à chaque démarrage alors que l'agent mojito ne peut pas appeler le panel
+(pas de credentials), c'est le panel qui **pousse** la sync au moment de la sauvegarde —
+indispensable aussi parce qu'un start peut être déclenché directement par le navigateur
+via le WS console, sans passer par le panel.
+
+```mermaid
+sequenceDiagram
+    participant N as Navigateur (Variables)
+    participant P as Panel (updateServerVariablesFn)
+    participant D as Postgres
+    participant A as Agent (POST /variables)
+
+    N->>P: POST updateServerVariablesFn { serverId, variables (record complet) }
+    P->>P: loadOwnedServer + merge : seules les variables userEditable<br/>acceptent les nouvelles valeurs (les autres gardent leur valeur)
+    P->>P: re-validation des règles du plugin (validateVariableValue du contract :<br/>required, min/max, pattern, options) → 422 sinon
+    P->>A: POST /servers/:serverId/variables { variables } (Bearer)
+    alt agent ne connaît pas le serveur (404)
+        P->>D: UPDATE server.variables (l'agent rattrapera à la prochaine install complète)
+    else agent injoignable / erreur
+        P-->>N: 502 — rien n'est écrit (pas de divergence DB ↔ cache)
+    else OK
+        A->>A: re-validation (règles du plugin stocké) + refus si install en cours (409)
+        A->>A: fusion + store.save(servers.json)
+        P->>D: UPDATE server.variables
+        P-->>N: toast succès — « appliquées au prochain démarrage »
+    end
+```
+
+**Points clés**
+- Validation en **trois couches** qui partagent la même fonction du contract :
+  schéma de formulaire (TanStack Form, messages mappés par champ), server function (422),
+  agent (422). Aucune divergence possible entre les règles.
+- Les nouvelles valeurs s'appliquent au **prochain start** (résolution du templating,
+  env au spawn, provisioning des outils `java`/`steamcmd`) — un process en cours garde
+  son environnement d'origine.
+- Les variables `userViewable && !userEditable` s'affichent en lecture seule ;
+  les non-viewables restent dans le record mais ne sont pas éditables.
+- La commande de démarrage résolue est affichée en lecture seule : les variables du
+  plugin sont substituées en direct (valeur courante > default), les variables système
+  (`{{SERVER_…}}`) restent littérales — seul l'agent peut les résoudre.
+
+---
+
+## 7. Cycle de vie d'un serveur (statuts)
 
 ```mermaid
 stateDiagram-v2
@@ -256,7 +304,7 @@ stateDiagram-v2
 
 ---
 
-## 7. Référence des routes
+## 8. Référence des routes
 
 ### Panel ↔ Agent (Bearer token du node — `AGENT_ROUTES`)
 
@@ -266,6 +314,7 @@ stateDiagram-v2
 | `POST /servers/install` | Démarre une installation (202) — validation sync 400/422 |
 | `POST /servers/:serverId/reinstall` | Réinstalle en place (202, arrête le serveur d'abord) |
 | `GET /servers/:serverId/install` | Statut d'installation + logs (sync fin d'install + fallback polling) |
+| `POST /servers/:serverId/variables` | Sync du cache de variables (fusion + re-validation, refus si install en cours) — cf. §6 |
 | `GET /servers` | Liste des serveurs de l'agent |
 | `GET /servers/:serverId` | Info runtime (statut, logs récents) |
 | `GET /servers/:serverId/logs?after=N` | Logs incrémentaux (fallback console) |
@@ -299,4 +348,5 @@ stateDiagram-v2
 | `serverActionFn` | POST | start/stop/restart/kill |
 | `sendCommandFn` | POST | Commande stdin via panel |
 | `reinstallServerFn` | POST | Réinstallation en place |
+| `updateServerVariablesFn` | POST | Édition des variables (merge userEditable + sync agent) — cf. §6 |
 | `deleteServerFn` | POST | Suppression (agent + DB) |

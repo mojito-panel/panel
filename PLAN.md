@@ -11,7 +11,7 @@
 Panel (TanStack Start)  <--HTTPS + Bearer token / WS-->  Agent (Node + Fastify, 1 par machine)
        |                                                        |
    better-auth                                           Runner d'étapes JSON
-   MikroORM v7 (SQLite)                                  node-pty (consoles)
+   MikroORM v7 (Postgres)                                Pipes de process + ring buffer
    TanStack Query                                        (V2: Job Objects, users Windows)
 ```
 
@@ -27,8 +27,8 @@ Panel (TanStack Start)  <--HTTPS + Bearer token / WS-->  Agent (Node + Fastify, 
 | Composant | Techno | Notes |
 |---|---|---|
 | Panel front | TanStack Start + shadcn/ui | TanStack Router + TanStack Query |
-| Auth panel | better-auth 1.7 | `node:sqlite` (Node 24), plugin `tanstackStartCookies` |
-| DB | MikroORM v7 (`defineEntity`) | SQLite, même fichier que better-auth |
+| Auth panel | better-auth 1.7 | `pg` (Postgres), plugin `tanstackStartCookies` |
+| DB | MikroORM v7 (`defineEntity`) | Postgres 17 (docker dev) — MikroORM gère TOUTES les tables (y compris better-auth) |
 | Query cache | TanStack Query | `staleTime: 60s`, passé dans le RouterContext |
 | Agent | Node pur (Fastify + WS) | PAS de NestJS — c'est un daemon système |
 | Packaging agent | Node SEA | `.exe` unique + addons natifs en fichiers externes (V2) |
@@ -48,7 +48,7 @@ mojito-panel/
 ├── package.json              # npm workspaces (packages/*)
 ├── mise.toml                 # Node 24 + npm 11, tâches setup:dev, migrate, dev, test
 ├── .nvmrc                    # 24
-├── docker-compose.dev.yml    # Postgres 17 (dev, optionnel — V1 utilise SQLite)
+├── docker-compose.dev.yml    # Postgres 17 (dev)
 ├── scripts/copy-env.mjs      # Copie .env.default → .env
 └── packages/
     ├── contract/             # @mojito/contract — Schémas Zod partagés
@@ -72,7 +72,7 @@ mojito-panel/
     │       ├── contexts/
     │       │   └── use-auth.tsx  # AuthProvider + useAuth (user, session, useSignOut)
     │       ├── lib/
-    │       │   ├── auth.ts       # better-auth server (node:sqlite, tanstackStartCookies)
+    │       │   ├── auth.ts       # better-auth server (pg, tanstackStartCookies)
     │       │   ├── auth-client.ts # better-auth client React
     │       │   ├── auth.types.ts # Types User/Session partagés
     │       │   └── utils.ts      # cn() shadcn
@@ -187,7 +187,7 @@ mojito-panel/
 - **Server** : id, name, nodeId, pluginId, ownerId, status, variables (JSON)
 - **ServerAllocation** : port, maxRamMb, maxCpuPercent
 
-> **Note** : better-auth et MikroORM partagent le même fichier SQLite mais ont deux pipelines de migrations séparés (comme custodia avec Postgres).
+> **Note** : better-auth et MikroORM partagent la même base Postgres ; MikroORM gère toutes les tables (mapping snake_case better-auth dans `src/lib/auth.ts`), migrations appliquées au boot (`src/server.ts`).
 
 ---
 
@@ -196,7 +196,7 @@ mojito-panel/
 ### Panel (better-auth)
 
 - Email/mot de passe V1
-- `node:sqlite` (Node 24) — pas de better-sqlite3 (ne compile pas sur Windows)
+- `pg` (Postgres) — pas de better-sqlite3 (ne compile pas sur Windows)
 - Plugin `tanstackStartCookies` pour forward les cookies dans TanStack Start
 - **TanStack Query dans le RouterContext** : `staleTime: 60s`, session fetchée en SSR via `beforeLoad`
 - **AuthProvider** : `useAuth()` expose `user`, `session`, `useSignOut()`
@@ -270,7 +270,7 @@ mojito-panel/
 - **Crash detection minimale** (comme wings crash.go) : exit code non-nul ET état ≠ `stopping` → `crashed`. Anti-crash-loop : si dernier crash < N secondes (défaut 60s), pas de restart auto. Restart auto → repasse par le power lock.
 - **Sortie console** : stdout/stderr pipés → ring buffer en mémoire (limite ~1000 lignes) + callbacks pour le streaming WS (phase 3).
 - **Persistance locale** : registre JSON dans `AGENT_DATA_DIR` (serverId → plugin, variables, installDir, allocation) rempli à l'install — le start n'a besoin que du serverId.
-- **Note écart wings** : wings re-applique `config.files` à chaque boot (`UpdateConfigurationFiles` dans onBeforeStart). Chez nous les actions `configFile` sont install-only pour l'instant — à reconsidérer en phase 3 (édition des variables sans réinstall).
+- **Note écart wings** : wings re-applique `config.files` à chaque boot (`UpdateConfigurationFiles` dans onBeforeStart). Chez nous les actions `configFile` sont install-only : **l'édition des variables existe** (page Variables — change la valeur + env au prochain start) mais NE réécrit pas les fichiers de config déjà générés (ex : changer le port dans la page ne met pas à jour `server.properties`). Parité complète = réécrire les `configFile` au start ou à la sauvegarde des variables — restant à décider.
 
 ### Phase 2 — Bridage (V2 — pas en V1)
 
@@ -293,12 +293,20 @@ mojito-panel/
 - [x] Start/stop/restart/kill + envoi de commandes
 - [x] Gestion des variables par serveur : formulaires auto-générés depuis les
   définitions du plugin (type number/boolean/options → champ adapté)
-- [x] Sync schéma des entités métier au boot (`orm.schema.update()`) — better-auth
-  migre ses tables séparément via son CLI (jamais sync MikroORM sur les tables auth)
+- [x] Édition post-install des variables (page `/servers/$serverId/variables`,
+  ex-« Démarrage ») : validation en 3 couches (formulaire / server function / agent)
+  réutilisant les règles du contract (required, min/max, pattern, options), variables
+  `userEditable` seules modifiables, commande de démarrage résolue en lecture seule.
+  DB panel = source de vérité ; sync de l'agent par push (`POST /servers/:serverId/variables`,
+  cf. docs/communications.md §6) — appliqué au prochain start (starts WS inclus).
+  Toasts sonner (richColors) pour les retours de mutations.
+- [x] Migrations au boot (`src/server.ts` → `orm.migrator.up()`) — MikroORM gère
+  toutes les tables (y compris better-auth) ; JAMAIS de `schema.update()`
+  (v7 drop les tables inconnues par défaut)
 
 Notes d'implémentation :
-- Le panel stocke le token agent en clair dans la table node (nécessaire pour
-  appeler l'agent ; encryption au repos = plus tard).
+- Le token agent est stocké **chiffré au repos** dans la table node (AES-256-GCM, clé
+  dérivée de `BETTER_AUTH_SECRET` — le token est aussi la clé de signature des JWT console).
 - Statut serveur : sync DB ← statut runtime de l'agent à chaque consultation.
 - Ownership : un user voit/gère ses serveurs ; l'admin voit tout et gère nodes/plugins.
 
@@ -428,7 +436,7 @@ Navigateur ◀──auth-ok + logs stream───── Agent (chaque message e
 - [ ] Addons natifs jamais bundle-és dans le SEA → fichiers à côté — V2
 - [ ] SEA = CommonJS (build esbuild si code ESM) — V2
 - [ ] Users locaux : jamais Administrateurs, groupe `PanelServers` dédié — V2
-- [x] better-auth et MikroORM : deux pipelines de migrations séparés, même fichier SQLite
+- [x] better-auth et MikroORM : même base Postgres, toutes les tables gérées par MikroORM, migrations au boot
 - [x] `schemaVersion` dans chaque JSON de plugin
 - [x] Variables inconnues = erreur à l'installation, pas au runtime
 - [ ] Timeout de stop gracieux avant kill forcé

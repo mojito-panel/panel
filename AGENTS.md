@@ -50,11 +50,17 @@ src/
 │   ├── index.tsx      # / → redirect (connecté → /servers, sinon /login)
 │   ├── _auth/         # pathless layout → /login, /register (PAS de sidebar)
 │   ├── _app.tsx       # layout protégé : SidebarProvider + AppSidebar + guard
-│   ├── _app/servers/  # /servers, /servers/new, /servers/$serverId
-│   ├── _app/admin/    # /admin/nodes, /admin/plugins
+│   ├── _app/servers/  # /servers (liste), /servers/new (création)
+│   ├── servers/$serverId/  # layout PELICAN : sidebar propre + pages
+│   │   ├── route.tsx  # layout + guard + query ['server', serverId] partagée
+│   │   ├── console.tsx / files.tsx / variables.tsx / settings.tsx
+│   │   └── backups.tsx / network.tsx / schedules.tsx / users.tsx / activity.tsx (placeholders)
+│   ├── admin/         # /admin/* (route.tsx guard admin + pages)
 │   └── api/auth/$.ts  # catch-all better-auth
 ├── components/ui/     # shadcn/ui (généré par le CLI — ne pas éditer à la main)
 ├── components/app-sidebar.tsx  # Sidebar de l'app (menu + footer user/logout)
+├── components/server-sidebar.tsx  # Sidebar d'un serveur (tabs Pelican)
+├── components/variable-field.tsx  # Champ variable de plugin (partagé new + Variables)
 ├── contexts/          # React contexts (AuthProvider, useAuth)
 ├── lib/               # auth.ts (better-auth), auth-client.ts, utils.ts
 ├── db/
@@ -62,7 +68,7 @@ src/
 │   ├── types.ts       # Types inférés : `interface IUser extends InferEntity<typeof User> {}`
 │   └── index.ts       # Config MikroORM + singleton (initOrm/getOrm)
 ├── validators/        # Schémas Zod des formulaires (loginSchema, registerSchema, Dto)
-├── server/functions/  # Server functions TanStack Start (getSession, signOutFn)
+├── server/functions/  # Server functions TanStack Start (getSession, signOutFn, servers, admin, files)
 └── router.tsx         # RouterContext { queryClient } + staleTime 60s
 ```
 
@@ -71,6 +77,9 @@ src/
 - **Formulaires** : TanStack Form + Zod (`useForm` + `validators: { onChange: schema }`), mutations via `useMutation`. JAMAIS de `useState` pour les champs de formulaire. Schémas dans `src/validators/`, types `XxxDto = z.infer<...>`. Lecture réactive d'une valeur du form : `<form.Subscribe selector={(s) => s.values.x}>`, écriture : `form.setFieldValue`. Pas de `z.coerce`/`z.default()` dans les schémas de formulaires (incompatibles avec le typage Standard Schema de TanStack Form).
 - **Server functions** : dans `src/server/functions/`. Auth via `requireUser()`/`requireAdmin()` (`src/server/session.ts`), erreurs via `HttpError(status, message)`. Le client agent : `src/server/agent/client.ts` (fetch Bearer, erreurs `AgentError`). L'ORM s'obtient par `initOrm()` (lazy, sync le schéma métier au premier appel — ne touche JAMAIS les tables better-auth).
 - **Console** : xterm.js (`@xterm/xterm` + `@xterm/addon-fit`), imports dynamiques dans useEffect (SSR-safe), polling des logs incrémentaux de l'agent (cursor `after=N`).
+- **Feedback UI** : toasts via sonner (`toast.success`/`toast.error` du package `sonner`), PAS de messages de succès inline. Le `<Toaster richColors closeButton />` est monté dans `__root.tsx`. Confirmations destructives : `confirm()` natif.
+- **Selects** : TOUJOURS le composant shadcn (`components/ui/select.tsx`), JAMAIS de `<select>` natif. Champ variable de plugin (boolean/options/text/number) : composant partagé `components/variable-field.tsx`.
+- **Variables serveur** : la page `/servers/$serverId/variables` édite les variables du plugin avec un schéma Zod dynamique (`makeUpdateServerVariablesSchema` dans `validators/server.ts`, réutilise `validateVariableValue` du contract). La DB panel est la source de vérité ; la server function `updateServerVariablesFn` ne merge que les variables `userEditable` puis pousse la sync à l'agent (cache `servers.json`).
 - **Types** : inférés des entités via `InferEntity` dans `db/types.ts` (préfixe `I` : `IUser`, `ISession`). PAS de types dupliqués à la main.
 - **Entités** : toutes dans `db/entities.ts` avec `defineEntity` + `p`. Champs snake_case en DB via `.fieldName()`, camelCase en TS.
 - **Session** : fetchée en SSR dans `beforeLoad` de `__root.tsx` via `queryClient.fetchQuery({ queryKey: ['auth'] })`. Après login/register/signOut : `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
@@ -85,6 +94,7 @@ src/
 - `/health` public, tout le reste derrière l'auth.
 - Config Zod depuis les variables d'environnement (`AGENT_TOKEN` requis, 32+ caractères).
 - NE JAMAIS logger le token.
+- **Variables serveur** (≈ wings, mais en push) : la DB panel est la source de vérité ; l'agent ne garde dans `servers.json` qu'un **cache** utilisé au start (résolution du templating + env). Comme l'agent ne peut pas tirer la config du panel (pas de credentials), le panel pousse les mises à jour via `POST /servers/:serverId/variables` (fusion + re-validation `validateVariableValue` du contract, refus 409 pendant une install). Les nouvelles valeurs s'appliquent au **prochain start** — un process en cours garde son env d'origine.
 - **Redémarrage de l'agent** (≈ wings cmd/root.go) : état runtime + PID persistés dans `states.json` (dataDir, écrit à chaque transition d'état via `ServerManager`). Au boot, `restoreServers` (hook `onReady`) : état running/starting + PID vivant → « adopted » (marqué running SANS console live, le process n'est jamais tué juste pour plaire à l'agent) ; PID mort → start rejoué (`handlePowerAction('start')`). Un serveur adopté : `sendCommand` refuse, stop/kill → `taskkill /T /F` sur le PID, mort inattendue → détection de crash normale. PAS de persistance de l'historique console : le ring buffer repart vide à chaque boot de l'agent (l'historique figé serait perturbant). La suppression d'un serveur efface aussi son entrée `states.json`.
 
 ## Conventions contract (packages/contract)
@@ -106,7 +116,7 @@ src/
 ## Tests
 
 - Vitest dans chaque package (`tests/` à côté de `src/`).
-- Après tout changement : `npm test` doit passer (319 tests actuellement).
+- Après tout changement : `npm test` doit passer (332 tests actuellement).
 
 ## V2 reporté (ne PAS faire en V1)
 

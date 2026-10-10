@@ -76,7 +76,7 @@ packages/
 
 ## Documentation
 
-- [Communications Panel ↔ Agent ↔ Client web](docs/communications.md) — flux détaillés avec diagrammes Mermaid : authentification, installation suivie en direct, console WS (JWT), actions power, réinstallation, cycle de vie des statuts.
+- [Communications Panel ↔ Agent ↔ Client web](docs/communications.md) — flux détaillés avec diagrammes Mermaid : authentification, installation suivie en direct, console WS (JWT), actions power, réinstallation, édition des variables, cycle de vie des statuts.
 
 ## Configuration
 
@@ -145,12 +145,12 @@ npm run db:migrate:up -w @mojito/panel
 
 ## Roadmap
 
-- **Phase 0** — Squelette (en cours) : monorepo, panel, agent, contract, tests
-- **Phase 1** — Cœur de l'agent : runner d'étapes, node-pty, stop gracieux
+- **Phase 0** — Squelette ✅ : monorepo, panel, agent, contract, tests
+- **Phase 1** — Cœur de l'agent ✅ : runner d'étapes, process manager, stop gracieux, crash detection, restauration au boot
 - **Phase 2** — Bridage : Job Objects (RAM/CPU) — *V2*
-- **Phase 3** — Panel & liaison : CRUD, console live, WS
+- **Phase 3** — Panel & liaison ✅ : CRUD serveurs/nodes/plugins, installation suivie en direct, console live, page Variables (édition + validation + sync agent)
 - **Phase 4** — SEA & distribution : packaging agent en `.exe`
-- **Phase 5** — Console WS directe navigateur ↔ agent + JWT + permissions (terminée)
+- **Phase 5** — Console WS directe navigateur ↔ agent + JWT + permissions ✅
 
 > Les Job Objects et l'isolation des users Windows sont volontairement reportés en V2.
 
