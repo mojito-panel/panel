@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import type { z } from 'zod';
 import type { runnerActionSchema, RunnerActionInput } from '@mojito/contract';
-import { render } from '../templating';
+import { render } from '../../templating';
 import { resolvePath, type ActionContext } from '../context';
 
 type ReplaceAction = RunnerActionInput & { action: 'replace' };

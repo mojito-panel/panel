@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { z } from 'zod';
 import type { runnerActionSchema, RunnerActionInput } from '@mojito/contract';
-import { render } from '../templating';
+import { render } from '../../templating';
 import { resolvePath, type ActionContext } from '../context';
 
 type WriteAction = RunnerActionInput & { action: 'write' };

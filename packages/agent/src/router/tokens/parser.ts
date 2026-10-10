@@ -1,9 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { consoleTokenPayloadSchema, type ConsoleTokenPayload, type Permission } from '@mojito/contract';
+import { consoleTokenPayloadSchema, type ConsoleTokenPayload } from '@mojito/contract';
 
 /**
- * Console JWT verification — HS256 with node:crypto only, no jwt library.
- * The panel signs the token (same shared secret), the agent verifies it.
+ * Console JWT verification (≈ wings router/tokens/parser.go) —
+ * HS256 with node:crypto only, no jwt library.
+ * The panel signs the token with the node's agent token, the agent
+ * verifies it with its own token (single per-node secret, like Pelican).
  */
 
 export type ConsoleTokenErrorCode = 'invalid' | 'expired';
@@ -41,7 +43,7 @@ export interface VerifyConsoleTokenOptions {
 
 /**
  * Verifies a console JWT: HS256 signature, then Zod payload validation
- * (iss/aud/serverId/permissions shapes), then `exp` with a 5 s clock skew.
+ * (iss/aud/serverId/permissions/scope shapes), then `exp` with a 5 s clock skew.
  * Throws ConsoleTokenError('invalid' | 'expired').
  */
 export function verifyConsoleToken(
@@ -98,12 +100,4 @@ export function verifyConsoleToken(
   }
 
   return payload;
-}
-
-/** Permission gate — called for EVERY incoming console message, not only at connection. */
-export function hasConsolePermission(
-  payload: ConsoleTokenPayload,
-  permission: Permission,
-): boolean {
-  return payload.permissions.includes(permission);
 }

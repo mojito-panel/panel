@@ -6,9 +6,9 @@ import type { AddressInfo } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAgentServer } from '../src/api';
+import { createAgentServer } from '../src/router';
 import type { AgentConfig } from '../src/config';
-import { ServerStore } from '../src/process/store';
+import { ServerStore } from '../src/internal/server-store';
 import {
   ALL_PERMISSIONS,
   parsePlugin,

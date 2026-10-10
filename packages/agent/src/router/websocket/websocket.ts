@@ -6,10 +6,11 @@ import {
   type ConsoleTokenPayload,
   type Permission,
 } from '@mojito/contract';
-import type { AgentConfig } from '../config';
-import type { ProcessRegistry } from '../process/registry';
-import { toPanelStatus } from '../process/states';
-import { verifyConsoleToken, hasConsolePermission, CLOCK_SKEW_SECONDS } from './jwt';
+import type { AgentConfig } from '../../config';
+import type { ServerManager } from '../../server/manager';
+import { toPanelStatus } from '../../environment/states';
+import { verifyConsoleToken, CLOCK_SKEW_SECONDS } from '../tokens/parser';
+import { hasConsolePermission } from '../tokens/websocket';
 
 /**
  * Browser-facing console WebSocket (Pelican-style direct user ↔ agent socket).
@@ -40,11 +41,11 @@ const POWER_PERMISSIONS: Record<'start' | 'stop' | 'restart' | 'kill', Permissio
 
 export interface ConsoleWsOptions {
   config: AgentConfig;
-  registry: ProcessRegistry;
+  manager: ServerManager;
 }
 
 function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): void {
-  const { config, registry } = options;
+  const { config, manager } = options;
 
   // Origins allowed to open the socket (the panel itself + extra origins)
   const allowedOrigins = new Set(config.allowedOrigins);
@@ -85,7 +86,7 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
       }
     };
     const sendStatus = (): void => {
-      send({ type: 'status', status: toPanelStatus(registry.getState(serverId), false) });
+      send({ type: 'status', status: toPanelStatus(manager.getState(serverId), false) });
     };
 
     /** No `auth` message in time → close (wings does the same). */
@@ -132,9 +133,9 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
         return;
       }
       send({ type: 'auth-ok' });
-      send({ type: 'log', lines: registry.getLogs(serverId) });
+      send({ type: 'log', lines: manager.getLogs(serverId) });
       sendStatus();
-      unsubscribe = registry.subscribe(serverId, {
+      unsubscribe = manager.subscribe(serverId, {
         onLog: (line) => send({ type: 'log', lines: [line] }),
         onState: () => sendStatus(),
       });
@@ -196,7 +197,7 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
         }
         commandTimestamps.push(now);
 
-        void registry
+        void manager
           .sendCommand(serverId, parsed.data.command)
           .then((sent) => {
             // Not running → the status update tells the console why nothing happened
@@ -211,7 +212,7 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
         send({ type: 'error', code: 'forbidden' });
         return;
       }
-      void registry
+      void manager
         .handlePowerAction(serverId, parsed.data.action)
         .then(() => sendStatus())
         .catch(() => sendStatus());

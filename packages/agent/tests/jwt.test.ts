@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac, randomUUID } from 'node:crypto';
-import { verifyConsoleToken, hasConsolePermission, ConsoleTokenError } from '../src/api/jwt';
+import { verifyConsoleToken, ConsoleTokenError } from '../src/router/tokens/parser';
+import { hasConsolePermission } from '../src/router/tokens/websocket';
 import { ALL_PERMISSIONS } from '@mojito/contract';
 
 const SECRET = 'test-secret-0123456789abcdef0123456789abcdef';

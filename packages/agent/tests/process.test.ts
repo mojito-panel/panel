@@ -2,10 +2,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ServerProcessManager } from '../src/process/manager';
-import { ProcessRegistry, PowerActionError } from '../src/process/registry';
-import { ServerStore } from '../src/process/store';
-import { toPanelStatus } from '../src/process/states';
+import { ServerProcessManager } from '../src/environment/process';
+import { ServerManager, PowerActionError } from '../src/server/manager';
+import { ServerStore } from '../src/internal/server-store';
+import { toPanelStatus } from '../src/environment/states';
 import { parsePlugin, type Plugin } from '@mojito/contract';
 
 const NODE = process.execPath;
@@ -284,7 +284,7 @@ describe('ServerStore', () => {
   });
 });
 
-// ─── ProcessRegistry (power lock + crash detection) ───────────────────────────
+// ─── ServerManager (power lock + crash detection) ───────────────────────────
 
 function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
   return parsePlugin({
@@ -298,10 +298,10 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
   });
 }
 
-describe('ProcessRegistry', () => {
+describe('ServerManager', () => {
   async function setupRegistry(opts: { crashLoopSeconds?: number } = {}) {
     const store = new ServerStore(tmpRoot);
-    const registry = new ProcessRegistry({ store, crashLoopSeconds: opts.crashLoopSeconds });
+    const registry = new ServerManager({ store, crashLoopSeconds: opts.crashLoopSeconds });
     const markerFile = join(tmpRoot, 'spawn-count.txt');
 
     // Plugin whose start process appends a line to a file
@@ -378,7 +378,7 @@ describe('ProcessRegistry', () => {
     // recent → no 3rd spawn (anti-loop, like wings crashTooFrequent)
     const markerFile = join(tmpRoot, 'crash-count.txt');
     const store = new ServerStore(tmpRoot);
-    const registry = new ProcessRegistry({ store, crashLoopSeconds: 60 });
+    const registry = new ServerManager({ store, crashLoopSeconds: 60 });
     const serverId = '770e8400-e29b-41d4-a716-446655440000';
 
     let spawnCount = 0;

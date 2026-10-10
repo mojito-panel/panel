@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parsePlugin } from '@mojito/contract';
-import { resolveVariables, render } from '../src/runner/templating';
-import type { SystemVariables } from '../src/runner/templating';
+import { resolveVariables, render } from '../src/server/templating';
+import type { SystemVariables } from '../src/server/templating';
 
 const plugin = parsePlugin({
   schemaVersion: 2,

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import type { runnerActionSchema, RunnerActionInput } from '@mojito/contract';
-import { render } from '../templating';
+import { render } from '../../templating';
 import { resolvePath, type ActionContext } from '../context';
 
 type CommandAction = RunnerActionInput & { action: 'command' };

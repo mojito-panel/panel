@@ -1,5 +1,5 @@
 import { isAbsolute, join, normalize, sep } from 'node:path';
-import type { ResolvedVariables } from './templating';
+import type { ResolvedVariables } from '../templating';
 
 /** Context shared by all runner actions. */
 export interface ActionContext {

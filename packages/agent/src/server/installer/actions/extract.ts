@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import AdmZip from 'adm-zip';
 import type { z } from 'zod';
 import type { runnerActionSchema, RunnerActionInput } from '@mojito/contract';
-import { render } from '../templating';
+import { render } from '../../templating';
 import { resolvePath, type ActionContext } from '../context';
 
 type ExtractAction = RunnerActionInput & { action: 'extract' };

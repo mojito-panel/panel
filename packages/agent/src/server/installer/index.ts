@@ -5,7 +5,7 @@ import {
   type RunnerAction,
 } from '@mojito/contract';
 import { mkdir } from 'node:fs/promises';
-import { resolveVariables, render, type SystemVariables } from './templating';
+import { resolveVariables, render, type SystemVariables } from '../templating';
 import type { ActionContext } from './context';
 import { runWrite } from './actions/write';
 import { runReplace } from './actions/replace';

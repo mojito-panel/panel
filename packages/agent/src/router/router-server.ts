@@ -1,57 +1,26 @@
-import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
-import websocket from '@fastify/websocket';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { rm } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
-import type { AgentConfig } from '../config';
 import {
   installServerRequestSchema,
   pluginSchema,
   serverActionRequestSchema,
   sendCommandRequestSchema,
-  type HealthResponse,
 } from '@mojito/contract';
-import { runInstall } from '../runner';
-import { buildSystemVariables } from '../process/system-vars';
-import { ProcessRegistry, PowerActionError } from '../process/registry';
-import { ServerStore } from '../process/store';
-import { toPanelStatus } from '../process/states';
-import { registerConsoleWs } from './console-ws';
+import type { AgentConfig } from '../config';
+import { ServerManager, PowerActionError } from '../server/manager';
+import { runInstall } from '../server/installer';
+import { buildSystemVariables } from '../server/variables';
+import { toPanelStatus } from '../environment/states';
+import type { ServerStore } from '../internal/server-store';
 
-const startTime = Date.now();
-
-/** Browser console WS route — authenticated by console JWT, NOT by the panel token. */
-const CONSOLE_WS_PATH = /^\/servers\/[^/]+\/ws$/;
-
-/**
- * The console JWT travels in the query string — redact it from every log line.
- */
-function redactTokenFromUrl(url: string): string {
-  return url.replace(/([?&])token=[^&]*/g, '$1token=[redacted]');
+export interface ServerRoutesOptions {
+  config: AgentConfig;
+  manager: ServerManager;
+  store: ServerStore;
 }
 
-/**
- * SHA-256 hash of the token for constant-time comparison.
- */
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
-
-/**
- * Verifies the request Bearer token in constant time.
- */
-function isAuthorized(request: FastifyRequest, expectedTokenHash: string): boolean {
-  const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ')) return false;
-  const token = header.slice(7);
-  const tokenHash = hashToken(token);
-  const a = Buffer.from(tokenHash, 'hex');
-  const b = Buffer.from(expectedTokenHash, 'hex');
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-/** Maps registry errors to HTTP responses. */
+/** Maps server errors to HTTP responses. */
 function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
   if (err instanceof PowerActionError) {
     const code = err.code === 'not_found' ? 404 : 409;
@@ -60,58 +29,11 @@ function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
   return reply.code(500).send({ error: 'Erreur interne' });
 }
 
-/**
- * Builds the agent's Fastify instance.
- * - /health is public (healthcheck)
- * - All other routes require `Authorization: Bearer <token>`
- */
-export function createAgentServer(config: AgentConfig): FastifyInstance {
-  const app = Fastify({
-    logger: {
-      level: 'info',
-      serializers: {
-        req(request) {
-          return {
-            method: request.method,
-            url: redactTokenFromUrl(request.url),
-            remoteAddress: request.ip,
-          };
-        },
-      },
-    },
-  });
-  const expectedTokenHash = hashToken(config.token);
+/** Server routes (≈ wings router_server.go). All behind the panel token. */
+export function registerServerRoutes(app: FastifyInstance, options: ServerRoutesOptions): void {
+  const { config, manager, store } = options;
 
-  const store = new ServerStore(config.dataDir);
-  const registry = new ProcessRegistry({ store });
-
-  // ─── Browser console WS (JWT auth, log streaming, commands, power) ──────
-  // Own scope: the websocket plugin must be booted BEFORE the
-  // `{ websocket: true }` route is registered.
-  app.register(async (instance) => {
-    await instance.register(websocket);
-    registerConsoleWs(instance, { config, registry });
-  });
-
-  // ─── Healthcheck (public) ──────────────────────────────────────────────────
-  app.get('/health', async (): Promise<HealthResponse> => {
-    return {
-      status: 'ok',
-      version: config.version,
-      uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
-    };
-  });
-
-  // ─── Authentication hook (except /health and the console WS) ────────────
-  app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (request.url === '/health') return;
-    if (CONSOLE_WS_PATH.test(request.url.split('?')[0])) return; // console JWT, not panel token
-    if (!isAuthorized(request, expectedTokenHash)) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
-  });
-
-  // ─── Server install (plugin step runner) ─────────────────
+  // ─── Server install (plugin step runner) ───────────────────────────────
   app.post('/servers/install', async (request, reply) => {
     const parsed = installServerRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -179,7 +101,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       servers: stored.map((s) => ({
         serverId: s.serverId,
         name: s.name,
-        status: toPanelStatus(registry.getState(s.serverId), false),
+        status: toPanelStatus(manager.getState(s.serverId), false),
       })),
     };
   });
@@ -191,7 +113,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
     }
 
-    const state = registry.getState(request.params.serverId);
+    const state = manager.getState(request.params.serverId);
     return {
       serverId: stored.serverId,
       name: stored.name,
@@ -201,7 +123,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       ramMb: null,
       cpuPercent: null,
       startedAt: null,
-      logs: registry.getLogs(request.params.serverId).slice(-50),
+      logs: manager.getLogs(request.params.serverId).slice(-50),
     };
   });
 
@@ -221,11 +143,11 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       }
 
       try {
-        await registry.handlePowerAction(parsed.data.serverId, parsed.data.action);
+        await manager.handlePowerAction(parsed.data.serverId, parsed.data.action);
         return {
           serverId: parsed.data.serverId,
           action: parsed.data.action,
-          status: toPanelStatus(registry.getState(parsed.data.serverId), false),
+          status: toPanelStatus(manager.getState(parsed.data.serverId), false),
         };
       } catch (err) {
         return powerErrorReply(err, reply);
@@ -233,7 +155,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     },
   );
 
-  // ─── Incremental logs (panel live console) ─────────────────────────────
+  // ─── Incremental logs (panel live console fallback) ─────────────────────
   app.get<{
     Params: { serverId: string };
     Querystring: { after?: string };
@@ -245,14 +167,14 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     }
 
     const after = Math.max(0, Number(request.query.after ?? 0) || 0);
-    const { lines, next } = registry.getLogsAfter(serverId, after);
+    const { lines, next } = manager.getLogsAfter(serverId, after);
 
     return {
       serverId,
       lines,
       next,
-      status: toPanelStatus(registry.getState(serverId), false),
-      runtimeState: registry.getState(serverId),
+      status: toPanelStatus(manager.getState(serverId), false),
+      runtimeState: manager.getState(serverId),
     };
   });
 
@@ -267,14 +189,14 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       }
 
       // Refuse while the process runs — the panel must stop/kill first
-      if (registry.isRunning(serverId)) {
+      if (manager.isRunning(serverId)) {
         return reply.code(409).send({
           error: 'Le serveur est en cours d’exécution',
           code: 'already_running',
         });
       }
 
-      registry.forget(serverId);
+      manager.forget(serverId);
       await store.delete(serverId);
 
       // Folder removal — only if it is under the agent's dataDir
@@ -310,7 +232,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       }
 
       try {
-        const sent = await registry.sendCommand(parsed.data.serverId, parsed.data.command);
+        const sent = await manager.sendCommand(parsed.data.serverId, parsed.data.command);
         if (!sent) {
           return reply.code(409).send({
             error: 'Le serveur n’est pas en cours d’exécution',
@@ -323,6 +245,4 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       }
     },
   );
-
-  return app;
 }

@@ -1,5 +1,5 @@
 import { loadConfig } from './config';
-import { createAgentServer } from './api';
+import { createAgentServer } from './router';
 
 /**
  * Agent entrypoint.

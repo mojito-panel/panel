@@ -1,5 +1,5 @@
 import type { ServerAllocationPayload } from '@mojito/contract';
-import type { SystemVariables } from '../runner/templating';
+import type { SystemVariables } from './templating';
 
 /**
  * Builds the agent's system variables.

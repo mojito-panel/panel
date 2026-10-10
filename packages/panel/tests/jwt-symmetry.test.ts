@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { signConsoleToken } from '../src/server/jwt';
 // Direct import of the agent's verifier — cross-package on purpose:
 // this pins the sign/verify symmetry between the two sides of the contract.
-import { verifyConsoleToken, hasConsolePermission } from '../../agent/src/api/jwt';
+import { verifyConsoleToken } from '../../agent/src/router/tokens/parser';
+import { hasConsolePermission } from '../../agent/src/router/tokens/websocket';
 
 const SECRET = 'symmetry-secret-0123456789abcdef012345';
 const USER_ID = 'user_sym';
