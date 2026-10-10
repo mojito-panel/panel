@@ -7,11 +7,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const TEST_TOKEN = 'a'.repeat(64); // 64 characters
+const TEST_JWT_SECRET = 'b'.repeat(64);
 
 const config: AgentConfig = {
   port: 0,
   host: '127.0.0.1',
   token: TEST_TOKEN,
+  jwtSecret: TEST_JWT_SECRET,
   dataDir: join(tmpdir(), 'mojito-api-data-' + process.pid),
   version: '0.1.0-test',
 };
