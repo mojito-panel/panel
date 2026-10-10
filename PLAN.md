@@ -36,6 +36,8 @@ Panel (TanStack Start)  <--HTTPS + Bearer token / WS-->  Agent (Node + Fastify, 
 | Bridage RAM/CPU | Windows Job Objects | **V2** — pas en V1 |
 | Isolation FS | Users Windows locaux + ACL NTFS | **V2** — pas en V1 |
 | Auth panel ↔ agent | Token statique (32 bytes random) en HTTPS | mTLS/rotation plus tard |
+| Auth user → agent | JWT HS256 court (TTL ~5 min) émis par le panel | Secret partagé, payload = serverId + permissions — cf. Phase 5 |
+| Logs live | WebSocket navigateur → agent (direct, type Pelican) | Remplace le polling de la phase 3 — cf. Phase 5 |
 
 ---
 
@@ -189,8 +191,22 @@ mojito-panel/
 - Token généré côté panel : `crypto.randomBytes(32).toString('hex')`
 - Panel stocke le **hash** (SHA-256), l'agent stocke le plaintext
 - Toutes les requêtes en HTTPS (`Authorization: Bearer <token>`), comparaison en temps constant (`timingSafeEqual`)
-- Logs live : l'agent ouvre une connexion WS **sortante** vers le panel (phase 3)
 - Ne JAMAIS logger le token
+
+### User ↔ Agent (JWT, type Pelican)
+
+- Le navigateur parle **directement** à l'agent (WS console) — le panel ne relaie plus les logs.
+- Le panel émet un **JWT HS256 court** (TTL ~5 min), signé avec un secret partagé panel/agent
+  (`PANEL_JWT_SECRET` / `AGENT_JWT_SECRET`, 32+ caractères, jamais loggé).
+- Payload validé par l'agent à CHAQUE requête/message : `aud: 'mojito-agent'`, `serverId`,
+  `sub` (userId), `permissions[]`, `exp`, `jti`.
+- L'agent vérifie : signature, `aud`, `exp`, `serverId` du token === paramètre de la route,
+  puis les **permissions** exigées par l'action (`console.write` pour une commande, etc.).
+- Permissions V1 : liste fermée dans le contract — `console.read`, `console.write`,
+  `power.start`, `power.stop`, `power.restart`, `power.kill`, `variables.read`, `variables.write`.
+- Pas d'invitations/sub-owners en V1 : tout owner (et l'admin) reçoit **toutes** les permissions
+  par défaut. La liste fermée existe déjà côté agent pour être prêt.
+- Révocation : TTL court + déconnexion WS. Blacklist `jti` = V2.
 
 ---
 
@@ -254,7 +270,8 @@ mojito-panel/
   — ⚠️ V1 synchrone sans progression live (WS : plus tard si besoin)
 - [x] Console live : **xterm.js** alimenté par polling des logs incrémentaux de l'agent
   (`GET /servers/:id/logs?after=N`, toutes les 2 s) + envoi de commandes stdin
-  — (remplace le WS + react-virtual initialement prévus)
+  — (remplace le WS + react-virtual initialement prévus ; le WS direct arrive en Phase 5,
+  le polling restera en fallback)
 - [x] Start/stop/restart/kill + envoi de commandes
 - [x] Gestion des variables par serveur : formulaires auto-générés depuis les
   définitions du plugin (type number/boolean/options → champ adapté)
@@ -272,6 +289,96 @@ Notes d'implémentation :
 - [ ] Build SEA de l'agent + addons externes
 - [ ] Installeur Windows (service auto)
 - [ ] Docs d'installation pour un utilisateur final
+
+### Phase 5 — Console WS directe user ↔ agent + JWT + permissions (découpée en edits)
+
+> Grosse mutation : le navigateur stream les logs directement depuis l'agent (type Pelican),
+> authentifié par un JWT court émis par le panel. Découpée en edits indépendants,
+> chacun testable/mergeable seul. Ordre = dépendances.
+
+#### E1 — Contract : permissions, payload JWT, messages WS (`packages/contract/src/api.ts` + tests)
+
+- [ ] `permissionSchema` : enum fermé `console.read`, `console.write`, `power.start`,
+  `power.stop`, `power.restart`, `power.kill`, `variables.read`, `variables.write`
+  (subset Pelican ; files/backups = V2+)
+- [ ] `consoleTokenPayloadSchema` : `{ iss: 'mojito-panel', aud: 'mojito-agent', sub, serverId, permissions, iat, exp, jti }`
+- [ ] `consoleTokenResponseSchema` (panel → navigateur) : `{ token, wsUrl }`
+- [ ] Messages WS : navigateur → agent `{ type: 'command', command } | { type: 'power', action }` ;
+  agent → navigateur `{ type: 'auth-ok' } | { type: 'log', lines[] } | { type: 'status', status } | { type: 'error', code }`
+- [ ] Tests contract (enum refusée hors liste, payload obligatoire)
+
+#### E2 — Agent : secret JWT dans la config (`packages/agent/src/config.ts` + tests)
+
+- [ ] `AGENT_JWT_SECRET` requis (32+ caractères), à côté du token statique panel
+- [ ] Ne JAMAIS le logger (logger redacted comme pour le token)
+
+#### E3 — Agent : vérification JWT (`packages/agent/src/api/jwt.ts` + tests)
+
+- [ ] HS256 via `node:crypto` (HMAC-SHA256 + base64url, SANS dépendance jwt/jsonwebtoken)
+- [ ] Vérifie signature, `aud === 'mojito-agent'`, `exp` (marge d'horloge 5 s)
+- [ ] Retourne le payload typé ; erreurs distinctes : `invalid`/`expired` (→ 401) vs
+  permissions insuffisantes (→ 403, check à part, par action)
+
+#### E4 — Agent : endpoint WS console (`packages/agent/src/api/index.ts`, `process/registry.ts`)
+
+- [ ] Dépendance `@fastify/websocket` + `ws`
+- [ ] `GET /servers/:serverId/ws?token=<jwt>` — token en query param (le navigateur
+  ne peut pas poser de header sur un WS). Token NEVER loggé (attention logger fastify).
+- [ ] Handshake : vérif JWT + `serverId` du token === paramètre de route → `auth-ok`,
+  batch initial du ring buffer, statut courant ; refus → close code 4001/4003 (pas de leak)
+- [ ] Streaming : subscribe au callback de logs du registry (déjà en place pour le polling)
+- [ ] Messages entrants : `command` gate `console.write`, `power` gate `power.<action>`
+- [ ] Unsubscribe propre à la déconnexion ; plusieurs sockets par serveur OK (pas de broadcast à faire, chacun s'abonne)
+- [ ] Le token est validé à la connexion ; les permissions re-validées à CHAQUE message entrant (payload en mémoire, pas re-signé)
+
+#### E5 — Panel : émission du JWT (`packages/panel/src/server/functions/servers.ts` + `.env.default` + tests)
+
+- [ ] `PANEL_JWT_SECRET` (même secret que l'agent) dans `.env.default`
+- [ ] Server function `createConsoleToken(serverId)` : `requireUser()` + check ownership
+  (ou admin), puis signe HS256 (`node:crypto`, même code de base que E3 partagé via une
+  petite fonction `signJwt` — pas de dépendance)
+- [ ] TTL 5 min, permissions = **toutes** en V1 (pas d'invitations ; défaut = full owner)
+- [ ] Retourne `{ token, wsUrl }` (fqdn/agentPort du node) — validé par le contract E1
+- [ ] Ne JAMAIS logger le token
+
+#### E6 — Panel : console front en WS (`packages/panel/src/routes/_app/servers/$serverId.tsx`)
+
+- [ ] Appel `createConsoleToken` → ouverture WS natif dans useEffect (SSR-safe, xterm déjà dynamique)
+- [ ] Reconnexion avec backoff → ré-émettre un token frais à chaque tentative (TTL court)
+- [ ] `command`/`power` envoyés via WS quand connecté ; sinon 401 → refresh token
+- [ ] Fallback polling conservé : si le WS échoue à l'ouverture (proxy sans WS, agent vieux),
+  retomber sur le polling `GET /logs?after=N` existant — dégradation, pas d'erreur
+- [ ] Supprimer le polling une fois le WS stable ? Non en V1 : garder les deux (fallback documenté)
+
+#### E7 — Hardening sécurité
+
+- [ ] TTL 5 min max, `jti` présent (prêt pour blacklist V2)
+- [ ] Rate-limit basique des `command` par socket (mémoire, ex. 10/s) anti-flood console
+- [ ] Close immédiate sans détail si JWT invalide (pas de distinction d'erreur côté client)
+
+#### E8 — Tests de bout en bout + docs
+
+- [ ] Agent : WS auth OK/ko, token expiré, `serverId` mismatch, permissions refusées
+  (`console.write` absente → commande rejetée), streaming reçu, unsubscribe
+- [ ] Panel : émission refusée pour non-owner, payload conforme au contract
+- [ ] `npm test` vert (54 tests + les nouveaux)
+- [ ] README (schéma du flux JWT) + mise à jour de ce plan (cocher les cases)
+
+#### Flux cible
+
+```
+Navigateur ──POST createConsoleToken──▶ Panel (requireUser + ownership)
+Navigateur ◀──{ token, wsUrl }────────── Panel (JWT HS256, TTL 5 min, permissions: all en V1)
+Navigateur ──WS wsUrl?token=jwt────────▶ Agent (vérif signature/aud/exp/serverId)
+Navigateur ◀──auth-ok + logs stream───── Agent (chaque message entrant re-validé par permissions)
+```
+
+#### Écarts assumés vs Pelican/wings
+
+- Pelican a des permissions par sub-user + invitations → V2 chez nous (liste fermée prête en E1)
+- wings revalide le token auprès du panel en interne → non : nous faisons confiance au JWT
+  signé (secret partagé), pas de call panel par message
+- Pas de events SENTRY/apteryx (stats) en V1 — le WS ne transporte que logs/commandes/statut
 
 ### V2+ (idées, ne PAS faire en V1)
 
@@ -298,6 +405,8 @@ Notes d'implémentation :
 - [ ] Timeout de stop gracieux avant kill forcé
 - [ ] Console de logs : virtualisation obligatoire (Minecraft spamme)
 - [ ] SteamCmd en cache global, pas par serveur
+- [ ] JWT console : jamais dans les logs (query string visible dans le logger fastify)
+- [ ] WS console : permissions du JWT re-validées à CHAQUE message, pas seulement à l'ouverture
 
 ---
 
