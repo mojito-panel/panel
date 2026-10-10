@@ -3,7 +3,7 @@
   "id": "minecraft-vanilla",
   "name": "Minecraft Vanilla",
   "author": "Mojito Panel",
-  "description": "Serveur Minecraft officiel (vanilla) de Mojang. Le JAR est resolu depuis le manifeste piston-meta, toute version publiee ou 'latest' est supportee. Un JRE Temurin portable est telecharge dans .bin/java — aucun Java n'est requis sur l'hote.",
+  "description": "Serveur Minecraft officiel (vanilla) de Mojang. Le JAR est resolu depuis le manifeste piston-meta, toute version publiee ou 'latest' est supportee. Un JDK Microsoft Build of OpenJDK portable est telecharge dans .bin/java — aucun Java n'est requis sur l'hote.",
   "tags": [
     "minecraft",
     "vanilla",
@@ -101,22 +101,27 @@
     },
     {
       "env": "JAVA_MAJOR",
-      "name": "Version Java (JRE embarque)",
-      "description": "Version majeure du JRE Temurin telecharge dans .bin/java. Minecraft 1.20.5+ requiert 21 ; les serveurs 1.16-1.17.1 necessitent 17 ; avant 1.16, 8 ou 11.",
-      "type": "number",
-      "defaultValue": 21,
+      "name": "Version Java (JDK embarque)",
+      "description": "Version LTS du JDK Microsoft Build of OpenJDK telecharge dans .bin/java (lien stable aka.ms, toujours le dernier patch de la branche). Minecraft 1.20.5+ requiert 21 ; 1.17-1.20.4 : 17 ; jusqu'a 1.16 : 11. Microsoft ne fournit pas Java 8 (Temurin le proposait).",
+      "type": "string",
+      "defaultValue": "21",
       "userViewable": true,
       "userEditable": true,
       "sort": 8,
       "required": false,
-      "min": 8,
-      "max": 25
+      "options": [
+        "11",
+        "17",
+        "21",
+        "25"
+      ],
+      "pattern": "^(11|17|21|25)$"
     }
   ],
   "install": [
     {
       "action": "download",
-      "url": "https://api.adoptium.net/v3/binary/latest/{{JAVA_MAJOR}}/ga/windows/x64/jre/hotspot/normal/eclipse?project=jdk",
+      "url": "https://aka.ms/download-jdk/microsoft-jdk-{{JAVA_MAJOR}}-windows-x64.zip",
       "dest": ".bin/java.zip"
     },
     {

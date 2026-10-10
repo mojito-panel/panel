@@ -47,7 +47,7 @@ describe('plugin minecraft-vanilla', () => {
     const install = parsed.data.install;
     // 3 premières étapes : download JRE → extract → cleanup zip
     expect(install[0]).toMatchObject({ action: 'download', dest: '.bin/java.zip' });
-    expect(String(install[0].url)).toContain('api.adoptium.net');
+    expect(String(install[0].url)).toContain('aka.ms/download-jdk/microsoft-jdk-{{JAVA_MAJOR}}-windows-x64.zip');
     expect(install[0].url).toContain('{{JAVA_MAJOR}}');
     expect(install[1]).toMatchObject({
       action: 'extract',
