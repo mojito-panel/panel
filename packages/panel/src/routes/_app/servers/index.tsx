@@ -32,7 +32,7 @@ function ServersPage() {
   const servers = query.data ?? [];
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl p-8">
+    <div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Mes serveurs</h1>
@@ -134,6 +134,6 @@ function ServersPage() {
           <Link to="/">← Retour à l'accueil</Link>
         </Button>
       </p>
-    </main>
+    </div>
   );
 }

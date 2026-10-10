@@ -1,9 +1,10 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '~/components/ui/sidebar';
+import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { ServerSidebar, type PanelServerStatus } from '~/components/server-sidebar';
+import { AppShell } from '~/components/app-shell';
 import { getServerFn } from '~/server/functions/servers';
 
 /**
@@ -38,26 +39,28 @@ function ServerLayout() {
     <TooltipProvider>
       <SidebarProvider>
         <ServerSidebar name={server?.name} status={status} />
-        <SidebarInset>
-          <header className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
-            <span className="text-sm font-medium">{server?.name ?? '…'}</span>
-            {status && (
-              <span
-                className={
-                  status === 'running'
-                    ? 'rounded-full bg-green-100 px-3 py-1 text-xs text-green-700'
-                    : status === 'crashed' || status === 'install_failed'
-                      ? 'rounded-full bg-red-100 px-3 py-1 text-xs text-red-700'
-                      : 'rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground'
-                }
-              >
-                {status}
-              </span>
-            )}
-          </header>
+        <AppShell
+          header={
+            <>
+              <span className="text-sm font-medium">{server?.name ?? '…'}</span>
+              {status && (
+                <span
+                  className={
+                    status === 'running'
+                      ? 'rounded-full bg-green-100 px-3 py-1 text-xs text-green-700'
+                      : status === 'crashed' || status === 'install_failed'
+                        ? 'rounded-full bg-red-100 px-3 py-1 text-xs text-red-700'
+                        : 'rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground'
+                  }
+                >
+                  {status}
+                </span>
+              )}
+            </>
+          }
+        >
           <Outlet />
-        </SidebarInset>
+        </AppShell>
       </SidebarProvider>
     </TooltipProvider>
   );

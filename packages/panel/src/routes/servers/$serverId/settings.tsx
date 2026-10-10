@@ -77,7 +77,7 @@ function ServerSettingsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <div className="space-y-6">
       {query.isError && (
         <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
       )}
@@ -178,6 +178,6 @@ function ServerSettingsPage() {
           )}
         </CardFooter>
       </Card>
-    </main>
+    </div>
   );
 }

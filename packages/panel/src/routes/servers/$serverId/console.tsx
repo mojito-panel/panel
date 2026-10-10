@@ -139,14 +139,14 @@ function ServerConsolePage() {
   // Degraded (polling) transport + install in progress → dedicated panel
   if (consoleMode === 'polling' && installQuery.data && installQuery.data.status !== 'installed') {
     return (
-      <main className="mx-auto max-w-6xl p-8">
+      <div>
         <InstallPanel serverId={serverId} status={installQuery.data} />
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
+    <div>
       {query.isError && (
         <p className="mb-4 text-sm text-destructive">Erreur : {query.error.message}</p>
       )}
@@ -234,7 +234,7 @@ function ServerConsolePage() {
           <p className="mt-2 text-sm text-destructive">{submitCommand.error.message}</p>
         )}
       </div>
-    </main>
+    </div>
   );
 }
 

@@ -86,7 +86,7 @@ function FilesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
+    <div>
       <FileBrowser
         serverId={serverId}
         dir={dir}
@@ -94,7 +94,7 @@ function FilesPage() {
         onRefresh={invalidateFiles}
         onDownload={download}
       />
-    </main>
+    </div>
   );
 }
 
@@ -532,25 +532,25 @@ function FileEditor({
 
   if (query.isPending) {
     return (
-      <main className="mx-auto max-w-6xl p-8">
+      <div>
         <p className="text-sm text-muted-foreground">Chargement de « {path} »…</p>
-      </main>
+      </div>
     );
   }
 
   if (query.isError) {
     return (
-      <main className="mx-auto max-w-6xl p-8">
+      <div>
         <p className="mb-4 text-sm text-destructive">Erreur : {query.error.message}</p>
         <Button variant="outline" size="sm" onClick={onClose}>
           ← Retour
         </Button>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
+    <div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={onClose}>
           ← Retour
@@ -570,7 +570,7 @@ function FileEditor({
       <p className="mt-2 text-xs text-muted-foreground">
         Dossier : {dir || 'racine'} — l’éditeur est réservé aux fichiers texte (max 1 Mo).
       </p>
-    </main>
+    </div>
   );
 }
 

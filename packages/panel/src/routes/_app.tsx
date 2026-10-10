@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '~/components/ui/sidebar';
+import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { AppSidebar } from '~/components/app-sidebar';
+import { AppShell } from '~/components/app-shell';
 
 /**
  * Protected pages layout — sidebar + content.
@@ -24,13 +25,13 @@ function AppLayout() {
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
+        <AppShell
+          header={
             <span className="text-sm font-medium text-muted-foreground">Mojito Panel</span>
-          </header>
+          }
+        >
           <Outlet />
-        </SidebarInset>
+        </AppShell>
       </SidebarProvider>
     </TooltipProvider>
   );

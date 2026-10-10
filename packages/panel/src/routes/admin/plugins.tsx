@@ -116,7 +116,7 @@ function AdminPluginsPage() {
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl p-8">
+    <div>
       <h1 className="text-3xl font-bold tracking-tight">Plugins</h1>
       <p className="text-muted-foreground">
         Eggs JSON (format v2, compatible Pelican-like) installables sur les serveurs.
@@ -322,6 +322,6 @@ function AdminPluginsPage() {
           <Link to="/servers">← Mes serveurs</Link>
         </Button>
       </p>
-    </main>
+    </div>
   );
 }

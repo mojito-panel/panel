@@ -43,7 +43,7 @@ function AdminNodesPage() {
   });
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl p-8">
+    <div>
       <h1 className="text-3xl font-bold tracking-tight">Nodes</h1>
       <p className="text-muted-foreground">Machines hébergeant un agent Mojito.</p>
 
@@ -186,6 +186,6 @@ function AdminNodesPage() {
           <Link to="/servers">← Mes serveurs</Link>
         </Button>
       </p>
-    </main>
+    </div>
   );
 }

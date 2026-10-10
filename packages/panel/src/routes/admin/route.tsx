@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '~/components/ui/sidebar';
+import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { AdminSidebar } from '~/components/admin-sidebar';
+import { AppShell } from '~/components/app-shell';
 
 /**
  * Admin layout — SEPARATE sidebar from the dashboard (Pelican-style admin
@@ -25,15 +26,15 @@ function AdminLayout() {
     <TooltipProvider>
       <SidebarProvider>
         <AdminSidebar />
-        <SidebarInset>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
+        <AppShell
+          header={
             <span className="text-sm font-medium text-muted-foreground">
               Administration
             </span>
-          </header>
+          }
+        >
           <Outlet />
-        </SidebarInset>
+        </AppShell>
       </SidebarProvider>
     </TooltipProvider>
   );
