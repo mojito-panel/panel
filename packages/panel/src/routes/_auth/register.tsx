@@ -22,7 +22,7 @@ function RegisterPage() {
       if (error) throw new Error(error.message ?? "Erreur lors de l'inscription");
     },
     onSuccess: async () => {
-      // Invalide le cache auth pour refetch la session côté serveur
+      // Invalidate the auth cache to refetch the session server-side
       await queryClient.invalidateQueries({ queryKey: ['auth'] });
       await navigate({ to: '/' });
     },

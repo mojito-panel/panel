@@ -2,8 +2,8 @@ import { loadConfig } from './config';
 import { createAgentServer } from './api';
 
 /**
- * Point d'entrée de l'agent.
- * Charge la config, démarre le serveur Fastify.
+ * Agent entrypoint.
+ * Loads the config, starts the Fastify server.
  */
 async function main() {
   const config = loadConfig();

@@ -22,7 +22,7 @@ function LoginPage() {
       if (error) throw new Error(error.message ?? 'Identifiants invalides');
     },
     onSuccess: async () => {
-      // Invalide le cache auth pour refetch la session côté serveur
+      // Invalidate the auth cache to refetch the session server-side
       await queryClient.invalidateQueries({ queryKey: ['auth'] });
       await navigate({ to: '/' });
     },

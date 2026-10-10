@@ -12,8 +12,8 @@ import {
 } from '~/db/entities';
 
 /**
- * Tests d'intégration MikroORM — vérifie que le schéma des entités
- * (better-auth + métier) se crée correctement en SQLite in-memory.
+ * MikroORM integration tests — checks that the entity schema
+ * (better-auth + business) is created correctly in SQLite in-memory.
  */
 describe('MikroORM entities (SQLite in-memory)', () => {
   let orm: MikroORM;

@@ -1,6 +1,6 @@
 import { defineEntity, p } from '@mikro-orm/core';
 
-// ─── better-auth (migrations gérées par @better-auth/cli) ─────────────────────
+// ─── better-auth (migrations managed by @better-auth/cli) ─────────────────────
 
 export const User = defineEntity({
   name: 'user',
@@ -61,7 +61,7 @@ export const Verification = defineEntity({
   },
 });
 
-// ─── Métier (migrations MikroORM, phase 3) ────────────────────────────────────
+// ─── Business domain (MikroORM migrations, phase 3) ────────────────────────────────────
 
 export const Node = defineEntity({
   name: 'node',
@@ -70,7 +70,7 @@ export const Node = defineEntity({
     name: p.string().length(128),
     fqdn: p.string().length(255),
     agentPort: p.integer().fieldName('agent_port').default(8080),
-    /** Token agent (Bearer) — envoyé à l'agent pour chaque requête. */
+    /** Agent token (Bearer) — sent to the agent on every request. */
     agentToken: p.text().fieldName('agent_token'),
     lastSeenAt: p.datetime().fieldName('last_seen_at').nullable(),
     status: p.string().default('unknown'),

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Passe un utilisateur existant en rôle admin.
+ * Promotes an existing user to the admin role.
  *
  * Usage :
  *   node scripts/promote-admin.mjs contact@ste4d.net
  *
- * Le compte doit exister (inscription via /register).
+ * The account must exist (sign-up via /register).
  */
 import pg from 'pg';
 

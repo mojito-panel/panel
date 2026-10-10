@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
 /**
- * Schémas Zod des server functions plugins (import/edit/export).
- * Le JSON du plugin lui-même est validé par `parsePlugin` du contract (schéma v2).
+ * Zod schemas for the plugin server functions (import/edit/export).
+ * The plugin JSON itself is validated by the contract's `parsePlugin` (v2 schema).
  */
 
 export const importPluginsSchema = z
   .object({
-    /** JSON bruts (textarea ou contenu de fichiers .json). */
+    /** Raw JSONs (textarea or .json file contents). */
     jsons: z.array(z.string().min(1)).max(10).optional(),
-    /** URLs de plugins .json (github.com/blob → raw converti côté serveur). */
+    /** Plugin .json URLs (github.com/blob → raw converted server-side). */
     urls: z.array(z.string().url()).max(10).optional(),
   })
   .refine((d) => (d.jsons?.length ?? 0) + (d.urls?.length ?? 0) > 0, {
@@ -27,7 +27,7 @@ export type GetPluginDto = z.infer<typeof getPluginSchema>;
 
 export const updatePluginSchema = z.object({
   pluginId: z.string().min(1),
-  /** JSON du plugin modifié — revalidé intégralement par `parsePlugin`. */
+  /** Modified plugin JSON — fully revalidated by `parsePlugin`. */
   json: z.string().min(1, 'Le JSON du plugin est requis'),
 });
 

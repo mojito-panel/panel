@@ -8,7 +8,7 @@ import { resolvePath, type ActionContext } from '../context';
 type WriteAction = RunnerActionInput & { action: 'write' };
 
 /**
- * Action `write` : ecrit un fichier (contenu templatise), cree les dossiers parents.
+ * `write` action: writes a file (templated content), creates parent directories.
  */
 export async function runWrite(action: WriteAction, ctx: ActionContext): Promise<void> {
   const filePath = resolvePath(ctx.installDir, render(action.file, ctx.vars));

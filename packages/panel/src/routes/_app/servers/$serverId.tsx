@@ -83,7 +83,7 @@ function ServerDetailPage() {
         <p className="mt-4 text-sm text-destructive">Erreur : {query.error.message}</p>
       )}
 
-      {/* Actions power */}
+      {/* Power actions */}
       <div className="mt-6 flex flex-wrap gap-2">
         <Button
           onClick={() => action.mutate('start')}
@@ -123,7 +123,7 @@ function ServerDetailPage() {
       <div className="mt-8">
         <XtermConsole serverId={serverId} isRunning={isRunning} />
 
-        {/* Envoi de commandes (stdin du process) */}
+        {/* Send commands (process stdin) */}
         <form onSubmit={handleCommand} className="mt-3 flex gap-2">
           <Input
             placeholder={isRunning ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}

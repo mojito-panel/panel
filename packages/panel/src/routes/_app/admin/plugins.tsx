@@ -38,7 +38,7 @@ function AdminPluginsPage() {
 
   const query = useQuery({ queryKey: ['plugins'], queryFn: () => listPlugins() });
 
-  /** Plugin en cours d'édition (id), ou null si le panneau est fermé. */
+  /** Plugin being edited (id), or null when the panel is closed. */
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
 
   const editingQuery = useQuery({
@@ -67,7 +67,7 @@ function AdminPluginsPage() {
     },
   });
 
-  /** Import batch : textarea + fichiers .json + URL (chacun optionnel). */
+  /** Batch import: textarea + .json files + URL (each optional). */
   const onImportSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -90,13 +90,13 @@ function AdminPluginsPage() {
     form.reset();
   };
 
-  /** Re-import depuis l'updateUrl du plugin (upsert — même comportement que Pelican). */
+  /** Re-import from the plugin's updateUrl (upsert — same behavior as Pelican). */
   const updateFromUrl = (url: string) => {
     importMutation.reset();
     importMutation.mutate({ jsons: [], urls: [url] });
   };
 
-  /** Export : télécharge le JSON brut du plugin. */
+  /** Export: downloads the plugin's raw JSON. */
   const exportPlugin = async (pluginId: string, slug: string) => {
     const result = await getPlugin({ data: { pluginId } });
     const blob = new Blob([result.json], { type: 'application/json' });

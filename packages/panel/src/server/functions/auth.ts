@@ -4,8 +4,8 @@ import { auth } from '~/lib/auth';
 import type { AuthSession } from '~/db/types';
 
 /**
- * Récupère la session courante côté serveur (SSR).
- * Appelée dans le beforeLoad de __root.tsx via queryClient.fetchQuery.
+ * Fetches the current session server-side (SSR).
+ * Called in __root.tsx's beforeLoad via queryClient.fetchQuery.
  */
 export const getSession = createServerFn({ method: 'GET' }).handler(
   async (): Promise<AuthSession | null> => {
@@ -15,8 +15,8 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
 
     if (!session) return null;
 
-    // Mapping explicite vers le DTO sérialisable — pas de type entité brut
-    // (IUser/ISession portent des IndexHints non sérialisables de MikroORM).
+    // Explicit mapping to the serializable DTO — no raw entity type
+    // (IUser/ISession carry non-serializable MikroORM IndexHints).
     return {
       user: {
         id: session.user.id,
@@ -33,7 +33,7 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
 );
 
 /**
- * Déconnexion côté serveur — supprime le cookie de session.
+ * Server-side sign-out — deletes the session cookie.
  */
 export const signOutFn = createServerFn({ method: 'POST' }).handler(async () => {
   await auth.api.signOut({

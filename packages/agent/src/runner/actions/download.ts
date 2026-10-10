@@ -9,8 +9,8 @@ import { resolvePath, type ActionContext } from '../context';
 type DownloadAction = RunnerActionInput & { action: 'download' };
 
 /**
- * Action `download` : telecharge un fichier (URL templatisee) avec verification
- * SHA-256 optionnelle et ecriture atomique (fichier .tmp puis rename).
+ * `download` action: downloads a file (templated URL) with optional
+ * SHA-256 verification and atomic write (.tmp file then rename).
  */
 export async function runDownload(action: DownloadAction, ctx: ActionContext): Promise<void> {
   const url = render(action.url, ctx.vars);
@@ -38,13 +38,13 @@ export async function runDownload(action: DownloadAction, ctx: ActionContext): P
     }
   }
 
-  // Ecriture atomique : .tmp puis rename
+  // Atomic write: .tmp then rename
   const tmpPath = `${dest}.tmp`;
   await writeFile(tmpPath, buffer);
   try {
     await rename(tmpPath, dest);
   } catch {
-    // Windows : rename peut echouer si le fichier existe deja
+    // Windows: rename can fail if the file already exists
     await unlink(dest).catch(() => undefined);
     await rename(tmpPath, dest);
   }

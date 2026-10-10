@@ -11,9 +11,9 @@ import {
 } from '../src/plugin-schema';
 
 /**
- * Egg style Paper — couvre toutes les features v2 :
- * variables env UPPERCASE, variables systeme, configFile parser,
- * ready detection avec strip, logs, runtime, env fixe.
+ * Paper-style egg — covers all v2 features:
+ * UPPERCASE env variables, system variables, configFile parser,
+ * ready detection with strip, logs, runtime, fixed env.
  */
 const validPaperPlugin = {
   schemaVersion: 2 as const,
@@ -129,7 +129,7 @@ describe('pluginSchema v2', () => {
         { env: 'MINECRAFT_VERSION', name: 'V2', type: 'string', defaultValue: 'b' },
       ],
     });
-    // Pas de contrainte d'unicite au niveau Zod (verifie par le panel a l import)
+    // No uniqueness constraint at the Zod level (checked by the panel on import)
     expect(result.success).toBe(true);
   });
 

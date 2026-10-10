@@ -22,7 +22,7 @@ import {
 
 type ServerStatusDb = 'installing' | 'stopped' | 'running' | 'crashed';
 
-/** Charge un serveur + vérifie l'ownership (admin = accès à tout). */
+/** Loads a server + checks ownership (admin = access to everything). */
 async function loadOwnedServer(serverId: string, userId: string, isAdmin: boolean) {
   const orm = await initOrm();
   const em = orm.em.fork();
@@ -36,7 +36,7 @@ async function loadOwnedServer(serverId: string, userId: string, isAdmin: boolea
   return { em, server };
 }
 
-// ─── Liste ─────────────────────────────────────────────────────────────────────
+// ─── List ─────────────────────────────────────────────────────────────────────
 
 export const listServersFn = createServerFn({ method: 'GET' }).handler(async () => {
   const user = await requireUser();
@@ -62,7 +62,7 @@ export const listServersFn = createServerFn({ method: 'GET' }).handler(async () 
   }));
 });
 
-// ─── Création (install via l'agent) ────────────────────────────────────────────
+// ─── Creation (install via the agent) ────────────────────────────────────────────
 
 export const installServerFn = createServerFn({ method: 'POST' })
   .validator(createServerSchema)
@@ -79,7 +79,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
 
     const serverId = randomUUID();
 
-    // Installation via l'agent (installDir relatif au dataDir de l'agent)
+    // Install via the agent (installDir relative to the agent's dataDir)
     try {
       await agentInstallServer(node, {
         serverId,
@@ -96,7 +96,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
       throw err;
     }
 
-    // Persistance panel
+    // Panel persistence
     const now = new Date();
     const server = em.create(Server, {
       id: serverId,
@@ -125,7 +125,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
     return { id: serverId, name: server.name };
   });
 
-// ─── Détail (DB + statut runtime réel de l'agent) ─────────────────────────────
+// ─── Detail (DB + actual agent runtime state) ─────────────────────────────
 
 export const getServerFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
@@ -147,7 +147,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
       throw new HttpError(500, 'Configuration du serveur incomplète');
     }
 
-    // Statut runtime réel (peut différer de la DB)
+    // Actual runtime status (may differ from the DB)
     let runtimeStatus: ServerStatusDb = server.status as ServerStatusDb;
     let runtimeState: string | null = null;
     let logs: string[] = [];
@@ -156,7 +156,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
       runtimeStatus = info.status;
       runtimeState = info.runtimeState ?? null;
       logs = info.logs ?? [];
-      // Sync du statut persisté
+      // Sync the persisted status
       if (runtimeStatus !== server.status) {
         const em2 = orm.em.fork();
         const dbServer = await em2.findOne(Server, { id: server.id });
@@ -166,7 +166,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
         }
       }
     } catch {
-      // Agent injoignable → on sert l'état DB
+      // Agent unreachable → serve the DB state
     }
 
     const pluginJson = plugin.json as PluginContract;
@@ -184,7 +184,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
         id: plugin.id,
         name: plugin.name,
         slug: plugin.slug,
-        // Définitions des variables pour l'UI (formulaires)
+        // Variable definitions for the UI (forms)
         variables: pluginJson.variables ?? [],
         start: pluginJson.start,
       },
@@ -195,7 +195,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
     };
   });
 
-// ─── Action power (start/stop/restart/kill) ───────────────────────────────────
+// ─── Power action (start/stop/restart/kill) ───────────────────────────────────
 
 export const serverActionFn = createServerFn({ method: 'POST' })
   .validator(serverActionInputSchema)
@@ -212,7 +212,7 @@ export const serverActionFn = createServerFn({ method: 'POST' })
 
     try {
       const result = await agentServerAction(node, server.id, data.action);
-      // Sync du statut
+      // Sync the status
       server.status = result.status as ServerStatusDb;
       await em.flush();
       return { id: server.id, action: data.action, status: result.status };
@@ -224,7 +224,7 @@ export const serverActionFn = createServerFn({ method: 'POST' })
     }
   });
 
-// ─── Commande console ──────────────────────────────────────────────────────────
+// ─── Console command ──────────────────────────────────────────────────────────
 
 export const sendCommandFn = createServerFn({ method: 'POST' })
   .validator(sendCommandSchema)
@@ -251,7 +251,7 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
     }
   });
 
-// ─── Logs incrémentaux (console live) ─────────────────────────────────────────
+// ─── Incremental logs (live console) ─────────────────────────────────────────
 
 export const getServerLogsFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
@@ -278,7 +278,7 @@ export const getServerLogsFn = createServerFn({ method: 'GET' })
     }
   });
 
-// ─── Suppression ──────────────────────────────────────────────────────────────
+// ─── Deletion ──────────────────────────────────────────────────────────────
 
 export const deleteServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
@@ -292,7 +292,7 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
 
     const node = await em.findOne(Node, { id: server.nodeId });
 
-    // Cleanup agent (tolérant : si l'agent ne connaît plus le serveur, on continue)
+    // Agent cleanup (tolerant: if the agent no longer knows the server, continue)
     if (node) {
       try {
         await agentDeleteServer(node, server.id);
@@ -304,7 +304,7 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
       }
     }
 
-    // Suppression DB (serveur + allocation)
+    // DB deletion (server + allocation)
     const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
     if (allocation) em.remove(allocation);
     em.remove(server);

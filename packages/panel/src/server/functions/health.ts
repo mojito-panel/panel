@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getOrm } from '~/db';
 
 /**
- * Server function de healthcheck — vérifie la connexion DB (MikroORM).
+ * Healthcheck server function — checks the DB connection (MikroORM).
  */
 export const healthCheck = createServerFn({ method: 'GET' }).handler(async () => {
   const orm = getOrm();

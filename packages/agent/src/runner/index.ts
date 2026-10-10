@@ -16,13 +16,13 @@ import { runCommand, runScript } from './actions/exec';
 
 export interface InstallOptions {
   plugin: Plugin;
-  /** Valeurs des variables du serveur (override les defaults du plugin). */
+  /** Server variable values (override plugin defaults). */
   variables: Record<string, string | number | boolean>;
-  /** Variables système fournies par l'agent. */
+  /** System variables provided by the agent. */
   systemVariables: SystemVariables;
-  /** Dossier d'installation du serveur. */
+  /** Server install directory. */
   installDir: string;
-  /** Callback de progression (compatible installProgress du contract). */
+  /** Progress callback (compatible with the contract's installProgress). */
   onProgress?: (progress: InstallProgress) => void;
 }
 
@@ -39,7 +39,7 @@ export interface InstallResult {
   resolvedVars: Map<string, string>;
 }
 
-/** Messages lisibles pour chaque type d'action. */
+/** Readable messages for each action type. */
 function describeAction(action: RunnerAction): string {
   switch (action.action) {
     case 'download':
@@ -60,13 +60,13 @@ function describeAction(action: RunnerAction): string {
 }
 
 /**
- * Exécute les actions d'installation d'un plugin, étape par étape,
- * avec validation stricte des variables avant de démarrer.
+ * Runs a plugin's install actions, step by step,
+ * with strict variable validation before starting.
  */
 export async function runInstall(options: InstallOptions): Promise<InstallResult> {
   const { plugin, variables, systemVariables, installDir, onProgress } = options;
 
-  // 1. Validation stricte : variable inconnue = erreur à l'installation
+  // 1. Strict validation: unknown variable = install error
   const unknown = findUnknownVariables(plugin);
   if (unknown.length > 0) {
     return {
@@ -76,7 +76,7 @@ export async function runInstall(options: InstallOptions): Promise<InstallResult
     };
   }
 
-  // 2. Validation des valeurs des variables
+  // 2. Validate variable values
   for (const variable of plugin.variables) {
     const value = variables[variable.env];
     if (value !== undefined) {
@@ -87,16 +87,16 @@ export async function runInstall(options: InstallOptions): Promise<InstallResult
     }
   }
 
-  // 3. Résolution des variables
+  // 3. Resolve variables
   const resolvedVars = resolveVariables(plugin, variables, systemVariables);
 
-  // 4. Préparation du dossier d'installation
+  // 4. Prepare the install directory
   await mkdir(installDir, { recursive: true });
 
   const ctx: ActionContext = { installDir, vars: resolvedVars };
   const totalSteps = plugin.install.length;
 
-  // 5. Exécution des actions
+  // 5. Run the actions
   for (let step = 0; step < totalSteps; step++) {
     const action = plugin.install[step];
     onProgress?.({

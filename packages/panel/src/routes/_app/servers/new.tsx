@@ -253,7 +253,7 @@ function NewServerPage() {
               </form.Field>
             </div>
 
-            {/* Variables du plugin — formulaire auto-généré */}
+            {/* Plugin variables — auto-generated form */}
             <form.Subscribe selector={(state) => state.values.pluginId}>
               {(pluginId) => {
                 const plugin = plugins.find((p) => p.id === pluginId);

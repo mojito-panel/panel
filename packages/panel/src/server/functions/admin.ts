@@ -17,8 +17,8 @@ import {
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
 /**
- * Liste des nodes — accessible à tout utilisateur connecté (sélection de node
- * à la création d'un serveur). Le token n'est JAMAIS exposé ici.
+ * Node list — accessible to any signed-in user (node
+ * selection when creating a server). The token is NEVER exposed here.
  */
 export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireUser();
@@ -58,8 +58,8 @@ export const createNodeFn = createServerFn({ method: 'POST' })
     em.persist(node);
     await em.flush();
 
-    // Le token est retourné UNE seule fois — l'admin le copie dans la config
-    // de l'agent (AGENT_TOKEN) et il ne sera plus jamais rejouable en clair.
+    // The token is returned ONCE — the admin copies it into the agent
+    // config (AGENT_TOKEN) and it will never be replayable in clear again.
     return {
       id: node.id,
       name: node.name,
@@ -79,7 +79,7 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
     const node = await em.findOne(Node, { id: data.nodeId });
     if (!node) throw new HttpError(404, 'Node introuvable');
 
-    // Refuser la suppression si des serveurs y sont encore installés
+    // Refuse deletion while servers are still installed on it
     const servers = await em.find(Server, { nodeId: node.id });
     if (servers.length > 0) {
       throw new HttpError(409, `${servers.length} serveur(s) encore installé(s) sur ce node`);
@@ -92,12 +92,12 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
 
 // ─── Plugins ───────────────────────────────────────────────────────────────────
 
-/** Parse un JSON brut et le valide contre le schéma v2 du contract. */
+/** Parses raw JSON and validates it against the contract's v2 schema. */
 function parsePluginJson(raw: string): PluginDefinition {
   return parsePlugin(JSON.parse(raw));
 }
 
-/** Message d'erreur lisible (ZodError → liste des champs en erreur). */
+/** Readable error message (ZodError → list of fields in error). */
 function pluginErrorMessage(err: unknown): string {
   if (err instanceof ZodError) {
     return err.issues.map((i) => `${i.path.join('.') || 'plugin'} : ${i.message}`).join(' · ');
@@ -106,8 +106,8 @@ function pluginErrorMessage(err: unknown): string {
 }
 
 /**
- * Convertit une URL github.com/…/blob/… en raw.githubusercontent.com/…/raw/…
- * (les URLs GitHub du catalogue pointent vers la page web, pas le fichier brut).
+ * Converts a github.com/…/blob/… URL to raw.githubusercontent.com/…/raw/…
+ * (catalog GitHub URLs point to the web page, not the raw file).
  */
 function normalizePluginUrl(url: string): string {
   const parsed = new URL(url);
@@ -117,7 +117,7 @@ function normalizePluginUrl(url: string): string {
   return url;
 }
 
-/** Télécharge le JSON d'un plugin depuis une URL (extension .json requise). */
+/** Downloads a plugin's JSON from a URL (.json extension required). */
 async function fetchPluginJsonFromUrl(url: string): Promise<string> {
   const normalized = normalizePluginUrl(url);
   if (!new URL(normalized).pathname.toLowerCase().endsWith('.json')) {
@@ -143,8 +143,8 @@ async function fetchPluginJsonFromUrl(url: string): Promise<string> {
 }
 
 /**
- * Crée le plugin ou met à jour celui qui porte le même slug (upsert —
- * un re-import met à jour la définition, comme les eggs Pelican).
+ * Creates the plugin or updates the one with the same slug (upsert —
+ * a re-import updates the definition, like Pelican eggs).
  */
 async function upsertPlugin(
   em: EntityManager,
@@ -188,9 +188,9 @@ export const listPluginsFn = createServerFn({ method: 'GET' }).handler(async () 
       slug: plugin.slug,
       name: plugin.name,
       schemaVersion: plugin.schemaVersion,
-      /** Définitions des variables (formulaire auto-généré à la création). */
+      /** Variable definitions (auto-generated form at creation). */
       variables: def.variables ?? [],
-      /** URL de mise à jour (re-import) si définie par le plugin. */
+      /** Update URL (re-import) if defined by the plugin. */
       updateUrl: def.updateUrl ?? null,
       createdAt: plugin.createdAt,
     };
@@ -198,9 +198,9 @@ export const listPluginsFn = createServerFn({ method: 'GET' }).handler(async () 
 });
 
 /**
- * Import de plugins en batch : JSON bruts (textarea/fichiers) + URLs.
- * Chaque source est traitée indépendamment — les échecs n'annulent pas
- * les succès (rapport par plugin, comme l'import d'eggs Pelican).
+ * Batch plugin import: raw JSONs (textarea/files) + URLs.
+ * Each source is processed independently — failures do not cancel
+ * successes (per-plugin report, like Pelican egg import).
  */
 export const importPluginsFn = createServerFn({ method: 'POST' })
   .validator(importPluginsSchema)
@@ -248,14 +248,14 @@ export const getPluginFn = createServerFn({ method: 'POST' })
       slug: plugin.slug,
       name: plugin.name,
       schemaVersion: plugin.schemaVersion,
-      /** JSON brut pretty-printé — sert l'édition ET l'export. */
+      /** Pretty-printed raw JSON — used for editing AND export. */
       json: JSON.stringify(plugin.json, null, 2),
     };
   });
 
 /**
- * Édite un plugin existant : le JSON complet est revalidé par le schéma v2.
- * Le slug (id) peut changer — l'unicité est revérifiée.
+ * Edits an existing plugin: the full JSON is revalidated against the v2 schema.
+ * The slug (id) can change — uniqueness is rechecked.
  */
 export const updatePluginFn = createServerFn({ method: 'POST' })
   .validator(updatePluginSchema)

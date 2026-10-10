@@ -130,7 +130,7 @@ function AdminNodesPage() {
               <p className="mt-2 text-sm text-destructive">{create.error.message}</p>
             )}
 
-            {/* Token affiché UNE seule fois après création */}
+            {/* Token shown ONCE after creation */}
             {create.data?.agentToken && (
               <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4">
                 <p className="font-semibold text-amber-800">

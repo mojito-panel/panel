@@ -14,20 +14,20 @@ import {
 } from '~/components/ui/sidebar';
 import { useAuth } from '~/contexts/use-auth';
 
-/** Menu principal. */
+/** Main menu. */
 const mainItems = [
   { title: 'Mes serveurs', url: '/servers', icon: Server },
   { title: 'Dashboard', url: '/servers', icon: LayoutDashboard },
 ];
 
-/** Menu admin — visible uniquement pour le rôle admin. */
+/** Admin menu — visible only for the admin role. */
 const adminItems = [
   { title: 'Nodes', url: '/admin/nodes', icon: Network },
   { title: 'Plugins', url: '/admin/plugins', icon: Puzzle },
 ];
 
 /**
- * Sidebar de l'application — navigation principale + footer utilisateur.
+ * Application sidebar — main navigation + user footer.
  */
 export function AppSidebar() {
   const { user, useSignOut } = useAuth();

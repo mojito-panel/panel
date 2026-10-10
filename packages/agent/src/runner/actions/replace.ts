@@ -7,8 +7,8 @@ import { resolvePath, type ActionContext } from '../context';
 type ReplaceAction = RunnerActionInput & { action: 'replace' };
 
 /**
- * Action `replace` : remplace une chaine (ou regex) dans un fichier existant.
- * `find` et `replace` sont templatises.
+ * `replace` action: replaces a string (or regex) in an existing file.
+ * `find` and `replace` are templated.
  */
 export async function runReplace(action: ReplaceAction, ctx: ActionContext): Promise<void> {
   const filePath = resolvePath(ctx.installDir, render(action.file, ctx.vars));

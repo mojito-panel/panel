@@ -3,27 +3,27 @@ import type { StopConfig } from '@mojito/contract';
 import { toPanelStatus, type ProcessState } from './states';
 
 export interface ProcessSpawnConfig {
-  /** Commande start templatisée. */
+  /** Templated start command. */
   command: string;
-  /** Dossier de travail (installDir). */
+  /** Working directory (installDir). */
   cwd: string;
-  /** Variables résolues, injectées dans l'environnement du process. */
+  /** Resolved variables, injected into the process environment. */
   env: Record<string, string>;
-  /** Pattern ready du plugin (détection optionnelle). */
+  /** Plugin ready pattern (optional detection). */
   readyPattern?: string;
-  /** Config de stop gracieux du plugin. */
+  /** Plugin graceful stop config. */
   stop?: StopConfig;
 }
 
 export interface ProcessEvents {
-  /** Chaque ligne de log (stdout/stderr pipés — pas de PTY requis). */
+  /** Each log line (piped stdout/stderr — no PTY required). */
   onLog?: (line: string, stream: 'stdout' | 'stderr') => void;
   onStateChange?: (state: ProcessState) => void;
-  /** Émis quand le readyPattern matche (après le passage en running). */
+  /** Emitted when the readyPattern matches (after entering running). */
   onReady?: () => void;
   /**
-   * Émis à la sortie du process. `clean` = sortie attendue (stop demandé)
-   * ou exit code 0.
+   * Emitted on process exit. `clean` = expected exit (requested stop)
+   * or exit code 0.
    */
   onExit?: (code: number | null, clean: boolean) => void;
 }
@@ -33,19 +33,19 @@ const KILL_POLL_INTERVAL_MS = 500;
 const KILL_POLL_TIMEOUT_MS = 10_000;
 
 /**
- * Manager d'un process serveur : spawn avec stdin/stdout pipés
- * (équivalent de l'attach Docker de wings — sans dépendance native),
- * console interactive, stop gracieux avec séquence timeout → poll → kill.
+ * Manages a server process: spawn with piped stdin/stdout
+ * (equivalent of wings' Docker attach — without native dependency),
+ * interactive console, graceful stop with a timeout → poll → kill sequence.
  *
- * Un manager = un serveur. Le verrouillage des actions (power lock) est
- * géré par le ProcessRegistry.
+ * One manager = one server. Action locking (power lock) is
+ * handled by the ProcessRegistry.
  */
 export class ServerProcessManager {
   #child: ChildProcess | null = null;
   #state: ProcessState = 'offline';
   #stoppedVoluntarily = false;
   #logBuffer: string[] = [];
-  /** Index de la première ligne du buffer (décales quand le ring buffer tronque). */
+  /** Index of the buffer's first line (shifts when the ring buffer truncates). */
   #logStart = 0;
   #readyRegExp: RegExp | null = null;
   readonly #maxLogLines = 1000;
@@ -73,8 +73,8 @@ export class ServerProcessManager {
   }
 
   /**
-   * Logs incrémentaux : lignes d'index > `after`.
-   * Si le ring buffer a tronqué des lignes demandées, renvoie tout le buffer.
+   * Incremental logs: lines with index > `after`.
+   * If the ring buffer truncated requested lines, returns the whole buffer.
    */
   getLogsAfter(after: number): { lines: string[]; next: number } {
     const start = this.#logStart;
@@ -101,8 +101,8 @@ export class ServerProcessManager {
   }
 
   /**
-   * Démarre le process. Passage immédiat en `running` après le spawn
-   * (comme wings) — le readyPattern émet l'event `ready` séparément.
+   * Starts the process. Switches to `running` right after spawn
+   * (like wings) — the readyPattern emits the `ready` event separately.
    */
   spawn(config: ProcessSpawnConfig): void {
     if (this.#child) {
@@ -125,7 +125,7 @@ export class ServerProcessManager {
     });
     this.#child = child;
 
-    // Comme wings : running dès le spawn effectif
+    // Like wings: running as soon as spawn is effective
     this.#setState('running');
 
     const pipeStream = (stream: 'stdout' | 'stderr') => (chunk: Buffer) => {
@@ -134,7 +134,7 @@ export class ServerProcessManager {
         if (line === '') continue;
         this.#pushLog(line, stream);
         if (stream === 'stdout' && this.#readyRegExp && this.#readyRegExp.test(line)) {
-          this.#readyRegExp = null; // ready une seule fois
+          this.#readyRegExp = null; // ready only once
           this.#events.onReady?.();
         }
       }
@@ -155,8 +155,8 @@ export class ServerProcessManager {
   }
 
   /**
-   * Envoie une commande sur le stdin du process (console interactive).
-   * Retourne false si le process n'est pas vivant.
+   * Sends a command to the process stdin (interactive console).
+   * Returns false if the process is not alive.
    */
   sendCommand(command: string): boolean {
     if (!this.#child?.stdin || !this.isAlive()) {
@@ -167,11 +167,11 @@ export class ServerProcessManager {
   }
 
   /**
-   * Stop gracieux — séquence wings :
-   * 1. état → `stopping` (ne pas déclencher la crash detection)
-   * 2. type `command` → écrit sur stdin ; type `signal` → kill direct
-   * 3. attente de sortie pendant `timeoutMs` (défaut 30s)
-   * 4. toujours vivant → kill de l'arbre de process
+   * Graceful stop — wings sequence:
+   * 1. state → `stopping` (do not trigger crash detection)
+   * 2. type `command` → write to stdin; type `signal` → direct kill
+   * 3. wait for exit during `timeoutMs` (default 30s)
+   * 4. still alive → kill the process tree
    */
   async stop(): Promise<void> {
     if (!this.#child || this.#state === 'offline') return;
@@ -190,15 +190,15 @@ export class ServerProcessManager {
       this.#sendSignal(value);
     }
 
-    // Attendre la sortie pendant timeoutMs
+    // Wait for exit during timeoutMs
     const exited = await this.#waitForExit(timeoutMs);
     if (exited) return;
 
-    // Toujours vivant → kill de l'arbre (dernier recours)
+    // Still alive → kill the tree (last resort)
     await this.killTree();
   }
 
-  /** Kill immédiat de l'arbre de process (force-passe tout). */
+  /** Immediately kills the process tree (force-passes everything). */
   async killTree(): Promise<void> {
     if (!this.#child || this.#state === 'offline') return;
 
@@ -212,7 +212,7 @@ export class ServerProcessManager {
     }
 
     if (process.platform === 'win32') {
-      // taskkill /T tue l'arbre complet, /F force
+      // taskkill /T kills the whole tree, /F forces
       await new Promise<void>((resolve) => {
         execFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => resolve());
       });
@@ -223,26 +223,26 @@ export class ServerProcessManager {
         try {
           this.#child.kill('SIGKILL');
         } catch {
-          /* déjà mort */
+          /* already dead */
         }
       }
     }
 
-    // Poll de confirmation (500ms pendant 10s — comme wings)
+    // Confirmation poll (500ms for 10s — like wings)
     await this.#waitForExit(KILL_POLL_TIMEOUT_MS, KILL_POLL_INTERVAL_MS);
   }
 
   #sendSignal(signal: string): void {
     if (!this.#child) return;
-    // Windows ne supporte pas les signaux POSIX — kill() termine de toute façon
+    // Windows does not support POSIX signals — kill() terminates anyway
     try {
       this.#child.kill(signal as NodeJS.Signals);
     } catch {
-      /* le process est peut-être déjà mort */
+      /* the process may already be dead */
     }
   }
 
-  /** Attend la sortie du process. Poll toutes les `intervalMs`. */
+  /** Waits for the process to exit. Polls every `intervalMs`. */
   #waitForExit(timeoutMs: number, intervalMs = 100): Promise<boolean> {
     return new Promise((resolve) => {
       const deadline = Date.now() + timeoutMs;

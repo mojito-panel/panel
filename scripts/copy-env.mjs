@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Copie les fichiers .env.default en .env (sans écraser les .env existants).
- * Utilisé par la tâche mise `setup:dev`.
+ * Copies the .env.default files to .env (without overwriting existing .env files).
+ * Used by the mise task `setup:dev`.
  */
 import { copyFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';

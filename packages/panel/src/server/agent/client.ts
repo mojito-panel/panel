@@ -2,8 +2,8 @@ import type { INode } from '~/db/types';
 import type { ServerAction } from '@mojito/contract';
 
 /**
- * Client HTTP du panel vers l'agent (Bearer token).
- * V1 : http — HTTPS (même auto-signé) à brancher en prod.
+ * Panel-to-agent HTTP client (Bearer token).
+ * V1: http — HTTPS (even self-signed) to be wired in prod.
  */
 
 interface AgentCallOptions {
@@ -48,7 +48,7 @@ async function agentCall<T>(
   return data as T;
 }
 
-// ─── Types de réponse (alignés sur l'API agent) ───────────────────────────────
+// ─── Response types (aligned with the agent API) ───────────────────────────────
 
 export interface AgentInstallResponse {
   serverId: string;
@@ -78,7 +78,7 @@ export interface AgentActionResponse {
   status: string;
 }
 
-// ─── Appels ───────────────────────────────────────────────────────────────────
+// ─── Calls ───────────────────────────────────────────────────────────────────
 
 export async function agentHealth(node: INode): Promise<{ status: string }> {
   return agentCall(node, '/health');

@@ -10,7 +10,7 @@ import type {
   ServerAllocation,
 } from './entities';
 
-// ─── Types inférés des entités MikroORM ───────────────────────────────────────
+// ─── Types inferred from MikroORM entities ───────────────────────────────────────
 
 export interface IUser extends InferEntity<typeof User> {}
 export interface ISession extends InferEntity<typeof Session> {}
@@ -24,13 +24,13 @@ export interface IServerAllocation extends InferEntity<typeof ServerAllocation> 
 export type NodeStatus = INode['status'];
 export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';
 
-// ─── Session better-auth (DTO sérialisables) ──────────────────────────────────
+// ─── better-auth session (serializable DTOs) ──────────────────────────────────
 
 /**
- * Versions sérialisables de l'utilisateur et de la session — seules à traverser
- * la frontière client (beforeLoad SSR, server functions). Les types entités
- * MikroORM (IUser/ISession) portent des IndexHints non sérialisables et restent
- * réservés à l'usage interne serveur.
+ * Serializable versions of the user and the session — the only ones allowed to cross
+ * the client boundary (SSR beforeLoad, server functions). The entity types
+ * MikroORM (IUser/ISession) carry non-serializable IndexHints and remain
+ * reserved for internal server use.
  */
 export interface SessionUser {
   id: string;

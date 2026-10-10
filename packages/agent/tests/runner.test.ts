@@ -34,7 +34,7 @@ beforeAll(async () => {
   tmpRoot = await mkdtemp(join(tmpdir(), 'mojito-runner-'));
   systemVars.SERVER_INSTALL_DIR = tmpRoot;
 
-  // Petit serveur HTTP pour tester download
+  // Small HTTP server to test download
   httpServer = createServer((req, res) => {
     if (req.url === '/server.jar') {
       res.writeHead(200, { 'content-type': 'application/octet-stream' });
@@ -56,7 +56,7 @@ afterAll(async () => {
   await new Promise<void>((resolve) => httpServer.close(() => resolve()));
 });
 
-/** Plugin de test minimal réutilisable. */
+/** Reusable minimal test plugin. */
 function makePlugin(overrides: Partial<PluginInput> = {}) {
   return parsePlugin({
     schemaVersion: 2,
@@ -230,7 +230,7 @@ describe('action configFile (parsers)', () => {
 
 describe('action extract', () => {
   it('extrait un zip avec stripComponents', async () => {
-    // Créer un zip de test : root/nested/file.txt
+    // Create a test zip: root/nested/file.txt
     const zip = new AdmZip();
     zip.addFile('root/nested/file.txt', Buffer.from('hello zip'));
     const archivePath = join(tmpRoot, 'test.zip');
@@ -252,7 +252,7 @@ describe('action extract', () => {
     expect(() => resolveZipEntryPath(tmpRoot, 'a/..\\b.txt')).toThrow('path traversal');
     expect(() => resolveZipEntryPath(tmpRoot, '/absolute/path.txt')).toThrow('path traversal');
     expect(() => resolveZipEntryPath(tmpRoot, 'root/file.txt', 5)).toThrow('stripComponents');
-    // Chemin valide
+    // Valid path
     expect(resolveZipEntryPath(tmpRoot, 'root/nested/file.txt', 1)).toBe(
       join(tmpRoot, 'nested', 'file.txt'),
     );
@@ -276,7 +276,7 @@ describe('exec', () => {
   });
 });
 
-// ─── action script (spawn direct, quoting Windows) ───────────────────────────
+// ─── action script (direct spawn, Windows quoting) ───────────────────────────
 
 describe('action script', () => {
   it('exécute un script powershell (chemin avec espaces + accents UTF-8)', async () => {
@@ -284,8 +284,8 @@ describe('action script', () => {
 
     const plugin = makePlugin();
     const vars = resolveVariables(plugin, {}, systemVars);
-    // Dossier avec espaces : l'ancien passage via cmd /c en chaîne corrompait
-    // le quoting de -File (« Caractères non conformes dans le chemin d'accès »).
+    // Folder with spaces: the old cmd /c string pass corrupted
+    // the -File quoting ("Illegal characters in path").
     const installDir = join(tmpRoot, 'dossier avec espaces');
     await mkdir(installDir, { recursive: true });
 
@@ -300,7 +300,7 @@ describe('action script', () => {
   });
 });
 
-// ─── Orchestrateur runInstall ─────────────────────────────────────────────────
+// ─── runInstall orchestrator ─────────────────────────────────────────────────
 
 describe('runInstall', () => {
   it('exécute une installation complète avec progression', async () => {
@@ -334,13 +334,13 @@ describe('runInstall', () => {
     expect(result.success).toBe(true);
     expect(result.resolvedVars.get('RAM_MB')).toBe('1024');
 
-    // Fichiers créés
+    // Files created
     const jar = await readFile(join(installDir, 'server.jar'), 'utf-8');
     expect(jar).toBe('fake-jar-content');
     const eula = await readFile(join(installDir, 'eula.txt'), 'utf-8');
     expect(eula).toBe('eula=false');
 
-    // Progression : 3 étapes + final
+    // Progress: 3 steps + final
     expect(progress.length).toBe(4);
     expect(progress[0].percent).toBe(0);
     expect(progress[progress.length - 1].percent).toBe(100);
@@ -413,5 +413,5 @@ describe('resolvePath', () => {
   });
 });
 
-// render importé pour éviter l unused warning si les tests ci-dessus évoluent
+// render imported to avoid an unused warning if the tests above evolve
 void render;

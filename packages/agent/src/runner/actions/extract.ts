@@ -9,16 +9,16 @@ import { resolvePath, type ActionContext } from '../context';
 type ExtractAction = RunnerActionInput & { action: 'extract' };
 
 /**
- * Valide et résout le chemin d'une entrée d'archive zip.
- * Refuse le path traversal (segments `..`, chemins absolus, backslashes Windows).
- * `stripComponents` retire N niveaux de dossiers racine (comme tar --strip-components).
+ * Validates and resolves the path of a zip archive entry.
+ * Rejects path traversal (`..` segments, absolute paths, Windows backslashes).
+ * `stripComponents` removes N root folder levels (like tar --strip-components).
  */
 export function resolveZipEntryPath(
   destDir: string,
   entryName: string,
   stripComponents?: number,
 ): string {
-  // Les zips utilisent / mais certains outils écrivent des backslashes
+  // Zips use / but some tools write backslashes
   const normalizedEntry = entryName.replace(/\\/g, '/');
   const parts = normalizedEntry.split('/');
 
@@ -46,7 +46,7 @@ export function resolveZipEntryPath(
 }
 
 /**
- * Action `extract` : décompresse une archive zip dans un dossier destination.
+ * `extract` action: extracts a zip archive into a destination directory.
  */
 export async function runExtract(action: ExtractAction, ctx: ActionContext): Promise<void> {
   const archivePath = resolvePath(ctx.installDir, render(action.archive, ctx.vars));

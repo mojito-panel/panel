@@ -1,18 +1,18 @@
 import { isAbsolute, join, normalize, sep } from 'node:path';
 import type { ResolvedVariables } from './templating';
 
-/** Contexte partagé par toutes les actions du runner. */
+/** Context shared by all runner actions. */
 export interface ActionContext {
-  /** Dossier d'installation du serveur. */
+  /** Server install directory. */
   installDir: string;
-  /** Variables résolues (système + serveur + defaults + env fixe). */
+  /** Resolved variables (system + server + defaults + fixed env). */
   vars: ResolvedVariables;
 }
 
 /**
- * Résout un chemin relatif au dossier d'installation.
- * Un chemin absolu est utilisé tel quel ; un chemin relatif est join à installDir.
- * Refuse les chemins qui s'échappent du dossier d'installation (sécurité).
+ * Resolves a path relative to the install directory.
+ * An absolute path is used as-is; a relative path is joined to installDir.
+ * Rejects paths that escape the install directory (security).
  */
 export function resolvePath(installDir: string, filePath: string): string {
   if (isAbsolute(filePath)) {

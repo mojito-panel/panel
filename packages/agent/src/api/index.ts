@@ -19,14 +19,14 @@ import { toPanelStatus } from '../process/states';
 const startTime = Date.now();
 
 /**
- * Hash SHA-256 du token pour comparaison en temps constant.
+ * SHA-256 hash of the token for constant-time comparison.
  */
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
 /**
- * Vérifie le Bearer token de la requête en temps constant.
+ * Verifies the request Bearer token in constant time.
  */
 function isAuthorized(request: FastifyRequest, expectedTokenHash: string): boolean {
   const header = request.headers.authorization;
@@ -39,7 +39,7 @@ function isAuthorized(request: FastifyRequest, expectedTokenHash: string): boole
   return timingSafeEqual(a, b);
 }
 
-/** Mappe les erreurs du registry en réponses HTTP. */
+/** Maps registry errors to HTTP responses. */
 function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
   if (err instanceof PowerActionError) {
     const code = err.code === 'not_found' ? 404 : 409;
@@ -49,9 +49,9 @@ function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
 }
 
 /**
- * Construit l'instance Fastify de l'agent.
- * - /health est public (healthcheck)
- * - Toutes les autres routes nécessitent `Authorization: Bearer <token>`
+ * Builds the agent's Fastify instance.
+ * - /health is public (healthcheck)
+ * - All other routes require `Authorization: Bearer <token>`
  */
 export function createAgentServer(config: AgentConfig): FastifyInstance {
   const app = Fastify({ logger: true });
@@ -69,7 +69,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Hook d'authentification (sauf /health) ────────────────────────────────
+  // ─── Authentication hook (except /health) ────────────────────────────────
   app.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     if (request.url === '/health') return;
     if (!isAuthorized(request, expectedTokenHash)) {
@@ -77,7 +77,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     }
   });
 
-  // ─── Installation d'un serveur (runner d'étapes du plugin) ─────────────────
+  // ─── Server install (plugin step runner) ─────────────────
   app.post('/servers/install', async (request, reply) => {
     const parsed = installServerRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -95,9 +95,9 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       });
     }
 
-    // installDir : absolu tel quel, sinon résolu sous le dataDir de l'agent
-    // (le panel envoie typiquement "servers/<uuid>" — garantit que DELETE
-    // pourra supprimer le dossier sous notre périmètre)
+    // installDir: used as-is when absolute, otherwise resolved under the agent's dataDir
+    // (the panel typically sends "servers/<uuid>" — this guarantees DELETE
+    // can remove the folder within our scope)
     const rawInstallDir = parsed.data.installDir;
     const installDir = isAbsolute(rawInstallDir)
       ? rawInstallDir
@@ -113,14 +113,14 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
         parsed.data.allocation,
       ),
       installDir,
-      // Progression temps réel via WS : phase 3. Pour l'instant, l'appel est synchrone.
+      // Real-time progress via WS: phase 3. For now the call is synchronous.
     });
 
     if (!result.success) {
       return reply.code(422).send({ error: result.error });
     }
 
-    // Persister le serveur installé → start n'a besoin que du serverId
+    // Persist the installed server → start only needs the serverId
     await store.save({
       serverId: parsed.data.serverId,
       name: parsed.data.name,
@@ -138,7 +138,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Liste des serveurs installés ──────────────────────────────────────────
+  // ─── List of installed servers ──────────────────────────────────────────
   app.get('/servers', async () => {
     const stored = await store.list();
     return {
@@ -150,7 +150,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Info d'un serveur (état runtime réel + logs récents) ───────────────────
+  // ─── Server info (actual runtime state + recent logs) ───────────────────
   app.get<{ Params: { serverId: string } }>('/servers/:serverId', async (request, reply) => {
     const stored = await store.get(request.params.serverId);
     if (!stored) {
@@ -163,7 +163,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       name: stored.name,
       status: toPanelStatus(state, false),
       runtimeState: state,
-      pid: null, // métriques en phase 2
+      pid: null, // metrics in phase 2
       ramMb: null,
       cpuPercent: null,
       startedAt: null,
@@ -171,7 +171,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Action power (start/stop/restart/kill) ────────────────────────────────
+  // ─── Power action (start/stop/restart/kill) ────────────────────────────────
   app.post<{ Params: { serverId: string } }>(
     '/servers/:serverId/action',
     async (request, reply) => {
@@ -199,7 +199,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     },
   );
 
-  // ─── Logs incrémentaux (console live du panel) ─────────────────────────────
+  // ─── Incremental logs (panel live console) ─────────────────────────────
   app.get<{
     Params: { serverId: string };
     Querystring: { after?: string };
@@ -222,7 +222,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     };
   });
 
-  // ─── Suppression d'un serveur (cleanup complet) ────────────────────────────
+  // ─── Server deletion (full cleanup) ────────────────────────────
   app.delete<{ Params: { serverId: string } }>(
     '/servers/:serverId',
     async (request, reply) => {
@@ -232,7 +232,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
         return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
       }
 
-      // Refuser si le process tourne — le panel doit stop/kill d'abord
+      // Refuse while the process runs — the panel must stop/kill first
       if (registry.isRunning(serverId)) {
         return reply.code(409).send({
           error: 'Le serveur est en cours d’exécution',
@@ -243,8 +243,8 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       registry.forget(serverId);
       await store.delete(serverId);
 
-      // Suppression du dossier — uniquement s'il est sous le dataDir de l'agent
-      // (garde anti-suppression accidentelle d'un chemin hors de notre périmètre)
+      // Folder removal — only if it is under the agent's dataDir
+      // (guard against accidental deletion of a path outside our scope)
       const normalizedDataDir = resolve(config.dataDir);
       const normalizedInstallDir = resolve(stored.installDir);
       let removed = false;
@@ -260,7 +260,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     },
   );
 
-  // ─── Commande console (stdin) ───────────────────────────────────────────────
+  // ─── Console command (stdin) ───────────────────────────────────────────────
   app.post<{ Params: { serverId: string } }>(
     '/servers/:serverId/command',
     async (request, reply) => {

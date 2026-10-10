@@ -9,9 +9,9 @@ interface XtermConsoleProps {
 }
 
 /**
- * Console serveur live : xterm.js alimenté par polling des logs
- * incrémentaux de l'agent (GET /servers/:id/logs?after=N).
- * Le terminal est créé dynamiquement dans useEffect (SSR-safe).
+ * Live server console: xterm.js fed by polling
+ * the agent's incremental logs (GET /servers/:id/logs?after=N).
+ * The terminal is created dynamically in a useEffect (SSR-safe).
  */
 export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,7 +32,7 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
         import('@xterm/xterm'),
         import('@xterm/addon-fit'),
       ]);
-      // CSS du terminal (une seule fois)
+      // Terminal CSS (once)
       if (!document.getElementById('xterm-css')) {
         const link = document.createElement('link');
         link.id = 'xterm-css';
@@ -55,9 +55,9 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
       term.open(containerRef.current);
       fit.fit();
 
-      // Le conteneur a une hauteur fixe (h-[400px]) : le fit ne peut pas
-      // agrandir le conteneur, donc pas de boucle ResizeObserver → fit → resize.
-      // Debounce rAF pour coalescer les resize en cascade.
+      // The container has a fixed height (h-[400px]): the fit can no longer
+      // grow its own observed parent, so no ResizeObserver → fit → resize loop.
+      // rAF debounce to coalesce cascading resizes.
       const scheduleFit = () => {
         if (fitRaf !== null) return;
         fitRaf = requestAnimationFrame(() => {
@@ -79,7 +79,7 @@ export function XtermConsole({ serverId, isRunning }: XtermConsoleProps) {
           }
           cursorRef.current = chunk.next;
         } catch {
-          // Agent injoignable — le prochain tick réessaiera
+          // Agent unreachable — the next tick will retry
         }
       };
 

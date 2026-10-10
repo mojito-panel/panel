@@ -2,7 +2,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server';
 import { auth } from '~/lib/auth';
 import type { IUser } from '~/db/types';
 
-/** Erreur HTTP depuis une server function (message propagé au client). */
+/** HTTP error thrown from a server function (message propagated to the client). */
 export class HttpError extends Error {
   readonly statusCode: number;
 
@@ -12,13 +12,13 @@ export class HttpError extends Error {
   }
 }
 
-/** Retourne l'utilisateur de la session courante, ou null. */
+/** Returns the current session's user, or null. */
 export async function getSessionUser(): Promise<IUser | null> {
   const session = await auth.api.getSession({ headers: getRequestHeaders() });
   return (session?.user as IUser | undefined) ?? null;
 }
 
-/** Exige une session — 401 sinon. */
+/** Requires a session — 401 otherwise. */
 export async function requireUser(): Promise<IUser> {
   const user = await getSessionUser();
   if (!user) {
@@ -27,7 +27,7 @@ export async function requireUser(): Promise<IUser> {
   return user;
 }
 
-/** Exige le rôle admin — 403 sinon. */
+/** Requires the admin role — 403 otherwise. */
 export async function requireAdmin(): Promise<IUser> {
   const user = await requireUser();
   if (user.role !== 'admin') {

@@ -15,8 +15,8 @@ import {
 const databaseUrl =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
-// Migrations bundlées (comme custodia) — le migrator n'a pas besoin de
-// résoudre un path sur disque, ça marche en dev comme en build.
+// Bundled migrations (like custodia) — the migrator does not need to
+// resolve a path on disk; works in dev as well as in build.
 const modules = import.meta.glob('../migrations/Migration*');
 
 const migrations = [];
@@ -27,11 +27,11 @@ for (const path in modules) {
 }
 
 /**
- * Configuration MikroORM v7 (defineEntity, decorator-less).
- * Postgres (docker compose dev) — MikroORM gère TOUTES les tables,
- * y compris les tables better-auth (user/session/account/verification,
- * mappées en snake_case côté better-auth via `user.fields` etc.).
- * Les migrations s'exécutent au démarrage du serveur (`src/server.ts`).
+ * MikroORM v7 configuration (defineEntity, decorator-less).
+ * Postgres (docker compose dev) — MikroORM manages ALL tables,
+ * including the better-auth tables (user/session/account/verification,
+ * mapped snake_case on the better-auth side via `user.fields` etc.).
+ * Migrations run at server startup (`src/server.ts`).
  */
 export const ormConfig = {
   dbName: 'mojito',
@@ -49,12 +49,12 @@ export const ormConfig = {
 let orm: MikroORM | null = null;
 
 /**
- * Initialise (ou retourne) l'instance MikroORM singleton (connexion Postgres).
- * Le schéma des entités métier est géré par les migrations MikroORM :
- * `src/server.ts` exécute `orm.migrator.up()` au démarrage du serveur.
- * On n'utilise JAMAIS `schema.update()` ici — MikroORM v7 drop par défaut
- * les tables qu'il ne connaît pas, ce qui supprimerait les tables
- * better-auth (user/session/account/verification) et tous les comptes.
+ * Initializes (or returns) the singleton MikroORM instance (Postgres connection).
+ * The business entity schema is managed by MikroORM migrations:
+ * `src/server.ts` runs `orm.migrator.up()` at server startup.
+ * NEVER use `schema.update()` here — MikroORM v7 drops by default
+ * tables it does not know, which would delete the
+ * better-auth tables (user/session/account/verification) and all accounts.
  */
 export async function initOrm(): Promise<MikroORM> {
   if (!orm) {
@@ -64,7 +64,7 @@ export async function initOrm(): Promise<MikroORM> {
 }
 
 /**
- * Retourne l'instance MikroORM courante (doit être initialisée avant).
+ * Returns the current MikroORM instance (must be initialized first).
  */
 export function getOrm(): MikroORM {
   if (!orm) throw new Error('MikroORM not initialized. Call initOrm() first.');

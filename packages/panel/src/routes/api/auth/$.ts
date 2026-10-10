@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { auth } from '~/lib/auth';
 
 /**
- * Route catch-all better-auth — toutes les routes /api/auth/* passent par ici.
+ * better-auth catch-all route — all /api/auth/* routes go through here.
  */
 export const Route = createFileRoute('/api/auth/$')({
   server: {

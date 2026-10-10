@@ -4,8 +4,8 @@ import { config } from 'dotenv';
 config({ quiet: true });
 
 /**
- * Configuration de l'agent, chargée depuis les variables d'environnement
- * ou un fichier config.json (V1 : env vars prioritaires).
+ * Agent configuration, loaded from environment variables
+ * or a config.json file (V1: env vars take priority).
  */
 export const agentConfigSchema = z.object({
   port: z.coerce.number().int().positive().default(8080),
@@ -19,8 +19,8 @@ export const agentConfigSchema = z.object({
 export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
 /**
- * Charge la config depuis process.env.
- * Lance si le token est manquant.
+ * Loads the config from process.env.
+ * Throws if the token is missing.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
   return agentConfigSchema.parse({

@@ -21,8 +21,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     links: [{ rel: 'stylesheet', href: styles }],
   }),
   /**
-   * beforeLoad SSR : récupère la session côté serveur et la met en cache
-   * TanStack Query (queryKey: ['auth']). Le staleTime 60s évite les refetch.
+   * SSR beforeLoad: fetches the session server-side and caches it
+   * in TanStack Query (queryKey: ['auth']). The 60s staleTime avoids refetches.
    */
   beforeLoad: async ({ context: { queryClient } }) => {
     const authSession = await queryClient.fetchQuery({

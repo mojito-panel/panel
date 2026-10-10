@@ -11,7 +11,7 @@ import { resolvePath, type ActionContext } from '../context';
 type CommandAction = RunnerActionInput & { action: 'command' };
 type ScriptAction = RunnerActionInput & { action: 'script' };
 
-/** Résultat d'une exécution de commande/script. */
+/** Result of a command/script execution. */
 export interface ExecResult {
   code: number | null;
   stdout: string;
@@ -19,8 +19,8 @@ export interface ExecResult {
 }
 
 /**
- * Spawn un processus, capture stdout/stderr, kill au timeout.
- * Base partagée de exec() (via shell) et execProcess() (spawn direct).
+ * Spawns a process, captures stdout/stderr, kills on timeout.
+ * Shared base of exec() (via shell) and execProcess() (direct spawn).
  */
 function spawnChild(
   file: string,
@@ -70,10 +70,10 @@ function spawnChild(
 }
 
 /**
- * Exécute une commande dans un shell, avec timeout optionnel.
- * Sous Windows : cmd /c ; sinon : /bin/sh -c.
- * Utilisé par le runner d'installation pour les actions `command` et `script`
- * des plugins (ex: java, steamcmd, powershell).
+ * Runs a command in a shell, with optional timeout.
+ * On Windows: cmd /c; otherwise: /bin/sh -c.
+ * Used by the install runner for the `command` and `script` actions
+ * of plugins (e.g. java, steamcmd, powershell).
  */
 export function exec(
   command: string,
@@ -86,13 +86,13 @@ export function exec(
 }
 
 /**
- * Exécute un binaire avec ses arguments (spawn direct, SANS shell).
- * Node échappe les guillemets à la mode MSVCRT (`\"`) dans les arguments —
- * cmd.exe ne comprend pas cet échappement. Passer une commande shell en
- * chaîne corrompt donc les chemins cités (ex: `powershell -File "C:\…"` →
- * « Caractères non conformes dans le chemin d'accès »). Avec un tableau
- * d'arguments, chaque argument est cité proprement : les chemins avec
- * espaces ou guillemets passent intacts.
+ * Runs a binary with its arguments (direct spawn, NO shell).
+ * Node escapes quotes the MSVCRT way (`\"`) in arguments —
+ * cmd.exe does not understand that escaping. Passing a shell command as a
+ * string therefore corrupts quoted paths (e.g. `powershell -File "C:\…"` →
+ * "Illegal characters in path"). With an argument array,
+ * each argument is properly quoted: paths with
+ * spaces or quotes pass through intact.
  */
 export function execProcess(
   file: string,
@@ -103,9 +103,9 @@ export function execProcess(
 }
 
 /**
- * Action `command` : exécute un binaire dans le dossier d'installation.
- * Échec (code non nul) = erreur d'installation.
- * Les variables résolues (plugin + système) sont injectées dans l'environnement.
+ * `command` action: runs a binary in the install directory.
+ * Failure (non-zero code) = install error.
+ * Resolved variables (plugin + system) are injected into the environment.
  */
 export async function runCommand(action: CommandAction, ctx: ActionContext): Promise<void> {
   const command = render(action.command, ctx.vars);
@@ -130,9 +130,9 @@ export async function runCommand(action: CommandAction, ctx: ActionContext): Pro
 }
 
 /**
- * Action `script` : exécute un script via le shell demandé (bash/powershell/cmd).
- * Le contenu est templatisé puis écrit dans un fichier temporaire.
- * Spawn direct avec tableau d'arguments — jamais via cmd /c en chaîne (cf. execProcess).
+ * `script` action: runs a script via the requested shell (bash/powershell/cmd).
+ * The content is templated then written to a temporary file.
+ * Direct spawn with an argument array — never via cmd /c as a string (see execProcess).
  */
 export async function runScript(action: ScriptAction, ctx: ActionContext): Promise<void> {
   const content = render(action.content, ctx.vars);
@@ -145,8 +145,8 @@ export async function runScript(action: ScriptAction, ctx: ActionContext): Promi
   };
   const scriptPath = join(scriptDir, `script${extensions[action.shell] ?? '.txt'}`);
 
-  // Windows PowerShell 5.1 lit un .ps1 sans BOM comme de l'ANSI — un contenu
-  // UTF-8 avec accents (messages FR) serait corrompu. BOM UTF-8 pour powershell.
+  // Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI — UTF-8 content
+  // with accents (FR messages) would be corrupted. UTF-8 BOM for powershell.
   const fileContent = action.shell === 'powershell' ? `\ufeff${content}` : content;
   await writeFile(scriptPath, fileContent, 'utf-8');
 

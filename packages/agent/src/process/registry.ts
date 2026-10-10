@@ -7,20 +7,20 @@ import type { ProcessState } from './states';
 
 export interface RegistryOptions {
   store: ServerStore;
-  /** Anti-crash-loop : pas de restart auto si dernier crash < N secondes. */
+  /** Anti-crash-loop: no auto restart if the last crash is < N seconds ago. */
   crashLoopSeconds?: number;
-  /** Factory d'events pour le manager d'un serveur (logs WS phase 3). */
+  /** Event factory for a server's manager (WS logs, phase 3). */
   createEvents?: (serverId: string) => ProcessEvents;
 }
 
 interface ServerEntry {
   manager: ServerProcessManager;
-  /** Chaîne de promesses = power lock par serveur (actions séquentielles). */
+  /** Promise chain = per-server power lock (sequential actions). */
   lock: Promise<unknown>;
   lastCrashAt: number | null;
 }
 
-/** Erreurs métier du registry (mappées en codes HTTP par l'API). */
+/** Registry business errors (mapped to HTTP codes by the API). */
 export class PowerActionError extends Error {
   readonly code: 'not_found' | 'already_running' | 'not_running' | 'crash_loop';
 
@@ -31,9 +31,9 @@ export class PowerActionError extends Error {
 }
 
 /**
- * Registry des process serveurs — power lock par serveur (comme wings :
- * workerpool d'1 worker), crash detection avec anti-loop, kill qui
- * force-passe le verrou.
+ * Registry of server processes — per-server power lock (like wings:
+ * 1-worker workerpool), crash detection with anti-loop, kill that
+ * force-passes the lock.
  */
 export class ProcessRegistry {
   readonly #servers = new Map<string, ServerEntry>();
@@ -69,9 +69,9 @@ export class ProcessRegistry {
   }
 
   /**
-   * Crash detection minimale (wings crash.go) :
-   * exit non-propre (code non-nul, pas un stop volontaire) → crashed +
-   * restart auto si le dernier crash est assez ancien (anti-crash-loop).
+   * Minimal crash detection (wings crash.go):
+   * unclean exit (non-zero code, not a voluntary stop) → crashed +
+   * auto restart if the last crash is old enough (anti-crash-loop).
    */
   async #handleExit(serverId: string, code: number | null, clean: boolean): Promise<void> {
     if (clean) return;
@@ -86,8 +86,8 @@ export class ProcessRegistry {
     const stored = await this.#store.get(serverId);
     if (!stored) return;
 
-    // Anti-crash-loop (wings crash.go) : le précédent crash est trop récent
-    // → pas de restart auto, le serveur reste crashed.
+    // Anti-crash-loop (wings crash.go): the previous crash is too recent
+    // → no auto restart, the server stays crashed.
     if (
       this.#crashLoopMs > 0 &&
       previousCrash !== null &&
@@ -96,11 +96,11 @@ export class ProcessRegistry {
       return;
     }
 
-    // Restart auto : repasse par le power lock
+    // Auto restart: goes through the power lock again
     try {
       await this.handlePowerAction(serverId, 'start');
     } catch {
-      // Le restart auto a échoué — le serveur reste crashed
+      // Auto restart failed — the server stays crashed
     }
   }
 
@@ -112,7 +112,7 @@ export class ProcessRegistry {
     return this.#getEntry(serverId).manager.getLogs();
   }
 
-  /** Logs incrémentaux (console live du panel). */
+  /** Incremental logs (panel live console). */
   getLogsAfter(serverId: string, after: number): { lines: string[]; next: number } {
     return this.#getEntry(serverId).manager.getLogsAfter(after);
   }
@@ -122,8 +122,8 @@ export class ProcessRegistry {
   }
 
   /**
-   * Retire un serveur du registry (après suppression du store).
-   * L'appelant doit vérifier que le process est arrêté avant.
+   * Removes a server from the registry (after store deletion).
+   * The caller must check that the process is stopped first.
    */
   forget(serverId: string): boolean {
     return this.#servers.delete(serverId);
@@ -138,8 +138,8 @@ export class ProcessRegistry {
   }
 
   /**
-   * Exécute une action power — sérialisée par le verrou du serveur.
-   * `kill` force-passe le verrou (un process coincé reste tuable, comme wings).
+   * Runs a power action — serialized by the server's lock.
+   * `kill` force-passes the lock (a stuck process stays killable, like wings).
    */
   async handlePowerAction(serverId: string, action: ServerAction): Promise<void> {
     const stored = await this.#store.get(serverId);
@@ -148,7 +148,7 @@ export class ProcessRegistry {
     }
 
     if (action === 'kill') {
-      // Kill : essaie le verrou, mais passe même s'il est pris
+      // Kill: tries the lock, but passes even if it is taken
       const entry = this.#getEntry(serverId);
       void entry.lock.catch(() => undefined);
       await entry.manager.killTree();
@@ -156,9 +156,9 @@ export class ProcessRegistry {
     }
 
     const entry = this.#getEntry(serverId);
-    // Chaîne la promesse : les actions s'exécutent séquentiellement par serveur
+    // Chain the promise: actions run sequentially per server
     const run = entry.lock.then(() => this.#executePowerAction(entry, stored, action));
-    entry.lock = run.catch(() => undefined); // la chaîne ne casse pas sur une erreur
+    entry.lock = run.catch(() => undefined); // the chain does not break on an error
     await run;
   }
 

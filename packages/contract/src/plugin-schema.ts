@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
 /**
- * Schéma Zod du plugin (egg) — format v2.
- * A parite de features avec les eggs Pelican (PTDL_v2), mais declaratif et Windows-first :
- * pas de Docker, pas de script bash obligatoire (action `script` en fallback ouvert).
+ * Zod schema of the plugin (egg) — v2 format.
+ * Feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first:
+ * no Docker, no mandatory bash script (`script` action as an open fallback).
  *
- * Templating `{{ENV_VAR}}` (UPPERCASE) partout : commandes, fichiers, URLs.
- * Resolution : variables systeme de l'agent > variables du serveur > defaults du plugin > env fixe.
+ * `{{ENV_VAR}}` templating (UPPERCASE) everywhere: commands, files, URLs.
+ * Resolution: agent system variables > server variables > plugin defaults > fixed env.
  */
 
-// ─── Variables systeme (reservees, fournies par l'agent au runtime) ───────────
+// ─── System variables (reserved, provided by the agent at runtime) ───────────
 
 export const RESERVED_ENV_NAMES = [
   'SERVER_UUID',
@@ -31,12 +31,12 @@ export const SYSTEM_VARIABLES_SCHEMA = {
   SERVER_INSTALL_DIR: 'string — dossier d installation du serveur',
 } as const;
 
-// ─── Variables du plugin (equivalent EggVariable Pelican) ─────────────────────
+// ─── Plugin variables (Pelican EggVariable equivalent) ─────────────────────
 
 export const variableTypeSchema = z.enum(['string', 'number', 'boolean']);
 
 export const pluginVariableSchema = z.object({
-  /** Nom de la variable d environnement (UPPERCASE) — templating + injection au spawn. */
+  /** Environment variable name (UPPERCASE) — templating + injection at spawn. */
   env: z
     .string()
     .regex(/^[A-Z][A-Z0-9_]*$/, 'Nom de variable invalide (UPPERCASE uniquement)')
@@ -44,20 +44,20 @@ export const pluginVariableSchema = z.object({
       (v) => !RESERVED_ENV_NAMES.includes(v as ReservedEnvName),
       { message: 'Nom de variable systeme reservee' },
     ),
-  /** Libelle affiche dans le panel. */
+  /** Label shown in the panel. */
   name: z.string().min(1),
   description: z.string().optional(),
   type: variableTypeSchema,
   defaultValue: z.union([z.string(), z.number(), z.boolean()]),
-  /** Visible par l utilisateur (sinon : variable technique admin-only). */
+  /** Visible to the user (otherwise: admin-only technical variable). */
   userViewable: z.boolean().default(true),
-  /** Modifiable par l utilisateur (sinon : lecture seule cote panel). */
+  /** Editable by the user (otherwise: read-only on the panel side). */
   userEditable: z.boolean().default(true),
   sort: z.number().int().default(0),
   required: z.boolean().default(false),
   min: z.number().optional(),
   max: z.number().optional(),
-  /** Regex de validation de la valeur (equivalent des rules Laravel de Pelican). */
+  /** Value validation regex (Pelican's Laravel rules equivalent). */
   pattern: z.string().optional(),
   options: z.array(z.string()).optional(),
 });
@@ -75,13 +75,13 @@ export const pluginRequirementsSchema = z.object({
 
 export type PluginRequirements = z.infer<typeof pluginRequirementsSchema>;
 
-// ─── Actions du runner ────────────────────────────────────────────────────────
+// ─── Runner actions ────────────────────────────────────────────────────────
 
 const downloadActionSchema = z.object({
   action: z.literal('download'),
   url: z.string().min(1),
   dest: z.string().min(1),
-  /** SHA-256 du fichier pour verifier l integrite. */
+  /** SHA-256 of the file to verify integrity. */
   checksum: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
 });
@@ -108,8 +108,8 @@ const replaceActionSchema = z.object({
 });
 
 /**
- * Equivalent `config.files` de Pelican : modification typede de fichiers de config
- * via un parser (properties, ini, yaml, json) — cle -> valeur templatisee.
+ * Pelican's `config.files` equivalent: typed modification of config files
+ * via a parser (properties, ini, yaml, json) — key -> templated value.
  */
 const configFileActionSchema = z.object({
   action: z.literal('configFile'),
@@ -127,8 +127,8 @@ const commandActionSchema = z.object({
 });
 
 /**
- * Fallback ouvert : execute un script via un shell de l hote.
- * Pour tout ce que les actions declaratives ne couvrent pas.
+ * Open fallback: runs a script via a host shell.
+ * For everything the declarative actions do not cover.
  */
 const scriptActionSchema = z.object({
   action: z.literal('script'),
@@ -149,44 +149,44 @@ export const runnerActionSchema = z.discriminatedUnion('action', [
 
 export type RunnerAction = z.infer<typeof runnerActionSchema>;
 
-// ─── Stop gracieux ────────────────────────────────────────────────────────────
+// ─── Graceful stop ────────────────────────────────────────────────────────────
 
 export const stopConfigSchema = z.object({
   type: z.enum(['command', 'signal']),
   value: z.string().min(1),
-  /** Delai avant kill force apres le stop gracieux. */
+  /** Delay before a force kill after the graceful stop. */
   timeoutMs: z.number().int().positive().default(30000),
 });
 
 export type StopConfig = z.infer<typeof stopConfigSchema>;
 
-// ─── Ready detection (equivalent config.startup de Pelican : done + strip) ────
+// ─── Ready detection (Pelican's config.startup equivalent: done + strip) ────
 
 export const readyConfigSchema = z.object({
-  /** Chaine/regex qui indique que le serveur est pret. */
+  /** String/regex indicating the server is ready. */
   pattern: z.string().min(1),
-  /** Regex a retirer des lignes de log avant matching (couleurs ANSI, timestamps...). */
+  /** Regex to strip from log lines before matching (ANSI colors, timestamps...). */
   strip: z.string().optional(),
 });
 
 export type ReadyConfig = z.infer<typeof readyConfigSchema>;
 
-// ─── Logs (equivalent config.logs de Pelican) ─────────────────────────────────
+// ─── Logs (Pelican's config.logs equivalent) ─────────────────────────────────
 
 export const logsConfigSchema = z.object({
   mode: z.enum(['stdout', 'file']).default('stdout'),
-  /** Fichier de log a suivre (requis si mode = file). */
+  /** Log file to follow (required if mode = file). */
   file: z.string().optional(),
   stripAnsi: z.boolean().default(false),
 });
 
 export type LogsConfig = z.infer<typeof logsConfigSchema>;
 
-// ─── Runtime (remplace docker_images de Pelican — verifie par l agent) ───────
+// ─── Runtime (replaces Pelican's docker_images — checked by the agent) ───────
 
 /**
- * Contraintes d execution de l hote, ex: { "java": ">=21" }.
- * L agent verifie la disponibilite avant install/start.
+ * Host execution constraints, e.g. { "java": ">=21" }.
+ * The agent checks availability before install/start.
  */
 export const runtimeSchema = z.record(z.string(), z.string());
 
@@ -203,7 +203,7 @@ export const startConfigSchema = z.object({
 
 export type StartConfig = z.infer<typeof startConfigSchema>;
 
-// ─── Plugin complet ───────────────────────────────────────────────────────────
+// ─── Full plugin ───────────────────────────────────────────────────────────
 
 export const pluginSchema = z.object({
   schemaVersion: z.literal(2),
@@ -212,9 +212,9 @@ export const pluginSchema = z.object({
   author: z.string().min(1),
   description: z.string().optional(),
   tags: z.array(z.string()).default([]),
-  /** Flags de features Pelican-style : eula, java_version, pid_limit... */
+  /** Pelican-style feature flags: eula, java_version, pid_limit... */
   features: z.array(z.string()).default([]),
-  /** URL d un JSON de mise a jour du plugin (equivalent meta.update_url Pelican). */
+  /** URL of a plugin update JSON (Pelican's meta.update_url equivalent). */
   updateUrl: z.string().url().optional(),
   requirements: pluginRequirementsSchema.optional(),
   runtime: runtimeSchema.optional(),
@@ -222,38 +222,38 @@ export const pluginSchema = z.object({
   install: z.array(runnerActionSchema).default([]),
   start: startConfigSchema,
   logs: logsConfigSchema.optional(),
-  /** Variables d environnement fixes injectees au spawn. */
+  /** Fixed environment variables injected at spawn. */
   env: z.record(z.string(), z.string()).optional(),
 });
 
 export type Plugin = z.infer<typeof pluginSchema>;
 
-/** Type d'entrée du schéma plugin (champs avec defaults optionnels). */
+/** Input type of the plugin schema (fields with optional defaults). */
 export type PluginInput = z.input<typeof pluginSchema>;
 
-/** Type d'entrée d'une action du runner (champs avec defaults optionnels). */
+/** Input type of a runner action (fields with optional defaults). */
 export type RunnerActionInput = z.input<typeof runnerActionSchema>;
 
-// ─── Helpers de validation ────────────────────────────────────────────────────
+// ─── Validation helpers ────────────────────────────────────────────────────
 
 /**
- * Valide un objet JSON brut comme plugin.
- * Lance une ZodError si invalide.
+ * Validates a raw JSON object as a plugin.
+ * Throws a ZodError if invalid.
  */
 export function parsePlugin(data: unknown): Plugin {
   return pluginSchema.parse(data);
 }
 
 /**
- * Valide un plugin et retourne le resultat sans lever d exception.
+ * Validates a plugin and returns the result without throwing.
  */
 export function safeParsePlugin(data: unknown) {
   return pluginSchema.safeParse(data);
 }
 
 /**
- * Extrait les noms de variables referencees dans un template `{{VAR}}`.
- * UPPERCASE uniquement — les variables systeme de l agent sont incluses.
+ * Extracts the variable names referenced in a `{{VAR}}` template.
+ * UPPERCASE only — the agent's system variables are included.
  */
 export function extractTemplateVars(template: string): string[] {
   const matches = template.matchAll(/\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}/g);
@@ -261,9 +261,9 @@ export function extractTemplateVars(template: string): string[] {
 }
 
 /**
- * Verifie que toutes les variables utilisees dans les templates du plugin
- * sont declarees (variables du plugin, variables systeme, ou env fixe).
- * Retourne la liste des variables inconnues.
+ * Checks that all variables used in the plugin's templates
+ * are declared (plugin variables, system variables, or fixed env).
+ * Returns the list of unknown variables.
  */
 export function findUnknownVariables(plugin: Plugin): string[] {
   const declared = new Set<string>([
@@ -315,8 +315,8 @@ export function findUnknownVariables(plugin: Plugin): string[] {
 }
 
 /**
- * Valide la valeur d une variable du plugin (equivalent rules Laravel de Pelican).
- * Retourne un message d erreur ou null si valide.
+ * Validates a plugin variable's value (Pelican's Laravel rules equivalent).
+ * Returns an error message, or null if valid.
  */
 export function validateVariableValue(
   variable: PluginVariable,

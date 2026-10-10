@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 /**
- * Contrat API panel ↔ agent.
- * Définit les routes HTTP et les payloads WebSocket échangés entre le panel et l'agent.
+ * Panel ↔ agent API contract.
+ * Defines the HTTP routes and WebSocket payloads exchanged between panel and agent.
  */
 
 // ─── Healthcheck ──────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
 // ─── Server lifecycle (panel → agent) ─────────────────────────────────────────
 
-/** Allocation du serveur — source des variables système (SERVER_PORT, SERVER_MEMORY...). */
+/** Server allocation — source of system variables (SERVER_PORT, SERVER_MEMORY...). */
 export const serverAllocationSchema = z.object({
   port: z.number().int().positive(),
   memoryMb: z.number().int().positive(),
@@ -29,7 +29,7 @@ export type ServerAllocationPayload = z.infer<typeof serverAllocationSchema>;
 export const installServerRequestSchema = z.object({
   serverId: z.string().uuid(),
   name: z.string().min(1),
-  plugin: z.unknown(), // Plugin validé côté panel, transmis tel quel
+  plugin: z.unknown(), // Plugin validated on the panel side, passed as-is
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   installDir: z.string().min(1),
   allocation: serverAllocationSchema,
@@ -77,7 +77,7 @@ export const serverInfoSchema = z.object({
 
 export type ServerInfo = z.infer<typeof serverInfoSchema>;
 
-// ─── Progression d'installation (agent → panel, via WS) ───────────────────────
+// ─── Install progress (agent → panel, via WS) ───────────────────────
 
 export const installProgressSchema = z.object({
   serverId: z.string().uuid(),
@@ -89,7 +89,7 @@ export const installProgressSchema = z.object({
 
 export type InstallProgress = z.infer<typeof installProgressSchema>;
 
-// ─── Logs live (agent → panel, via WS) ────────────────────────────────────────
+// ─── Live logs (agent → panel, via WS) ────────────────────────────────────────
 
 export const logLineSchema = z.object({
   serverId: z.string().uuid(),
@@ -100,7 +100,7 @@ export const logLineSchema = z.object({
 
 export type LogLine = z.infer<typeof logLineSchema>;
 
-// ─── Messages WebSocket (union discriminée) ───────────────────────────────────
+// ─── WebSocket messages (discriminated union) ───────────────────────────────────
 
 export const wsMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('install-progress'), payload: installProgressSchema }),
@@ -111,10 +111,10 @@ export const wsMessageSchema = z.discriminatedUnion('type', [
 
 export type WsMessage = z.infer<typeof wsMessageSchema>;
 
-// ─── Routes HTTP (référence) ──────────────────────────────────────────────────
+// ─── HTTP routes (reference) ──────────────────────────────────────────────────
 
 /**
- * Routes exposées par l'agent. Toutes protégées par `Authorization: Bearer <token>`.
+ * Routes exposed by the agent. All protected by `Authorization: Bearer <token>`.
  */
 export const AGENT_ROUTES = {
   health: 'GET /health',

@@ -2,10 +2,10 @@ import handler, { createServerEntry } from '@tanstack/react-start/server-entry';
 import { initOrm } from '~/db';
 
 /**
- * Entrypoint serveur custom — TanStack Start détecte automatiquement src/server.ts.
- * Au démarrage : connexion Postgres + migrations MikroORM (entités métier).
- * Les tables better-auth (user/session/account/verification) sont gérées
- * séparément par `npm run auth:migrate` (CLI better-auth).
+ * Custom server entrypoint — TanStack Start detects src/server.ts automatically.
+ * At startup: Postgres connection + MikroORM migrations (business entities).
+ * The better-auth tables (user/session/account/verification) are managed
+ * separately by `npm run auth:migrate` (better-auth CLI).
  */
 const orm = await initOrm();
 await orm.migrator.up();

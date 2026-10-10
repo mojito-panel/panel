@@ -6,7 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const TEST_TOKEN = 'a'.repeat(64); // 64 caractères
+const TEST_TOKEN = 'a'.repeat(64); // 64 characters
 
 const config: AgentConfig = {
   port: 0,
@@ -87,7 +87,7 @@ describe('Agent API (Fastify)', () => {
   });
 });
 
-// ─── Route POST /servers/install (runner) ─────────────────────────────────────
+// ─── POST /servers/install route (runner) ─────────────────────────────────────
 
 describe('Agent API — POST /servers/install', () => {
   let app: FastifyInstance;
@@ -170,7 +170,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(body.serverId).toBe('550e8400-e29b-41d4-a716-446655440000');
     expect(body.status).toBe('stopped');
 
-    // Le runner a bien exécuté l'action write avec la variable système SERVER_PORT
+    // The runner did run the write action with the SERVER_PORT system variable
     const { readFile } = await import('node:fs/promises');
     const marker = await readFile(join(config.dataDir, 'srv', 'marker.txt'), 'utf-8');
     expect(marker).toBe('port=25565');
@@ -196,7 +196,7 @@ describe('Agent API — POST /servers/install', () => {
   });
 
   it('après install : GET 200 stopped, action 404/400, command 409 sans process', async () => {
-    // Installe un serveur valide
+    // Install a valid server
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -207,7 +207,7 @@ describe('Agent API — POST /servers/install', () => {
 
     const serverId = '550e8400-e29b-41d4-a716-446655440000';
 
-    // GET : serveur connu → 200, statut stopped
+    // GET: known server → 200, stopped status
     const info = await app.inject({
       method: 'GET',
       url: `/servers/${serverId}`,
@@ -216,7 +216,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(info.statusCode).toBe(200);
     expect(info.json().status).toBe('stopped');
 
-    // Action sur serveur inconnu → 404
+    // Action on unknown server → 404
     const action404 = await app.inject({
       method: 'POST',
       url: '/servers/660e8400-e29b-41d4-a716-446655440000/action',
@@ -225,7 +225,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(action404.statusCode).toBe(404);
 
-    // Action invalide → 400
+    // Invalid action → 400
     const action400 = await app.inject({
       method: 'POST',
       url: `/servers/${serverId}/action`,
@@ -234,7 +234,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(action400.statusCode).toBe(400);
 
-    // Commande console sans process running → 409
+    // Console command without a running process → 409
     const cmd = await app.inject({
       method: 'POST',
       url: `/servers/${serverId}/command`,
@@ -243,7 +243,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(cmd.statusCode).toBe(409);
 
-    // Liste des serveurs contient le serveur installé
+    // The server list contains the installed server
     const list = await app.inject({ method: 'GET', url: '/servers', headers: auth });
     expect(list.statusCode).toBe(200);
     const ids = list.json().servers.map((s: { serverId: string }) => s.serverId);
@@ -254,7 +254,7 @@ describe('Agent API — POST /servers/install', () => {
     const serverId = '550e8400-e29b-41d4-a716-446655440000';
     const { access } = await import('node:fs/promises');
 
-    // DELETE sur un serveur inconnu → 404
+    // DELETE on an unknown server → 404
     const del404 = await app.inject({
       method: 'DELETE',
       url: '/servers/660e8400-e29b-41d4-a716-446655440000',
@@ -262,7 +262,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(del404.statusCode).toBe(404);
 
-    // Installe un serveur
+    // Install a server
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -271,10 +271,10 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(install.statusCode).toBe(200);
 
-    // Le dossier existe
+    // The folder exists
     await expect(access(join(config.dataDir, 'srv', 'marker.txt'))).resolves.toBeUndefined();
 
-    // DELETE → 200, dossier supprimé (installDir sous dataDir)
+    // DELETE → 200, folder removed (installDir under dataDir)
     const del = await app.inject({
       method: 'DELETE',
       url: `/servers/${serverId}`,
@@ -284,11 +284,11 @@ describe('Agent API — POST /servers/install', () => {
     expect(del.json().removed).toBe(true);
     await expect(access(join(config.dataDir, 'srv'))).rejects.toThrow();
 
-    // Le serveur n'est plus connu
+    // The server is no longer known
     const info = await app.inject({ method: 'GET', url: `/servers/${serverId}`, headers: auth });
     expect(info.statusCode).toBe(404);
 
-    // DELETE encore → 404
+    // DELETE again → 404
     const again = await app.inject({
       method: 'DELETE',
       url: `/servers/${serverId}`,
@@ -300,7 +300,7 @@ describe('Agent API — POST /servers/install', () => {
   it('DELETE : 409 si le process tourne, 200 après kill', async () => {
     const serverId = '550e8400-e29b-41d4-a716-446655440000';
 
-    // Installe un serveur avec un process long
+    // Install a server with a long-running process
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -314,7 +314,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(install.statusCode).toBe(200);
 
-    // Démarre le process
+    // Start the process
     const start = await app.inject({
       method: 'POST',
       url: `/servers/${serverId}/action`,
@@ -324,7 +324,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(start.statusCode).toBe(200);
     expect(start.json().status).toBe('running');
 
-    // DELETE pendant que ça tourne → 409
+    // DELETE while running → 409
     const del409 = await app.inject({
       method: 'DELETE',
       url: `/servers/${serverId}`,
@@ -332,7 +332,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(del409.statusCode).toBe(409);
 
-    // Kill puis DELETE → 200
+    // Kill then DELETE → 200
     const kill = await app.inject({
       method: 'POST',
       url: `/servers/${serverId}/action`,
@@ -353,7 +353,7 @@ describe('Agent API — POST /servers/install', () => {
   it('GET /servers/:id/logs : 404 inconnu, lignes incrémentales après install', async () => {
     const serverId = '550e8400-e29b-41d4-a716-446655440000';
 
-    // Serveur inconnu → 404
+    // Unknown server → 404
     const unknown = await app.inject({
       method: 'GET',
       url: '/servers/660e8400-e29b-41d4-a716-446655440000/logs',
@@ -361,7 +361,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(unknown.statusCode).toBe(404);
 
-    // Installe
+    // Install
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -370,7 +370,7 @@ describe('Agent API — POST /servers/install', () => {
     });
     expect(install.statusCode).toBe(200);
 
-    // Logs sans process → vide, next=0
+    // Logs without a process → empty, next=0
     const logs = await app.inject({
       method: 'GET',
       url: `/servers/${serverId}/logs?after=0`,
@@ -383,8 +383,8 @@ describe('Agent API — POST /servers/install', () => {
   });
 
   it('installDir relatif est résolu sous le dataDir de l agent', async () => {
-    // installBody envoie "servers/<uuid>" ? Non — ici on vérifie la résolution :
-    // un installDir relatif "rel-xyz" doit atterrir sous config.dataDir
+    // Does installBody send "servers/<uuid>"? No — here we check resolution:
+    // a relative "rel-xyz" installDir must land under config.dataDir
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -403,6 +403,6 @@ describe('Agent API — POST /servers/install', () => {
       headers: auth,
     });
     expect(del.statusCode).toBe(200);
-    expect(del.json().removed).toBe(true); // sous dataDir → supprimé
+    expect(del.json().removed).toBe(true); // under dataDir → removed
   });
 });

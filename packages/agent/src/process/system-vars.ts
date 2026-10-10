@@ -2,8 +2,8 @@ import type { ServerAllocationPayload } from '@mojito/contract';
 import type { SystemVariables } from '../runner/templating';
 
 /**
- * Construit les variables système de l'agent.
- * Source unique partagée entre l'install (API) et le start (registry).
+ * Builds the agent's system variables.
+ * Single source shared between install (API) and start (registry).
  */
 export function buildSystemVariables(
   serverId: string,

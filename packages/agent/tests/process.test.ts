@@ -10,7 +10,7 @@ import { parsePlugin, type Plugin } from '@mojito/contract';
 
 const NODE = process.execPath;
 
-/** Commande spawn cross-platform (quotée pour shell:true, chemins avec espaces OK). */
+/** Cross-platform spawn command (quoted for shell:true, paths with spaces OK). */
 function nodeCommand(code: string): string {
   return `"${NODE}" -e ${JSON.stringify(code)}`;
 }
@@ -44,7 +44,7 @@ describe('ServerProcessManager', () => {
 
     expect(manager.getState()).toBe('running');
 
-    // Attendre la sortie
+    // Wait for exit
     await new Promise<void>((resolve) => {
       const check = () => (manager.getState() === 'offline' ? resolve() : setTimeout(check, 50));
       check();
@@ -143,7 +143,7 @@ describe('ServerProcessManager', () => {
 
     expect(manager.getState()).toBe('offline');
     expect(duration).toBeLessThan(5000);
-    // Passé par stopping avant offline (pas de crash detection déclenchée)
+    // Went through stopping before offline (crash detection not triggered)
     expect(states).toContain('stopping');
     expect(states[states.length - 1]).toBe('offline');
   });
@@ -160,7 +160,7 @@ describe('ServerProcessManager', () => {
 
     expect(manager.getState()).toBe('running');
 
-    // stop : le process ignore le signal → killTree en dernier recours
+    // stop: the process ignores the signal → killTree as last resort
     await manager.stop();
 
     expect(manager.getState()).toBe('offline');
@@ -188,7 +188,7 @@ describe('ServerProcessManager', () => {
 
   it('ring buffer : le buffer de logs est limité', async () => {
     const manager = new ServerProcessManager();
-    // Max 1000 lignes — on en génère 1500 en spammant stdout
+    // Max 1000 lines — we generate 1500 by spamming stdout
     manager.spawn({
       command: nodeCommand(
         "for (let i = 0; i < 1500; i++) console.log('line-' + i); process.exit(0);",
@@ -222,24 +222,24 @@ describe('ServerProcessManager', () => {
       check();
     });
 
-    // Buffer tronqué à 1000 : les 500 premières lignes sont perdues
+    // Buffer truncated to 1000: the first 500 lines are lost
     const chunk = manager.getLogsAfter(0);
     expect(chunk.next).toBe(1500);
     expect(chunk.lines.length).toBe(1000);
     expect(chunk.lines[0]).toBe('line-500');
 
-    // Incremental : après l'index 1490 → 10 dernières lignes
+    // Incremental: after index 1490 → last 10 lines
     const tail = manager.getLogsAfter(1490);
     expect(tail.next).toBe(1500);
     expect(tail.lines.length).toBe(10);
     expect(tail.lines[tail.lines.length - 1]).toBe('line-1499');
 
-    // Index à jour → rien de neuf
+    // Up-to-date index → nothing new
     const none = manager.getLogsAfter(1500);
     expect(none.lines).toEqual([]);
     expect(none.next).toBe(1500);
 
-    // Index périmé (raté des lignes) → tout le buffer
+    // Stale index (missed lines) → the whole buffer
     const stale = manager.getLogsAfter(100);
     expect(stale.lines.length).toBe(1000);
   });
@@ -265,7 +265,7 @@ describe('ServerStore', () => {
     expect(await store.get(entry.serverId)).not.toBeNull();
     expect((await store.list()).length).toBe(1);
 
-    // Nouvelle instance relit le fichier
+    // A new instance re-reads the file
     const store2 = new ServerStore(tmpRoot);
     expect(await store2.get(entry.serverId)).not.toBeNull();
 
@@ -304,8 +304,8 @@ describe('ProcessRegistry', () => {
     const registry = new ProcessRegistry({ store, crashLoopSeconds: opts.crashLoopSeconds });
     const markerFile = join(tmpRoot, 'spawn-count.txt');
 
-    // Plugin dont le process de démarrage append une ligne dans un fichier
-    // (permet de compter les spawns réels, y compris les restarts auto)
+    // Plugin whose start process appends a line to a file
+    // (lets us count actual spawns, including auto restarts)
     const plugin = makePlugin({
       start: {
         command: nodeCommand(
@@ -339,7 +339,7 @@ describe('ProcessRegistry', () => {
     const { registry, serverId, markerFile } = await setupRegistry();
     await registry.handlePowerAction(serverId, 'start');
 
-    // Le process a tourné et est sorti proprement
+    // The process ran and exited cleanly
     await new Promise((r) => setTimeout(r, 400));
     expect((await readFile(markerFile, 'utf-8')).trim()).toBe('x');
     expect(registry.getState(serverId)).toBe('offline');
@@ -347,7 +347,7 @@ describe('ProcessRegistry', () => {
 
   it('double start concurrent → la 2e action est rejetée (power lock)', async () => {
     const { registry, serverId, markerFile } = await setupRegistry();
-    // Process long pour que le 1er start soit encore "running"
+    // Long process so the 1st start is still "running"
     const store = new ServerStore(tmpRoot);
     await store.save({
       serverId,
@@ -368,14 +368,14 @@ describe('ProcessRegistry', () => {
       code: 'already_running',
     });
 
-    // kill force-passe le verrou → offline
+    // kill force-passes the lock → offline
     await registry.handlePowerAction(serverId, 'kill');
     expect(registry.getState(serverId)).toBe('offline');
   });
 
   it('crash detection : restart auto puis anti-crash-loop', async () => {
-    // Process qui crash immédiatement (exit 1) → restart auto → re-crash trop
-    // récent → pas de 3e spawn (anti-loop, comme wings crashTooFrequent)
+    // Process that crashes immediately (exit 1) → auto restart → re-crash too
+    // recent → no 3rd spawn (anti-loop, like wings crashTooFrequent)
     const markerFile = join(tmpRoot, 'crash-count.txt');
     const store = new ServerStore(tmpRoot);
     const registry = new ProcessRegistry({ store, crashLoopSeconds: 60 });
@@ -399,14 +399,14 @@ describe('ProcessRegistry', () => {
       installedAt: new Date().toISOString(),
     });
 
-    // 1er start manuel → crash → restart auto → crash → anti-loop stop
+    // 1st manual start → crash → auto restart → crash → anti-loop stop
     await registry.handlePowerAction(serverId, 'start');
 
-    // Attendre les 2 spawns (initial + restart auto) + marge anti-loop
+    // Wait for the 2 spawns (initial + auto restart) + anti-loop margin
     await new Promise((r) => setTimeout(r, 1500));
 
     spawnCount = (await readFile(markerFile, 'utf-8')).split('x').length - 1;
-    expect(spawnCount).toBe(2); // initial + 1 restart auto, pas plus (anti-loop)
+    expect(spawnCount).toBe(2); // initial + 1 auto restart, no more (anti-loop)
     expect(registry.getState(serverId)).toBe('offline');
   }, 15000);
 

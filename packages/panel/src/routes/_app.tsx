@@ -4,8 +4,8 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { AppSidebar } from '~/components/app-sidebar';
 
 /**
- * Layout des pages protégées — sidebar + contenu.
- * Non connecté → redirection vers /login (via le context du root route).
+ * Protected pages layout — sidebar + content.
+ * Not signed in → redirect to /login (via the root route context).
  */
 export const Route = createFileRoute('/_app')({
   beforeLoad: ({ context }) => {
@@ -19,8 +19,8 @@ export const Route = createFileRoute('/_app')({
 
 function AppLayout() {
   return (
-    // TooltipProvider requis par les tooltips du sidebar (SidebarMenuButton
-    // tooltip=...) — le sidebar.tsx généré par le CLI ne l'embarque pas.
+    // TooltipProvider required by the sidebar tooltips (SidebarMenuButton
+    // tooltip=...) — the CLI-generated sidebar.tsx does not embed it.
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />

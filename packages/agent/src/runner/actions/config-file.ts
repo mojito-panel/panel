@@ -9,12 +9,12 @@ import { resolvePath, type ActionContext } from '../context';
 type ConfigFileAction = RunnerActionInput & { action: 'configFile' };
 
 /**
- * Action `configFile` : modification typée d'un fichier de config via un parser
- * (properties, ini, yaml, json). Équivalent `config.files` de Pelican.
- * Chaque valeur de `find` est templatisée avant écriture.
- * Un fichier absent est CRÉÉ avec les entrées de `find` (les parsers ajoutent
- * déjà les clés manquantes en fin de fichier) — ex: server.properties n'existe
- * pas avant le premier démarrage du serveur Minecraft.
+ * `configFile` action: typed modification of a config file via a parser
+ * (properties, ini, yaml, json). Equivalent of Pelican's `config.files`.
+ * Each `find` value is templated before writing.
+ * A missing file is CREATED with the `find` entries (parsers already
+ * append missing keys at the end of the file) — e.g. server.properties does
+ * not exist before the Minecraft server's first boot.
  */
 export async function runConfigFile(action: ConfigFileAction, ctx: ActionContext): Promise<void> {
   const filePath = resolvePath(ctx.installDir, render(action.file, ctx.vars));
@@ -55,7 +55,7 @@ async function applyParser(
   }
 }
 
-/** key=value, commentaires #/!, préserve l'ordre et les clés non modifiées. */
+/** key=value, #/! comments, preserves order and untouched keys. */
 function applyProperties(content: string, find: Record<string, string>): string {
   const lines = content.split(/\r?\n/);
   const remaining = new Map(Object.entries(find));
@@ -71,7 +71,7 @@ function applyProperties(content: string, find: Record<string, string>): string 
     }
   }
 
-  // Clés absentes du fichier : append à la fin
+  // Keys missing from the file: append at the end
   for (const [key, value] of remaining) {
     result.push(`${key}=${value}`);
   }
@@ -79,7 +79,7 @@ function applyProperties(content: string, find: Record<string, string>): string 
   return result.join('\n');
 }
 
-/** Sections [section], clés `section.key` ou `key` (section courante implicite). */
+/** [section] sections, `section.key` or `key` keys (implicit current section). */
 function applyIni(content: string, find: Record<string, string>): string {
   const lines = content.split(/\r?\n/);
   const remaining = new Map(Object.entries(find));
@@ -102,7 +102,7 @@ function applyIni(content: string, find: Record<string, string>): string {
         remaining.delete(fullKey);
         continue;
       }
-      // clé sans section
+      // key without section
       if (remaining.has(match[1])) {
         result.push(`${match[1]}=${remaining.get(match[1])}`);
         remaining.delete(match[1]);
@@ -112,7 +112,7 @@ function applyIni(content: string, find: Record<string, string>): string {
     result.push(line);
   }
 
-  // Clés absentes : ajouter la section si besoin puis la clé
+  // Missing keys: add the section if needed, then the key
   const pendingBySection = new Map<string, Map<string, string>>();
   for (const [key, value] of remaining) {
     const dotIndex = key.indexOf('.');
@@ -133,7 +133,7 @@ function applyIni(content: string, find: Record<string, string>): string {
   return result.join('\n');
 }
 
-/** Chemins `a.b.c` → objets imbriqués, préserve le reste du document. */
+/** `a.b.c` paths → nested objects, preserves the rest of the document. */
 function applyYaml(content: string, find: Record<string, string>): string {
   const doc = parse(content) ?? {};
   for (const [path, value] of Object.entries(find)) {

@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { Plugin } from '@mojito/contract';
 
-/** Entrée persistée pour un serveur installé sur cet agent. */
+/** Persisted entry for a server installed on this agent. */
 export interface StoredServer {
   serverId: string;
   name: string;
@@ -15,8 +15,8 @@ export interface StoredServer {
 }
 
 /**
- * Registre local des serveurs installés (JSON dans AGENT_DATA_DIR).
- * Écriture atomique (.tmp → rename). Un process start n'a besoin que du serverId.
+ * Local registry of installed servers (JSON in AGENT_DATA_DIR).
+ * Atomic write (.tmp → rename). A process start only needs the serverId.
  */
 export class ServerStore {
   readonly #filePath: string;
@@ -37,7 +37,7 @@ export class ServerStore {
           map.set(entry.serverId, entry);
         }
       } catch {
-        // Fichier corrompu → repartir vide plutôt que de bloquer l'agent
+        // Corrupted file → start empty rather than blocking the agent
       }
     }
     this.#cache = map;
