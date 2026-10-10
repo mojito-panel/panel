@@ -1,4 +1,7 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useServerFn } from '@tanstack/react-start';
+import { listServersFn, deleteServerFn } from '~/server/functions/servers';
 import { Button } from '~/components/ui/button';
 import { useAuth } from '~/contexts/use-auth';
 
@@ -8,16 +11,121 @@ export const Route = createFileRoute('/servers/')({
 
 function ServersPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const listServers = useServerFn(listServersFn);
+  const deleteServer = useServerFn(deleteServerFn);
+
+  const query = useQuery({
+    queryKey: ['servers'],
+    queryFn: () => listServers(),
+  });
+
+  const remove = useMutation({
+    mutationFn: (serverId: string) => deleteServer({ data: { serverId, after: 0 } }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+  });
+
+  const servers = query.data ?? [];
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-bold tracking-tight">Mes serveurs</h1>
-      <p className="text-muted-foreground">
-        Aucun serveur pour l'instant. {user?.role === 'admin' && '(admin)'}
+    <main className="mx-auto min-h-screen max-w-4xl p-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Mes serveurs</h1>
+          <p className="text-muted-foreground">
+            {user?.role === 'admin' ? 'Vue administrateur — tous les serveurs' : 'Tes serveurs de jeu'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {user?.role === 'admin' && (
+            <>
+              <Button variant="outline" asChild>
+                <Link to="/admin/nodes">Nodes</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/admin/plugins">Plugins</Link>
+              </Button>
+            </>
+          )}
+          <Button asChild>
+            <Link to="/servers/new">Nouveau serveur</Link>
+          </Button>
+        </div>
+      </div>
+
+      {query.isLoading && <p className="mt-8 text-muted-foreground">Chargement…</p>}
+      {query.isError && (
+        <p className="mt-8 text-sm text-destructive">Erreur : {query.error.message}</p>
+      )}
+
+      {query.data && servers.length === 0 && (
+        <div className="mt-8 rounded-lg border p-8 text-center">
+          <p className="text-muted-foreground">Aucun serveur pour l'instant.</p>
+          <Button className="mt-4" asChild>
+            <Link to="/servers/new">Créer mon premier serveur</Link>
+          </Button>
+        </div>
+      )}
+
+      <div className="mt-8 space-y-3">
+        {servers.map((server) => (
+          <div
+            key={server.id}
+            className="flex items-center justify-between rounded-lg border p-4"
+          >
+            <div className="min-w-0">
+              <Link
+                to="/servers/$serverId"
+                params={{ serverId: server.id }}
+                className="font-semibold hover:underline"
+              >
+                {server.name}
+              </Link>
+              <p className="truncate text-sm text-muted-foreground">
+                {server.pluginName} · {server.nodeName}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span
+                className={
+                  server.status === 'running'
+                    ? 'text-sm text-green-600'
+                    : server.status === 'crashed'
+                      ? 'text-sm text-destructive'
+                      : 'text-sm text-muted-foreground'
+                }
+              >
+                {server.status}
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={remove.isPending}
+                onClick={() => {
+                  if (confirm(`Supprimer « ${server.name} » ? Le dossier sera effacé.`)) {
+                    remove.mutate(server.id);
+                  }
+                }}
+              >
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {remove.isError && (
+        <p className="mt-4 text-sm text-destructive">{remove.error.message}</p>
+      )}
+
+      <p className="mt-8">
+        <Button variant="ghost" asChild>
+          <Link to="/">← Retour à l'accueil</Link>
+        </Button>
       </p>
-      <Button variant="outline" asChild>
-        <Link to="/">Retour à l'accueil</Link>
-      </Button>
     </main>
   );
 }

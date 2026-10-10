@@ -245,14 +245,27 @@ mojito-panel/
 - [ ] Métriques : lecture conso RAM/CPU par serveur
 - [ ] Crash detection + auto-restart configurable
 
-### Phase 3 — Panel & liaison (2–4 semaines)
+### Phase 3 — Panel & liaison ✅ (V1)
 
-- [ ] CRUD nodes (génération token), plugins (upload JSON), serveurs
-- [ ] Installation d'un serveur : panel → agent (étapes + progression temps réel)
-- [ ] Console live dans le panel (WS, logs virtualisés avec @tanstack/react-virtual)
-- [ ] Start/stop/restart + envoi de commandes
-- [ ] Gestion des variables par serveur (formulaires auto-générés depuis le plugin)
-- [ ] MikroORM migrations pour les entités métier (node, plugin, server, server_allocation)
+- [x] CRUD nodes (génération token, affiché une seule fois à la création)
+- [x] CRUD plugins (import JSON validé par `parsePlugin` v2, refus si serveurs actifs)
+- [x] CRUD serveurs (création → install agent → DB ; suppression → agent + DB)
+- [x] Installation d'un serveur : panel → agent (`installDir` relatif au dataDir de l'agent)
+  — ⚠️ V1 synchrone sans progression live (WS : plus tard si besoin)
+- [x] Console live : **xterm.js** alimenté par polling des logs incrémentaux de l'agent
+  (`GET /servers/:id/logs?after=N`, toutes les 2 s) + envoi de commandes stdin
+  — (remplace le WS + react-virtual initialement prévus)
+- [x] Start/stop/restart/kill + envoi de commandes
+- [x] Gestion des variables par serveur : formulaires auto-générés depuis les
+  définitions du plugin (type number/boolean/options → champ adapté)
+- [x] Sync schéma des entités métier au boot (`orm.schema.update()`) — better-auth
+  migre ses tables séparément via son CLI (jamais sync MikroORM sur les tables auth)
+
+Notes d'implémentation :
+- Le panel stocke le token agent en clair dans la table node (nécessaire pour
+  appeler l'agent ; encryption au repos = plus tard).
+- Statut serveur : sync DB ← statut runtime de l'agent à chaque consultation.
+- Ownership : un user voit/gère ses serveurs ; l'admin voit tout et gère nodes/plugins.
 
 ### Phase 4 — SEA & distribution (1–2 semaines)
 

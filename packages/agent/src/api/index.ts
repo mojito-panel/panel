@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { rm } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
+import { isAbsolute, resolve, sep } from 'node:path';
 import type { AgentConfig } from '../config';
 import {
   installServerRequestSchema,
@@ -11,7 +11,7 @@ import {
   type HealthResponse,
 } from '@mojito/contract';
 import { runInstall } from '../runner';
-import { fromInstallRequest } from '../process/system-vars';
+import { buildSystemVariables } from '../process/system-vars';
 import { ProcessRegistry, PowerActionError } from '../process/registry';
 import { ServerStore } from '../process/store';
 import { toPanelStatus } from '../process/states';
@@ -95,11 +95,24 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       });
     }
 
+    // installDir : absolu tel quel, sinon résolu sous le dataDir de l'agent
+    // (le panel envoie typiquement "servers/<uuid>" — garantit que DELETE
+    // pourra supprimer le dossier sous notre périmètre)
+    const rawInstallDir = parsed.data.installDir;
+    const installDir = isAbsolute(rawInstallDir)
+      ? rawInstallDir
+      : resolve(config.dataDir, rawInstallDir);
+
     const result = await runInstall({
       plugin: pluginResult.data,
       variables: parsed.data.variables,
-      systemVariables: fromInstallRequest(parsed.data),
-      installDir: parsed.data.installDir,
+      systemVariables: buildSystemVariables(
+        parsed.data.serverId,
+        parsed.data.name,
+        installDir,
+        parsed.data.allocation,
+      ),
+      installDir,
       // Progression temps réel via WS : phase 3. Pour l'instant, l'appel est synchrone.
     });
 
@@ -113,7 +126,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       name: parsed.data.name,
       plugin: pluginResult.data,
       variables: parsed.data.variables,
-      installDir: parsed.data.installDir,
+      installDir,
       allocation: parsed.data.allocation,
       installedAt: new Date().toISOString(),
     });
@@ -185,6 +198,29 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       }
     },
   );
+
+  // ─── Logs incrémentaux (console live du panel) ─────────────────────────────
+  app.get<{
+    Params: { serverId: string };
+    Querystring: { after?: string };
+  }>('/servers/:serverId/logs', async (request, reply) => {
+    const { serverId } = request.params;
+    const stored = await store.get(serverId);
+    if (!stored) {
+      return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+    }
+
+    const after = Math.max(0, Number(request.query.after ?? 0) || 0);
+    const { lines, next } = registry.getLogsAfter(serverId, after);
+
+    return {
+      serverId,
+      lines,
+      next,
+      status: toPanelStatus(registry.getState(serverId), false),
+      runtimeState: registry.getState(serverId),
+    };
+  });
 
   // ─── Suppression d'un serveur (cleanup complet) ────────────────────────────
   app.delete<{ Params: { serverId: string } }>(

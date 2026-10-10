@@ -69,7 +69,9 @@ export const Node = defineEntity({
     id: p.string().primary(),
     name: p.string().length(128),
     fqdn: p.string().length(255),
-    agentTokenHash: p.text().fieldName('agent_token_hash'),
+    agentPort: p.integer().fieldName('agent_port').default(8080),
+    /** Token agent (Bearer) — envoyé à l'agent pour chaque requête. */
+    agentToken: p.text().fieldName('agent_token'),
     lastSeenAt: p.datetime().fieldName('last_seen_at').nullable(),
     status: p.string().default('unknown'),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),

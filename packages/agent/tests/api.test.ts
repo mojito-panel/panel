@@ -349,4 +349,60 @@ describe('Agent API — POST /servers/install', () => {
     expect(del.statusCode).toBe(200);
     expect(del.json().removed).toBe(true);
   });
+
+  it('GET /servers/:id/logs : 404 inconnu, lignes incrémentales après install', async () => {
+    const serverId = '550e8400-e29b-41d4-a716-446655440000';
+
+    // Serveur inconnu → 404
+    const unknown = await app.inject({
+      method: 'GET',
+      url: '/servers/660e8400-e29b-41d4-a716-446655440000/logs',
+      headers: auth,
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    // Installe
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody(),
+    });
+    expect(install.statusCode).toBe(200);
+
+    // Logs sans process → vide, next=0
+    const logs = await app.inject({
+      method: 'GET',
+      url: `/servers/${serverId}/logs?after=0`,
+      headers: auth,
+    });
+    expect(logs.statusCode).toBe(200);
+    expect(logs.json().lines).toEqual([]);
+    expect(logs.json().next).toBe(0);
+    expect(logs.json().status).toBe('stopped');
+  });
+
+  it('installDir relatif est résolu sous le dataDir de l agent', async () => {
+    // installBody envoie "servers/<uuid>" ? Non — ici on vérifie la résolution :
+    // un installDir relatif "rel-xyz" doit atterrir sous config.dataDir
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody({ installDir: 'rel-check' }),
+    });
+    expect(install.statusCode).toBe(200);
+
+    const { access } = await import('node:fs/promises');
+    await expect(access(join(config.dataDir, 'rel-check', 'marker.txt'))).resolves.toBeUndefined();
+
+    // Cleanup
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/servers/550e8400-e29b-41d4-a716-446655440000',
+      headers: auth,
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().removed).toBe(true); // sous dataDir → supprimé
+  });
 });

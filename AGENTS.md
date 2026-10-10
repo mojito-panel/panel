@@ -59,7 +59,9 @@ src/
 
 ### Règles
 
-- **Formulaires** : TanStack Form + Zod (`useForm` + `validators: { onChange: schema }`), mutations via `useMutation`. JAMAIS de `useState` pour les champs de formulaire. Schémas dans `src/validators/`, types `XxxDto = z.infer<...>`.
+- **Formulaires** : TanStack Form + Zod (`useForm` + `validators: { onChange: schema }`), mutations via `useMutation`. JAMAIS de `useState` pour les champs de formulaire. Schémas dans `src/validators/`, types `XxxDto = z.infer<...>`. Lecture réactive d'une valeur du form : `<form.Subscribe selector={(s) => s.values.x}>`, écriture : `form.setFieldValue`. Pas de `z.coerce`/`z.default()` dans les schémas de formulaires (incompatibles avec le typage Standard Schema de TanStack Form).
+- **Server functions** : dans `src/server/functions/`. Auth via `requireUser()`/`requireAdmin()` (`src/server/session.ts`), erreurs via `HttpError(status, message)`. Le client agent : `src/server/agent/client.ts` (fetch Bearer, erreurs `AgentError`). L'ORM s'obtient par `initOrm()` (lazy, sync le schéma métier au premier appel — ne touche JAMAIS les tables better-auth).
+- **Console** : xterm.js (`@xterm/xterm` + `@xterm/addon-fit`), imports dynamiques dans useEffect (SSR-safe), polling des logs incrémentaux de l'agent (cursor `after=N`).
 - **Types** : inférés des entités via `InferEntity` dans `db/types.ts` (préfixe `I` : `IUser`, `ISession`). PAS de types dupliqués à la main.
 - **Entités** : toutes dans `db/entities.ts` avec `defineEntity` + `p`. Champs snake_case en DB via `.fieldName()`, camelCase en TS.
 - **Session** : fetchée en SSR dans `beforeLoad` de `__root.tsx` via `queryClient.fetchQuery({ queryKey: ['auth'] })`. Après login/register/signOut : `queryClient.invalidateQueries({ queryKey: ['auth'] })`.

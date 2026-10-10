@@ -70,7 +70,8 @@ describe('MikroORM entities (SQLite in-memory)', () => {
       id: 'node-1',
       name: 'Windows-01',
       fqdn: 'node1.example.com',
-      agentTokenHash: 'abc123',
+      agentPort: 8080,
+      agentToken: 'secret-token-32-bytes-minimum',
       lastSeenAt: null,
       status: 'unknown',
       createdAt: new Date(),
@@ -81,6 +82,8 @@ describe('MikroORM entities (SQLite in-memory)', () => {
 
     const found = await em.findOne(Node, { fqdn: 'node1.example.com' });
     expect(found?.name).toBe('Windows-01');
+    expect(found?.agentPort).toBe(8080);
+    expect(found?.agentToken).toBe('secret-token-32-bytes-minimum');
   });
 
   it('crée un Plugin avec du JSON', async () => {

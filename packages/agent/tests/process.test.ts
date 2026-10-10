@@ -205,6 +205,44 @@ describe('ServerProcessManager', () => {
     expect(manager.getLogs().length).toBeLessThanOrEqual(1000);
     expect(manager.getLogs()[manager.getLogs().length - 1]).toBe('line-1499');
   });
+
+  it('getLogsAfter : logs incrémentaux avec index, gère la troncature du buffer', async () => {
+    const manager = new ServerProcessManager();
+
+    manager.spawn({
+      command: nodeCommand(
+        "for (let i = 0; i < 1500; i++) console.log('line-' + i); process.exit(0);",
+      ),
+      cwd: tmpRoot,
+      env: {},
+    });
+
+    await new Promise<void>((resolve) => {
+      const check = () => (manager.getState() === 'offline' ? resolve() : setTimeout(check, 50));
+      check();
+    });
+
+    // Buffer tronqué à 1000 : les 500 premières lignes sont perdues
+    const chunk = manager.getLogsAfter(0);
+    expect(chunk.next).toBe(1500);
+    expect(chunk.lines.length).toBe(1000);
+    expect(chunk.lines[0]).toBe('line-500');
+
+    // Incremental : après l'index 1490 → 10 dernières lignes
+    const tail = manager.getLogsAfter(1490);
+    expect(tail.next).toBe(1500);
+    expect(tail.lines.length).toBe(10);
+    expect(tail.lines[tail.lines.length - 1]).toBe('line-1499');
+
+    // Index à jour → rien de neuf
+    const none = manager.getLogsAfter(1500);
+    expect(none.lines).toEqual([]);
+    expect(none.next).toBe(1500);
+
+    // Index périmé (raté des lignes) → tout le buffer
+    const stale = manager.getLogsAfter(100);
+    expect(stale.lines.length).toBe(1000);
+  });
 });
 
 // ─── ServerStore ─────────────────────────────────────────────────────────────

@@ -45,6 +45,8 @@ export class ServerProcessManager {
   #state: ProcessState = 'offline';
   #stoppedVoluntarily = false;
   #logBuffer: string[] = [];
+  /** Index de la première ligne du buffer (décales quand le ring buffer tronque). */
+  #logStart = 0;
   #readyRegExp: RegExp | null = null;
   readonly #maxLogLines = 1000;
   readonly #events: ProcessEvents;
@@ -70,6 +72,18 @@ export class ServerProcessManager {
     return [...this.#logBuffer];
   }
 
+  /**
+   * Logs incrémentaux : lignes d'index > `after`.
+   * Si le ring buffer a tronqué des lignes demandées, renvoie tout le buffer.
+   */
+  getLogsAfter(after: number): { lines: string[]; next: number } {
+    const start = this.#logStart;
+    const next = start + this.#logBuffer.length;
+    if (after < start) return { lines: [...this.#logBuffer], next };
+    if (after >= next) return { lines: [], next };
+    return { lines: this.#logBuffer.slice(after - start), next };
+  }
+
   #setState(next: ProcessState): void {
     if (this.#state === next) return;
     this.#state = next;
@@ -79,7 +93,9 @@ export class ServerProcessManager {
   #pushLog(line: string, stream: 'stdout' | 'stderr'): void {
     this.#logBuffer.push(line);
     if (this.#logBuffer.length > this.#maxLogLines) {
-      this.#logBuffer.splice(0, this.#logBuffer.length - this.#maxLogLines);
+      const removed = this.#logBuffer.length - this.#maxLogLines;
+      this.#logBuffer.splice(0, removed);
+      this.#logStart += removed;
     }
     this.#events.onLog?.(line, stream);
   }
@@ -96,6 +112,7 @@ export class ServerProcessManager {
     this.#spawnConfig = config;
     this.#stoppedVoluntarily = false;
     this.#logBuffer = [];
+    this.#logStart = 0;
     this.#readyRegExp = config.readyPattern ? new RegExp(config.readyPattern) : null;
     this.#setState('starting');
 

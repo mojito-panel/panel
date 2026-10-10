@@ -1,4 +1,4 @@
-import type { InstallServerRequest, ServerAllocationPayload } from '@mojito/contract';
+import type { ServerAllocationPayload } from '@mojito/contract';
 import type { SystemVariables } from '../runner/templating';
 
 /**
@@ -19,14 +19,4 @@ export function buildSystemVariables(
     SERVER_IP: allocation.ip,
     SERVER_INSTALL_DIR: installDir,
   };
-}
-
-/** Surcharge pour une requête d'installation complète. */
-export function fromInstallRequest(request: InstallServerRequest): SystemVariables {
-  return buildSystemVariables(
-    request.serverId,
-    request.name,
-    request.installDir,
-    request.allocation,
-  );
 }

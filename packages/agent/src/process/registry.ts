@@ -112,6 +112,11 @@ export class ProcessRegistry {
     return this.#getEntry(serverId).manager.getLogs();
   }
 
+  /** Logs incrémentaux (console live du panel). */
+  getLogsAfter(serverId: string, after: number): { lines: string[]; next: number } {
+    return this.#getEntry(serverId).manager.getLogsAfter(after);
+  }
+
   isRunning(serverId: string): boolean {
     return this.#getEntry(serverId).manager.isAlive();
   }
