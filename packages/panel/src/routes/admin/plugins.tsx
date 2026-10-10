@@ -22,7 +22,7 @@ import {
   SheetDescription,
 } from '~/components/ui/sheet';
 
-export const Route = createFileRoute('/_app/admin/plugins')({
+export const Route = createFileRoute('/admin/plugins')({
   component: AdminPluginsPage,
 });
 

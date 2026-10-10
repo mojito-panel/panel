@@ -408,3 +408,158 @@ describe('Agent API — POST /servers/install', () => {
     expect(del.json().removed).toBe(true); // under dataDir → removed
   });
 });
+
+// ─── POST /servers/:serverId/reinstall route ─────────────────────────────────
+
+describe('Agent API — POST /servers/:serverId/reinstall', () => {
+  let app: FastifyInstance;
+  let tmpDir: string;
+  const auth = { authorization: `Bearer ${TEST_TOKEN}` };
+  const serverId = '550e8400-e29b-41d4-a716-446655440000';
+
+  const pluginWithContent = (content: string) => ({
+    schemaVersion: 2,
+    id: 'test-plugin',
+    name: 'Test',
+    author: 'moi',
+    variables: [{ env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 }],
+    install: [{ action: 'write', file: 'marker.txt', content }],
+    start: { command: 'echo {{SERVER_PORT}}' },
+  });
+
+  const installBody = (content: string) => ({
+    serverId,
+    name: 'mon-serveur',
+    plugin: pluginWithContent(content),
+    variables: {},
+    installDir: join(config.dataDir, 'srv'),
+    allocation: { port: 25565, memoryMb: 2048 },
+  });
+
+  const reinstallBody = (overrides: Record<string, unknown> = {}) => ({
+    plugin: pluginWithContent('reinstalled-port={{SERVER_PORT}}'),
+    variables: {},
+    ...overrides,
+  });
+
+  beforeAll(async () => {
+    app = createAgentServer(config);
+    await app.ready();
+    tmpDir = await mkdtemp(join(tmpdir(), 'mojito-api-'));
+  });
+
+  afterAll(async () => {
+    // Cleanup: delete the installed server
+    await app.inject({ method: 'DELETE', url: `/servers/${serverId}`, headers: auth });
+    await app.close();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('retourne 401 sans token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/reinstall`,
+      payload: reinstallBody(),
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('retourne 404 pour un serveur inconnu', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/660e8400-e29b-41d4-a716-446655440000/reinstall',
+      headers: auth,
+      payload: reinstallBody(),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('not_found');
+  });
+
+  it('retourne 400 si le plugin est invalide', async () => {
+    // Install first so the server is known (404 would mask the 400)
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody('port={{SERVER_PORT}}'),
+    });
+    expect(install.statusCode).toBe(200);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/reinstall`,
+      headers: auth,
+      payload: reinstallBody({ plugin: { foo: 'bar' } }),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Plugin invalide');
+  });
+
+  it('réinstalle : relance le runner dans le même dossier, statut stopped', async () => {
+    // Install v1 → marker = port=25565
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody('port={{SERVER_PORT}}'),
+    });
+    expect(install.statusCode).toBe(200);
+
+    const { readFile, rm: rmFile } = await import('node:fs/promises');
+    const markerPath = join(config.dataDir, 'srv', 'marker.txt');
+    expect(await readFile(markerPath, 'utf-8')).toBe('port=25565');
+
+    // Reinstall with a NEW plugin version (different install content)
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/reinstall`,
+      headers: auth,
+      payload: reinstallBody(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.serverId).toBe(serverId);
+    expect(body.status).toBe('stopped');
+
+    // The runner re-ran in the SAME installDir with the STORED allocation
+    expect(await readFile(markerPath, 'utf-8')).toBe('reinstalled-port=25565');
+
+    // The store kept the server (with the updated plugin)
+    const info = await app.inject({
+      method: 'GET',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(info.statusCode).toBe(200);
+    expect(info.json().status).toBe('stopped');
+
+    await rmFile(markerPath);
+  });
+
+  it('retourne 422 si une étape du runner échoue (état inchangé)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/reinstall`,
+      headers: auth,
+      payload: reinstallBody({
+        plugin: {
+          ...pluginWithContent('x'),
+          install: [
+            { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
+          ],
+        },
+      }),
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toContain('Étape 1');
+
+    // The server is still known and stopped (store untouched)
+    const info = await app.inject({
+      method: 'GET',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(info.statusCode).toBe(200);
+    expect(info.json().status).toBe('stopped');
+  });
+});

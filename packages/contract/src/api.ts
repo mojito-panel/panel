@@ -37,6 +37,20 @@ export const installServerRequestSchema = z.object({
 
 export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
 
+/**
+ * Reinstall — same semantics as Pelican: the agent stops the server (if
+ * running), then re-runs the plugin's install script in place. The panel
+ * sends the CURRENT plugin (an update may have changed the install script);
+ * the agent keeps its stored installDir and allocation.
+ */
+export const reinstallServerRequestSchema = z.object({
+  serverId: z.string().uuid(),
+  plugin: z.unknown(), // Plugin validated by the agent, passed as-is
+  variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+});
+
+export type ReinstallServerRequest = z.infer<typeof reinstallServerRequestSchema>;
+
 export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
 
 export type ServerAction = z.infer<typeof serverActionSchema>;
@@ -218,6 +232,7 @@ export type ConsoleServerMessage = z.infer<typeof consoleServerMessageSchema>;
 export const AGENT_ROUTES = {
   health: 'GET /health',
   install: 'POST /servers/install',
+  reinstall: 'POST /servers/:serverId/reinstall',
   action: 'POST /servers/:serverId/action',
   command: 'POST /servers/:serverId/command',
   info: 'GET /servers/:serverId',

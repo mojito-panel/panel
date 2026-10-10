@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { Server, Network, Puzzle, LogOut, LayoutDashboard } from 'lucide-react';
+import { Server, Shield, LogOut } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -17,13 +17,6 @@ import { useAuth } from '~/contexts/use-auth';
 /** Main menu. */
 const mainItems = [
   { title: 'Mes serveurs', url: '/servers', icon: Server },
-  { title: 'Dashboard', url: '/servers', icon: LayoutDashboard },
-];
-
-/** Admin menu — visible only for the admin role. */
-const adminItems = [
-  { title: 'Nodes', url: '/admin/nodes', icon: Network },
-  { title: 'Plugins', url: '/admin/plugins', icon: Puzzle },
 ];
 
 /**
@@ -76,16 +69,14 @@ export function AppSidebar() {
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {adminItems.map((item) => (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild tooltip={item.title}>
-                      <Link to={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Administration">
+                    <Link to="/admin/nodes">
+                      <Shield />
+                      <span>Administration</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

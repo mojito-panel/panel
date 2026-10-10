@@ -78,7 +78,7 @@ function ServersPage() {
           >
             <div className="min-w-0">
               <Link
-                to="/servers/$serverId"
+                to="/servers/$serverId/console"
                 params={{ serverId: server.id }}
                 className="font-semibold hover:underline"
               >

@@ -4,6 +4,7 @@ import { isAbsolute, resolve, sep } from 'node:path';
 import {
   installServerRequestSchema,
   pluginSchema,
+  reinstallServerRequestSchema,
   serverActionRequestSchema,
   sendCommandRequestSchema,
 } from '@mojito/contract';
@@ -93,6 +94,77 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       message: 'Installation terminée',
     };
   });
+
+  // ─── Server reinstall (re-run the plugin's install script in place) ────
+  app.post<{ Params: { serverId: string } }>(
+    '/servers/:serverId/reinstall',
+    async (request, reply) => {
+      const parsed = reinstallServerRequestSchema.safeParse({
+        serverId: request.params.serverId,
+        ...(request.body as object),
+      });
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'Requête invalide',
+          details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        });
+      }
+
+      // Fresh plugin from the panel (an update may have changed the script)
+      const pluginResult = pluginSchema.safeParse(parsed.data.plugin);
+      if (!pluginResult.success) {
+        return reply.code(400).send({
+          error: 'Plugin invalide',
+          details: pluginResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        });
+      }
+
+      const stored = await store.get(parsed.data.serverId);
+      if (!stored) {
+        return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+      }
+
+      // Pelican semantics: reinstall stops the server first
+      if (manager.isRunning(parsed.data.serverId)) {
+        try {
+          await manager.handlePowerAction(parsed.data.serverId, 'stop');
+        } catch (err) {
+          return powerErrorReply(err, reply);
+        }
+      }
+
+      // Re-run the install runner in the SAME directory with the SAME
+      // allocation (stored) but the LATEST plugin/variables
+      const result = await runInstall({
+        plugin: pluginResult.data,
+        variables: parsed.data.variables,
+        systemVariables: buildSystemVariables(
+          stored.serverId,
+          stored.name,
+          stored.installDir,
+          stored.allocation,
+        ),
+        installDir: stored.installDir,
+      });
+
+      if (!result.success) {
+        return reply.code(422).send({ error: result.error });
+      }
+
+      await store.save({
+        ...stored,
+        plugin: pluginResult.data,
+        variables: parsed.data.variables,
+        installedAt: new Date().toISOString(),
+      });
+
+      return {
+        serverId: parsed.data.serverId,
+        status: 'stopped',
+        message: 'Réinstallation terminée',
+      };
+    },
+  );
 
   // ─── List of installed servers ──────────────────────────────────────────
   app.get('/servers', async () => {

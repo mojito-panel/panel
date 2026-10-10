@@ -13,6 +13,7 @@ import {
   agentServerAction,
   agentSendCommand,
   agentDeleteServer,
+  agentReinstallServer,
   AgentError,
 } from '../agent/client';
 import {
@@ -221,6 +222,42 @@ export const serverActionFn = createServerFn({ method: 'POST' })
     } catch (err) {
       if (err instanceof AgentError) {
         throw new HttpError(502, `Action échouée côté agent : ${err.message}`);
+      }
+      throw err;
+    }
+  });
+
+// ─── Reinstall (stop + re-run the plugin's install script) ────────────────────
+
+export const reinstallServerFn = createServerFn({ method: 'POST' })
+  .validator(serverLogsQuerySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    // The CURRENT plugin is sent — an update of the plugin JSON is picked up
+    // on reinstall, like an egg update in Pelican.
+    const plugin = await em.findOne(Plugin, { id: server.pluginId });
+    if (!plugin) throw new HttpError(500, 'Plugin introuvable');
+
+    try {
+      const result = await agentReinstallServer(node, server.id, {
+        plugin: plugin.json,
+        variables: server.variables,
+      });
+      server.status = result.status as ServerStatusDb;
+      await em.flush();
+      return { id: server.id, status: result.status, message: result.message };
+    } catch (err) {
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Réinstallation échouée côté agent : ${err.message}`);
       }
       throw err;
     }

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
@@ -14,13 +14,12 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { XtermConsole } from '~/components/console/xterm-console';
 
-export const Route = createFileRoute('/_app/servers/$serverId')({
-  component: ServerDetailPage,
+export const Route = createFileRoute('/servers/$serverId/console')({
+  component: ServerConsolePage,
 });
 
-function ServerDetailPage() {
+function ServerConsolePage() {
   const { serverId } = Route.useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const getServer = useServerFn(getServerFn);
   const doAction = useServerFn(serverActionFn);
@@ -84,36 +83,13 @@ function ServerDetailPage() {
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl p-8">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{server?.name ?? '…'}</h1>
-          {server && (
-            <p className="text-muted-foreground">
-              {server.plugin.name} · {server.node.name} ({server.node.fqdn}) · port{' '}
-              {server.allocation?.port ?? '—'} · {server.allocation?.memoryMb ?? '—'} Mo
-            </p>
-          )}
-        </div>
-        <span
-          className={
-            server?.status === 'running'
-              ? 'rounded-full bg-green-100 px-3 py-1 text-sm text-green-700'
-              : server?.status === 'crashed'
-                ? 'rounded-full bg-red-100 px-3 py-1 text-sm text-red-700'
-                : 'rounded-full bg-muted px-3 py-1 text-sm text-muted-foreground'
-          }
-        >
-          {server?.status ?? '…'}
-        </span>
-      </div>
-
+    <main className="mx-auto max-w-4xl p-8">
       {query.isError && (
-        <p className="mt-4 text-sm text-destructive">Erreur : {query.error.message}</p>
+        <p className="mb-4 text-sm text-destructive">Erreur : {query.error.message}</p>
       )}
 
       {/* Power actions */}
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           onClick={() => runAction('start')}
           disabled={action.isPending || isRunning}
@@ -149,7 +125,7 @@ function ServerDetailPage() {
       )}
 
       {/* Console */}
-      <div className="mt-8">
+      <div className="mt-6">
         <XtermConsole
           serverId={serverId}
           isRunning={isRunning}
@@ -173,15 +149,6 @@ function ServerDetailPage() {
           <p className="mt-2 text-sm text-destructive">{submitCommand.error.message}</p>
         )}
       </div>
-
-      <p className="mt-8">
-        <Button
-          variant="ghost"
-          onClick={() => navigate({ to: '/servers' })}
-        >
-          ← Mes serveurs
-        </Button>
-      </p>
     </main>
   );
 }

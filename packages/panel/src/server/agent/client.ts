@@ -105,6 +105,30 @@ export async function agentGetServer(node: INode, serverId: string): Promise<Age
   return agentCall(node, `/servers/${serverId}`);
 }
 
+export interface AgentReinstallResponse {
+  serverId: string;
+  status: string;
+  message: string;
+}
+
+/**
+ * Reinstall — the agent stops the server then re-runs the plugin's install
+ * script (in place). The panel sends the CURRENT plugin + variables.
+ */
+export async function agentReinstallServer(
+  node: INode,
+  serverId: string,
+  body: {
+    plugin: unknown;
+    variables: Record<string, string | number | boolean>;
+  },
+): Promise<AgentReinstallResponse> {
+  return agentCall(node, `/servers/${serverId}/reinstall`, {
+    method: 'POST',
+    body: { plugin: body.plugin, variables: body.variables },
+  });
+}
+
 export async function agentGetServerLogs(
   node: INode,
   serverId: string,
