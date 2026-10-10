@@ -15,9 +15,19 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
 
     if (!session) return null;
 
+    // Mapping explicite vers le DTO sérialisable — pas de type entité brut
+    // (IUser/ISession portent des IndexHints non sérialisables de MikroORM).
     return {
-      user: session.user as AuthSession['user'],
-      session: session.session as AuthSession['session'],
+      user: {
+        id: session.user.id,
+        name: session.user.name ?? null,
+        email: session.user.email,
+        role: session.user.role ?? 'user',
+      },
+      session: {
+        id: session.session.id,
+        expiresAt: session.session.expiresAt,
+      },
     };
   },
 );

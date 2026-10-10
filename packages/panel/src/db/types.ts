@@ -24,9 +24,27 @@ export interface IServerAllocation extends InferEntity<typeof ServerAllocation> 
 export type NodeStatus = INode['status'];
 export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';
 
-// ─── Session better-auth (user + session) ────────────────────────────────────
+// ─── Session better-auth (DTO sérialisables) ──────────────────────────────────
+
+/**
+ * Versions sérialisables de l'utilisateur et de la session — seules à traverser
+ * la frontière client (beforeLoad SSR, server functions). Les types entités
+ * MikroORM (IUser/ISession) portent des IndexHints non sérialisables et restent
+ * réservés à l'usage interne serveur.
+ */
+export interface SessionUser {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+}
+
+export interface SessionInfo {
+  id: string;
+  expiresAt: Date;
+}
 
 export interface AuthSession {
-  user: IUser;
-  session: ISession;
+  user: SessionUser;
+  session: SessionInfo;
 }

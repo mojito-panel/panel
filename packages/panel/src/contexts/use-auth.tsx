@@ -3,11 +3,11 @@ import { useMutation, type UseMutationResult, useQueryClient } from '@tanstack/r
 import { useRouter } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { signOutFn } from '~/server/functions/auth';
-import type { ISession, IUser } from '~/db/types';
+import type { SessionInfo, SessionUser } from '~/db/types';
 
 interface AuthContextState {
-  user: IUser | null;
-  session: ISession | null;
+  user: SessionUser | null;
+  session: SessionInfo | null;
   useSignOut: () => UseMutationResult<void, Error, void, unknown>;
 }
 
@@ -15,8 +15,8 @@ export const AuthContext = createContext({} as AuthContextState);
 
 interface AuthProviderProps {
   children: ReactNode;
-  user: IUser | null;
-  session: ISession | null;
+  user: SessionUser | null;
+  session: SessionInfo | null;
 }
 
 export const AuthProvider = ({ children, user, session }: AuthProviderProps) => {
