@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
 import { getAdminOverviewFn } from '~/server/functions/admin';
+import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import {
   Card,
@@ -16,19 +17,6 @@ import {
 export const Route = createFileRoute('/admin/')({
   component: AdminOverviewPage,
 });
-
-/** Small status badge (green / red / blue / gray — palette of the console). */
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === 'running' || status === 'online'
-      ? 'bg-green-100 text-green-700'
-      : status === 'crashed' || status === 'install_failed' || status === 'offline'
-        ? 'bg-red-100 text-red-700'
-        : status === 'installing'
-          ? 'bg-blue-100 text-blue-700'
-          : 'bg-muted text-muted-foreground';
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
-}
 
 function StatCard({
   label,

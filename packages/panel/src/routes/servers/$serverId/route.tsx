@@ -4,6 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { ServerSidebar, type PanelServerStatus } from '~/components/server-sidebar';
+import { StatusBadge } from '~/components/status-badge';
 import { AppShell } from '~/components/app-shell';
 import { getServerFn } from '~/server/functions/servers';
 
@@ -43,19 +44,7 @@ function ServerLayout() {
           header={
             <>
               <span className="text-sm font-medium">{server?.name ?? '…'}</span>
-              {status && (
-                <span
-                  className={
-                    status === 'running'
-                      ? 'rounded-full bg-green-100 px-3 py-1 text-xs text-green-700'
-                      : status === 'crashed' || status === 'install_failed'
-                        ? 'rounded-full bg-red-100 px-3 py-1 text-xs text-red-700'
-                        : 'rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground'
-                  }
-                >
-                  {status}
-                </span>
-              )}
+              {status && <StatusBadge status={status} />}
             </>
           }
         >

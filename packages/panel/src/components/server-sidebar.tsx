@@ -15,6 +15,7 @@ import type { ServerStatus } from '@mojito/contract';
 
 /** Panel-side status (contract status + the install_failed state). */
 export type PanelServerStatus = ServerStatus | 'install_failed';
+import { StatusBall, statusLabel } from '~/components/status-badge';
 import {
   Sidebar,
   SidebarContent,
@@ -43,18 +44,7 @@ const serverItems = [
   { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: true },
 ] as const;
 
-/** Status dot colors (same palette as the console header badge). */
-function statusClass(status: PanelServerStatus | undefined): string {
-  switch (status) {
-    case 'running':
-      return 'bg-green-500';
-    case 'crashed':
-    case 'install_failed':
-      return 'bg-destructive';
-    default:
-      return 'bg-muted-foreground';
-  }
-}
+/** Status badge colors are centralized in status-badge.tsx. */
 
 interface ServerSidebarProps {
   name?: string;
@@ -82,8 +72,8 @@ export function ServerSidebar({ name, status }: ServerSidebarProps) {
                 <div className="flex min-w-0 flex-col gap-0.5 leading-none">
                   <span className="truncate font-semibold">{name ?? '…'}</span>
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className={`size-2 shrink-0 rounded-full ${statusClass(status)}`} />
-                    {status ?? '…'}
+                    <StatusBall status={status ?? 'unknown'} />
+                    {status ? statusLabel(status) : '…'}
                   </span>
                 </div>
               </Link>

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Plus, Trash2 } from 'lucide-react';
 import { listServersFn, deleteServerFn } from '~/server/functions/servers';
+import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import { useAuth } from '~/contexts/use-auth';
 
@@ -96,17 +97,7 @@ function ServersPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <span
-                className={
-                  server.status === 'running'
-                    ? 'text-sm text-green-600'
-                    : server.status === 'crashed' || server.status === 'install_failed'
-                      ? 'text-sm text-destructive'
-                      : 'text-sm text-muted-foreground'
-                }
-              >
-                {server.status}
-              </span>
+              <StatusBadge status={server.status} />
               <Button
                 variant="destructive"
                 size="sm"
