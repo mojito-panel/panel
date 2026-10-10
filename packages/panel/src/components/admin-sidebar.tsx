@@ -35,7 +35,7 @@ const adminItems = [
   { title: 'Utilisateurs', url: '/admin/users', icon: Users, soon: true },
   { title: 'API', url: '/admin/api', icon: KeyRound, soon: true },
   { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: true },
-  { title: 'Santé', url: '/admin/health', icon: HeartPulse, soon: true },
+  { title: 'Santé', url: '/admin/health', icon: HeartPulse, soon: false },
 ] as const;
 
 /**

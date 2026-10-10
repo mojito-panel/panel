@@ -1,5 +1,11 @@
 import type { INode } from '~/db/types';
-import type { HealthResponse, InstallStatus, ServerAction, FileObject } from '@mojito/contract';
+import type {
+  HealthResponse,
+  InstallStatus,
+  NodeStats,
+  ServerAction,
+  FileObject,
+} from '@mojito/contract';
 import { decryptSecret } from '../crypto';
 
 /**
@@ -91,6 +97,14 @@ export async function agentHealth(
   options: { signal?: AbortSignal } = {},
 ): Promise<HealthResponse> {
   return agentCall(node, '/health', options);
+}
+
+/** Node system snapshot (CPU/RAM/disk) — the caller measures the round-trip as latency. */
+export async function agentGetStats(
+  node: INode,
+  options: { signal?: AbortSignal } = {},
+): Promise<NodeStats> {
+  return agentCall(node, '/stats', options);
 }
 
 export async function agentInstallServer(

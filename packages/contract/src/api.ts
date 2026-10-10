@@ -277,6 +277,90 @@ export type ConsoleServerMessage = z.infer<typeof consoleServerMessageSchema>;
 /** install-status WS payload (console page banner). */
 export type ConsoleInstallStatus = Extract<ConsoleServerMessage, { type: 'install-status' }>;
 
+// ─── Node health (admin dashboard) ───────────────────────────────────────────
+
+/**
+ * System metrics of a NODE (the agent's host), pushed live to the admin
+ * health page. Nothing is persisted — the panel and the agent both treat
+ * these as ephemeral samples (Pelican semantics: health = last poll/push).
+ */
+export const nodeStatsSchema = z.object({
+  timestamp: z.string().datetime(),
+  /** Host-wide CPU usage, 0-100 (delta of os.cpus() idle vs total). */
+  cpuPercent: z.number().min(0).max(100),
+  memoryUsedMb: z.number().nonnegative(),
+  memoryTotalMb: z.number().positive(),
+  /** Disk of the agent's dataDir — null when statfs fails (network drive…). */
+  diskUsedGb: z.number().nonnegative().nullable(),
+  diskTotalGb: z.number().positive().nullable(),
+  /** Agent process uptime. */
+  uptimeSeconds: z.number().int().nonnegative(),
+  version: z.string(),
+  /** Number of game servers currently running on the node. */
+  serversRunning: z.number().int().nonnegative(),
+});
+
+export type NodeStats = z.infer<typeof nodeStatsSchema>;
+
+/**
+ * Stats push cadence on the health WS — also the CPU measurement window.
+ * Exported so the browser can match its chart animation to the frame rate.
+ */
+export const HEALTH_STATS_INTERVAL_MS = 1000;
+
+/** TTL of a health JWT, in seconds — refreshed in-place by re-sending `auth`. */
+export const HEALTH_TOKEN_TTL_SECONDS = 300;
+
+/**
+ * Payload of the health JWT (HS256, signed by the panel with the node's agent
+ * token — same single per-node secret as the console JWT). Read-only scope:
+ * no permissions to gate, the agent only ever PUSHES stats on this socket.
+ */
+export const healthTokenPayloadSchema = z.object({
+  iss: z.literal('mojito-panel'),
+  aud: z.literal('mojito-agent'),
+  sub: z.string().min(1), // user id
+  scope: z.literal('health'),
+  iat: z.number().int().nonnegative(),
+  exp: z.number().int().positive(),
+  jti: z.string().min(1),
+});
+
+export type HealthTokenPayload = z.infer<typeof healthTokenPayloadSchema>;
+
+/** Browser → agent (health WS). Same Pelican-style handshake as the console. */
+export const healthClientMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('auth'),
+    token: z.string().min(1).max(4096),
+  }),
+]);
+
+export type HealthClientMessage = z.infer<typeof healthClientMessageSchema>;
+
+export const healthErrorSchema = z.enum(['unauthorized', 'invalid-message']);
+
+export type HealthError = z.infer<typeof healthErrorSchema>;
+
+/** Agent → browser (health WS). */
+export const healthServerMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('auth-ok') }),
+  z.object({ type: z.literal('stats'), stats: nodeStatsSchema }),
+  z.object({ type: z.literal('error'), code: healthErrorSchema }),
+]);
+
+export type HealthServerMessage = z.infer<typeof healthServerMessageSchema>;
+
+/** Panel → browser response for "give me a node health token". */
+export const healthTokenResponseSchema = z.object({
+  token: z.string().min(1),
+  wsUrl: z.string().min(1),
+  /** Unix ms — the client refreshes by re-sending `auth` before this. */
+  expiresAt: z.number().int().positive(),
+});
+
+export type HealthTokenResponse = z.infer<typeof healthTokenResponseSchema>;
+
 // ─── File browser (panel → agent, panel proxies everything) ──────────────────
 
 /**
@@ -379,4 +463,8 @@ export const AGENT_ROUTES = {
   fileUpload: 'POST /servers/:serverId/files/upload',
   /** Browser-facing console socket — auth by console JWT (?token=), NOT the panel token. */
   consoleWs: 'GET /servers/:serverId/ws',
+  /** Node system snapshot (panel token) — latency measurement + one-shot health. */
+  stats: 'GET /stats',
+  /** Browser-facing node health socket — auth by health JWT, NOT the panel token. */
+  healthWs: 'GET /health/ws',
 } as const;

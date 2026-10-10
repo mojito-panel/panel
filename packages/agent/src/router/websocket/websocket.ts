@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import {
   consoleClientMessageSchema,
@@ -12,6 +12,7 @@ import type { InstallRegistry } from '../../server/installer/registry';
 import { toPanelStatus } from '../../environment/states';
 import { verifyConsoleToken, CLOCK_SKEW_SECONDS } from '../tokens/parser';
 import { hasConsolePermission } from '../tokens/websocket';
+import { makeOriginGate } from './origin';
 
 /**
  * Browser-facing console WebSocket (Pelican-style direct user ↔ agent socket).
@@ -50,23 +51,8 @@ export interface ConsoleWsOptions {
 }
 
 function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): void {
-  const { config } = options;
-
-  // Origins allowed to open the socket (the panel itself + extra origins)
-  const allowedOrigins = new Set(config.allowedOrigins);
-  if (config.panelUrl) allowedOrigins.add(config.panelUrl);
-
-  /**
-   * Origin gate — like wings' websocket upgrader CheckOrigin:
-   * a missing or unknown origin (i.e. not the panel) is rejected before
-   * the console JWT is even considered.
-   */
-  const checkOrigin = async (request: FastifyRequest, reply: FastifyReply) => {
-    const origin = request.headers.origin;
-    if (!origin || !allowedOrigins.has(origin)) {
-      return reply.code(403).send({ error: 'Origin non autorisée' });
-    }
-  };
+  // Origin gate — shared with the health WS (see websocket/origin.ts)
+  const checkOrigin = makeOriginGate(options.config);
 
   app.get<{ Params: { serverId: string } }>(
     '/servers/:serverId/ws',
@@ -133,7 +119,7 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
     /** Full token check: signature, aud, scope, exp, serverId match. */
     const authenticate = (token: string): ConsoleTokenPayload | null => {
       try {
-        return verifyConsoleToken(token, config.token, { serverId });
+        return verifyConsoleToken(token, options.config.token, { serverId });
       } catch {
         return null; // no distinction invalid/expired client-side — do not leak details
       }

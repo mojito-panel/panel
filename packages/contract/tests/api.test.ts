@@ -17,6 +17,10 @@ import {
   consoleServerMessageSchema,
   consoleErrorSchema,
   installStatusSchema,
+  nodeStatsSchema,
+  HEALTH_TOKEN_TTL_SECONDS,
+  healthTokenPayloadSchema,
+  healthServerMessageSchema,
   AGENT_ROUTES,
 } from '../src/api';
 
@@ -457,5 +461,99 @@ describe('AGENT_ROUTES', () => {
   it('expose la route de statut d’installation', () => {
     expect(AGENT_ROUTES.installStatus).toBe('GET /servers/:serverId/install');
     expect(AGENT_ROUTES.reinstall).toBe('POST /servers/:serverId/reinstall');
+  });
+});
+
+// ─── Node health (admin dashboard) ───────────────────────────────────────────
+
+describe('nodeStatsSchema', () => {
+  const valid = {
+    timestamp: new Date().toISOString(),
+    cpuPercent: 12.5,
+    memoryUsedMb: 4096,
+    memoryTotalMb: 16384,
+    diskUsedGb: 250.5,
+    diskTotalGb: 512,
+    uptimeSeconds: 3600,
+    version: '0.1.0',
+    serversRunning: 3,
+  };
+
+  it('valide des stats de node correctes', () => {
+    expect(nodeStatsSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('accepte un disque indisponible (null)', () => {
+    expect(
+      nodeStatsSchema.safeParse({ ...valid, diskUsedGb: null, diskTotalGb: null }).success,
+    ).toBe(true);
+  });
+
+  it('rejette un cpuPercent hors bornes', () => {
+    expect(nodeStatsSchema.safeParse({ ...valid, cpuPercent: 120 }).success).toBe(false);
+  });
+
+  it('rejette une mémoire totale nulle', () => {
+    expect(nodeStatsSchema.safeParse({ ...valid, memoryTotalMb: 0 }).success).toBe(false);
+  });
+});
+
+describe('healthTokenPayloadSchema', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const valid = {
+    iss: 'mojito-panel',
+    aud: 'mojito-agent',
+    sub: 'user_1',
+    scope: 'health',
+    iat: now,
+    exp: now + HEALTH_TOKEN_TTL_SECONDS,
+    jti: 'tok_health_test',
+  };
+
+  it('valide un payload health correct', () => {
+    expect(healthTokenPayloadSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejette le scope console (scopes distincts)', () => {
+    expect(healthTokenPayloadSchema.safeParse({ ...valid, scope: 'websocket' }).success).toBe(
+      false,
+    );
+  });
+
+  it('rejette un payload sans jti', () => {
+    const { jti: _jti, ...withoutJti } = valid;
+    expect(healthTokenPayloadSchema.safeParse(withoutJti).success).toBe(false);
+  });
+});
+
+describe('healthServerMessageSchema', () => {
+  it('valide une frame stats', () => {
+    const result = healthServerMessageSchema.safeParse({
+      type: 'stats',
+      stats: {
+        timestamp: new Date().toISOString(),
+        cpuPercent: 5,
+        memoryUsedMb: 1000,
+        memoryTotalMb: 2000,
+        diskUsedGb: null,
+        diskTotalGb: null,
+        uptimeSeconds: 10,
+        version: '0.1.0',
+        serversRunning: 0,
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('valide auth-ok et rejette un type inconnu', () => {
+    expect(healthServerMessageSchema.safeParse({ type: 'auth-ok' }).success).toBe(true);
+    expect(healthServerMessageSchema.safeParse({ type: 'log', lines: [] }).success).toBe(false);
+  });
+});
+
+describe('AGENT_ROUTES — santé', () => {
+  it('expose les routes stats et health WS', () => {
+    expect(AGENT_ROUTES.stats).toBe('GET /stats');
+    expect(AGENT_ROUTES.healthWs).toBe('GET /health/ws');
   });
 });

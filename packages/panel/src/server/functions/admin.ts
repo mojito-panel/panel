@@ -6,8 +6,9 @@ import { initOrm } from '~/db';
 import { Node, Plugin, Server, User } from '~/db/entities';
 import { parsePlugin, type Plugin as PluginDefinition } from '@mojito/contract';
 import { requireUser, requireAdmin, HttpError } from '../session';
-import { encryptSecret } from '../crypto';
-import { agentHealth } from '../agent/client';
+import { encryptSecret, decryptSecret } from '../crypto';
+import { agentHealth, agentGetStats } from '../agent/client';
+import { signHealthToken } from '../jwt';
 import { createNodeSchema, deleteNodeSchema } from '~/validators/node';
 import {
   importPluginsSchema,
@@ -441,3 +442,79 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
     recentServers,
   };
 });
+
+// ─── Health (admin dashboard) ────────────────────────────────────────────────
+
+/**
+ * Node health list — per node: measured latency (round-trip of the REST
+ * /stats snapshot) + the snapshot itself. The live graphs are NOT here: the
+ * browser opens a DIRECT WS to each agent (see /admin/health) and the panel
+ * stays out of the loop (Pelican PR #2558 semantics).
+ */
+export const getHealthNodesFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAdmin();
+  const orm = await initOrm();
+  const em = orm.em.fork();
+  const nodes = await em.find(Node, {});
+
+  // Parallel ping — an offline node must not slow the page down
+  const pings = await Promise.allSettled(
+    nodes.map(async (node) => {
+      const startedAt = Date.now();
+      const stats = await agentGetStats(node, {
+        signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS),
+      });
+      return { stats, latencyMs: Date.now() - startedAt };
+    }),
+  );
+
+  const now = new Date();
+  nodes.forEach((node, index) => {
+    const ping = pings[index];
+    if (ping.status === 'fulfilled') {
+      node.status = 'online';
+      node.lastSeenAt = now;
+    } else {
+      node.status = 'offline';
+    }
+  });
+  if (nodes.length > 0) await em.flush();
+
+  return nodes.map((node, index) => ({
+    id: node.id,
+    name: node.name,
+    fqdn: node.fqdn,
+    agentPort: node.agentPort,
+    // Just set above by the ping — typed for the health page's DTO
+    status: node.status as 'online' | 'offline' | 'unknown',
+    lastSeenAt: node.lastSeenAt ?? null,
+    latencyMs: pings[index].status === 'fulfilled' ? pings[index].value.latencyMs : null,
+    snapshot: pings[index].status === 'fulfilled' ? pings[index].value.stats : null,
+  }));
+});
+
+/**
+ * Health WS token (browser ↔ agent direct socket) — same Pelican-style
+ * flow as the console token: short-lived JWT signed with the node's OWN
+ * agent token, refreshed in-place by re-sending `auth` before expiry.
+ */
+export const createNodeHealthTokenFn = createServerFn({ method: 'POST' })
+  .validator(deleteNodeSchema) // { nodeId } — same shape as the other node fns
+  .handler(async ({ data }) => {
+    const user = await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+    const node = await em.findOne(Node, { id: data.nodeId });
+    if (!node) throw new HttpError(404, 'Node introuvable');
+
+    const { token, expiresAt } = signHealthToken(
+      { userId: user.id },
+      decryptSecret(node.agentToken),
+    );
+
+    return {
+      token,
+      expiresAt,
+      wsUrl: `ws://${node.fqdn}:${node.agentPort}/health/ws`,
+    };
+  });
