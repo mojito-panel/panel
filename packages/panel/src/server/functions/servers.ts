@@ -4,6 +4,7 @@ import { initOrm } from '~/db';
 import { Node, Plugin, Server, ServerAllocation } from '~/db/entities';
 import type { Plugin as PluginContract } from '@mojito/contract';
 import { requireUser, HttpError } from '../session';
+import { signConsoleToken, getJwtSecret } from '../jwt';
 import {
   agentInstallServer,
   agentGetServer,
@@ -276,6 +277,36 @@ export const getServerLogsFn = createServerFn({ method: 'GET' })
       }
       throw err;
     }
+  });
+
+// ─── Console token (JWT for the browser ↔ agent direct WS) ──────────────────
+
+export const createConsoleTokenFn = createServerFn({ method: 'POST' })
+  .validator(serverLogsQuerySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+    const orm = await initOrm();
+    const em = orm.em.fork();
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    // Short-lived JWT — the agent validates signature/aud/exp/serverId and
+    // gates every console action on the permissions carried in the payload.
+    // V1: no invitations — owner/admin gets every permission.
+    const { token } = signConsoleToken(
+      { userId: user.id, serverId: server.id },
+      getJwtSecret(),
+    );
+
+    return {
+      token,
+      wsUrl: `ws://${node.fqdn}:${node.agentPort}/servers/${server.id}/ws`,
+    };
   });
 
 // ─── Deletion ──────────────────────────────────────────────────────────────
