@@ -4,7 +4,8 @@ import { initOrm } from '~/db';
 import { Node, Plugin, Server, ServerAllocation } from '~/db/entities';
 import type { Plugin as PluginContract } from '@mojito/contract';
 import { requireUser, HttpError } from '../session';
-import { signConsoleToken, getJwtSecret } from '../jwt';
+import { signConsoleToken } from '../jwt';
+import { decryptSecret } from '../crypto';
 import {
   agentInstallServer,
   agentGetServer,
@@ -295,12 +296,13 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
     const node = await em.findOne(Node, { id: server.nodeId });
     if (!node) throw new HttpError(500, 'Node introuvable');
 
-    // Short-lived JWT — the agent validates signature/aud/exp/serverId and
-    // gates every console action on the permissions carried in the payload.
-    // V1: no invitations — owner/admin gets every permission.
+    // Short-lived JWT — the agent validates signature/aud/scope/exp/serverId
+    // and gates every console action on the permissions carried in the payload.
+    // Pelican-style: signed with the node's OWN agent token (single per-node
+    // secret). V1: no invitations — owner/admin gets every permission.
     const { token } = signConsoleToken(
       { userId: user.id, serverId: server.id },
-      getJwtSecret(),
+      decryptSecret(node.agentToken),
     );
 
     return {

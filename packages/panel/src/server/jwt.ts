@@ -10,8 +10,10 @@ import {
 /**
  * Console JWT signing (panel side) — HS256 with node:crypto only.
  * MUST stay symmetric with the agent's `verifyConsoleToken`
- * (packages/agent/src/api/jwt.ts): same header shape, same secret.
- * The token is short-lived and NEVER logged.
+ * (packages/agent/src/api/jwt.ts): same header shape.
+ * Pelican-style: the signing key is the node's OWN agent token — no separate
+ * shared secret. The token never leaves the panel DB in clear (encrypted at
+ * rest) and is NEVER logged.
  */
 
 function signPayload(payload: ConsoleTokenPayload, secret: string): string {
@@ -42,18 +44,10 @@ export function signConsoleToken(
     sub: input.userId,
     serverId: input.serverId,
     permissions: input.permissions ?? ALL_PERMISSIONS,
+    scope: 'websocket',
     iat,
     exp: iat + CONSOLE_TOKEN_TTL_SECONDS,
     jti: randomUUID(),
   });
   return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };
-}
-
-/** Reads PANEL_JWT_SECRET — must be identical to the agent's AGENT_JWT_SECRET. */
-export function getJwtSecret(): string {
-  const secret = process.env.PANEL_JWT_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error('PANEL_JWT_SECRET manquant ou trop court (32+ caractères requis)');
-  }
-  return secret;
 }

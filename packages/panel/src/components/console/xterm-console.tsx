@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
-import type { ConsoleClientMessage, ConsoleServerMessage } from '@mojito/contract';
+import {
+  CONSOLE_TOKEN_TTL_SECONDS,
+  type ConsoleClientMessage,
+  type ConsoleServerMessage,
+} from '@mojito/contract';
 import { getServerLogsFn, createConsoleTokenFn } from '~/server/functions/servers';
 
 interface XtermConsoleProps {
   serverId: string;
   isRunning: boolean;
   /**
-   * Called when the direct agent WS connects/disconnects.
+   * Called when the direct agent WS authenticates/disconnects.
    * Non-null = live WS sender usable for console commands/power (bypasses the
    * panel); null = fall back to the panel server functions.
    */
@@ -20,13 +24,17 @@ interface XtermConsoleProps {
 const WS_MAX_ATTEMPTS = 3;
 /** Reconnect backoff cap (ms). */
 const WS_BACKOFF_CAP_MS = 5000;
+/** Refresh the console token this long before its expiry (Pelican-style re-auth). */
+const TOKEN_REFRESH_MARGIN_SECONDS = 60;
 
 /**
  * Live server console (xterm.js), fed by a DIRECT WebSocket to the agent
  * (Pelican-style): the panel issues a short-lived console JWT, the browser
- * opens `ws://agent/servers/:id/ws?token=<jwt>` and streams logs.
- * Fallback: if the WS cannot be established (proxy without WS, old agent),
- * degrade to the polling of incremental logs (GET /servers/:id/logs?after=N).
+ * opens `ws://agent/servers/:id/ws` UNauthenticated and sends the JWT as the
+ * first `auth` message (never in the URL). The token is refreshed in-place by
+ * re-sending `auth` before it expires.
+ * Fallback: if the WS cannot be established (proxy without WS, old agent,
+ * origin refused), degrade to the polling of incremental logs.
  * The terminal is created dynamically in a useEffect (SSR-safe).
  */
 export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: XtermConsoleProps) {
@@ -51,9 +59,11 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
     let term: import('@xterm/xterm').Terminal | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let fitRaf: number | null = null;
     let socket: WebSocket | null = null;
+    let currentToken: string | null = null;
 
     // ─── Polling fallback (agent incremental logs) ────────────────────────
     const startPolling = () => {
@@ -86,14 +96,37 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
       onConnectionRef.current?.(send);
     };
 
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(
+        () => {
+          void (async () => {
+            try {
+              // Fresh token before expiry — Pelican-style in-place re-auth
+              const fresh = await createToken({ data: { serverId, after: 0 } });
+              if (disposed || !socket || socket.readyState !== WebSocket.OPEN) return;
+              currentToken = fresh.token;
+              socket.send(JSON.stringify({ type: 'auth', token: fresh.token }));
+            } catch {
+              // Panel unreachable — the connection will drop and reconnect
+            } finally {
+              if (!disposed) scheduleRefresh();
+            }
+          })();
+        },
+        Math.max(1, CONSOLE_TOKEN_TTL_SECONDS - TOKEN_REFRESH_MARGIN_SECONDS) * 1000,
+      );
+    };
+
     const connect = async (attempt: number) => {
       if (disposed) return;
 
       // Fresh token at every attempt (short TTL — never reuse an old one)
-      let token: string;
       let wsUrl: string;
       try {
-        ({ token, wsUrl } = await createToken({ data: { serverId, after: 0 } }));
+        const response = await createToken({ data: { serverId, after: 0 } });
+        wsUrl = response.wsUrl;
+        currentToken = response.token;
       } catch {
         // Panel unreachable / ownership refused → degrade to polling
         if (attempt >= WS_MAX_ATTEMPTS - 1) return startPolling();
@@ -103,20 +136,28 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
       if (disposed) return;
 
       let authenticated = false;
-      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
+      const ws = new WebSocket(wsUrl); // unauthenticated — the JWT travels as the first message
       socket = ws;
+
+      ws.onopen = () => {
+        if (disposed || !currentToken) return;
+        ws.send(JSON.stringify({ type: 'auth', token: currentToken }));
+      };
 
       ws.onmessage = (event) => {
         if (disposed) return;
         const message = JSON.parse(event.data.toString()) as ConsoleServerMessage;
         if (message.type === 'auth-ok') {
-          authenticated = true;
-          setMode('ws');
-          notifyConnection((clientMessage) => {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify(clientMessage));
-            }
-          });
+          if (!authenticated) {
+            authenticated = true;
+            setMode('ws');
+            notifyConnection((clientMessage) => {
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify(clientMessage));
+              }
+            });
+            scheduleRefresh();
+          }
           return;
         }
         if (message.type === 'log') {
@@ -130,17 +171,36 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
           return;
         }
         if (message.type === 'error') {
+          if (message.code === 'unauthorized' && currentToken && !disposed) {
+            // Token expired/refresh failed — re-auth in place with a fresh one
+            void (async () => {
+              try {
+                const fresh = await createToken({ data: { serverId, after: 0 } });
+                currentToken = fresh.token;
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type: 'auth', token: fresh.token }));
+                }
+              } catch {
+                // The connection will drop and reconnect
+              }
+            })();
+            return;
+          }
           term?.writeln(`\x1b[31m[${message.code}]\x1b[0m`);
         }
       };
 
       ws.onclose = () => {
         if (socket === ws) socket = null;
+        if (refreshTimer) {
+          clearTimeout(refreshTimer);
+          refreshTimer = null;
+        }
         notifyConnection(null);
         if (disposed) return;
 
         if (!authenticated && attempt >= WS_MAX_ATTEMPTS - 1) {
-          // WS not usable at all — degrade to polling, not an error
+          // WS not usable at all (origin refused, proxy without WS…) — degrade
           startPolling();
           return;
         }
@@ -201,6 +261,7 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
       disposed = true;
       if (pollTimer) clearInterval(pollTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (refreshTimer) clearTimeout(refreshTimer);
       if (resizeObserver) resizeObserver.disconnect();
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);
       socket?.close();

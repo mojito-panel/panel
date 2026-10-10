@@ -1,9 +1,12 @@
 import type { INode } from '~/db/types';
 import type { ServerAction } from '@mojito/contract';
+import { decryptSecret } from '../crypto';
 
 /**
  * Panel-to-agent HTTP client (Bearer token).
  * V1: http — HTTPS (even self-signed) to be wired in prod.
+ * The node's agent token is stored encrypted at rest — it is decrypted here
+ * on each call and never cached or logged.
  */
 
 interface AgentCallOptions {
@@ -32,7 +35,7 @@ async function agentCall<T>(
   const response = await fetch(`${baseUrl(node)}${path}`, {
     method: options.method ?? 'GET',
     headers: {
-      authorization: `Bearer ${node.agentToken}`,
+      authorization: `Bearer ${decryptSecret(node.agentToken)}`,
       ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

@@ -6,7 +6,7 @@ import {
   CONSOLE_TOKEN_TTL_SECONDS,
   consoleTokenPayloadSchema,
 } from '@mojito/contract';
-import { signConsoleToken, getJwtSecret } from '../src/server/jwt';
+import { signConsoleToken } from '../src/server/jwt';
 
 const SECRET = 'panel-secret-0123456789abcdef0123456789abcdef';
 const USER_ID = 'user_42';
@@ -49,6 +49,7 @@ describe('signConsoleToken', () => {
     expect(payload.serverId).toBe(SERVER_ID);
     expect(payload.iss).toBe('mojito-panel');
     expect(payload.aud).toBe('mojito-agent');
+    expect(payload.scope).toBe('websocket');
     expect(payload.permissions).toEqual([...ALL_PERMISSIONS]);
     expect(payload.exp).toBe(now + CONSOLE_TOKEN_TTL_SECONDS);
     expect(expiresAt).toBe((now + CONSOLE_TOKEN_TTL_SECONDS) * 1000);
@@ -69,20 +70,5 @@ describe('signConsoleToken', () => {
         SECRET,
       ),
     ).toThrow();
-  });
-});
-
-describe('getJwtSecret', () => {
-  it('returns the configured secret', () => {
-    process.env.PANEL_JWT_SECRET = SECRET;
-    expect(getJwtSecret()).toBe(SECRET);
-  });
-
-  it('rejects a missing or too short secret', () => {
-    delete process.env.PANEL_JWT_SECRET;
-    expect(() => getJwtSecret()).toThrow();
-    process.env.PANEL_JWT_SECRET = 'short';
-    expect(() => getJwtSecret()).toThrow();
-    delete process.env.PANEL_JWT_SECRET;
   });
 });

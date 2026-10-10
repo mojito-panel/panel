@@ -6,6 +6,7 @@ import { initOrm } from '~/db';
 import { Node, Plugin, Server } from '~/db/entities';
 import { parsePlugin, type Plugin as PluginDefinition } from '@mojito/contract';
 import { requireUser, requireAdmin, HttpError } from '../session';
+import { encryptSecret } from '../crypto';
 import { createNodeSchema, deleteNodeSchema } from '~/validators/node';
 import {
   importPluginsSchema,
@@ -49,7 +50,8 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       name: data.name,
       fqdn: data.fqdn,
       agentPort: data.agentPort,
-      agentToken: token,
+      // Encrypted at rest — the token doubles as the console-JWT signing key
+      agentToken: encryptSecret(token),
       lastSeenAt: null,
       status: 'unknown',
       createdAt: now,
