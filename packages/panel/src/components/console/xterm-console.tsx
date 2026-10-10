@@ -3,13 +3,19 @@ import { useServerFn } from '@tanstack/react-start';
 import {
   CONSOLE_TOKEN_TTL_SECONDS,
   type ConsoleClientMessage,
+  type ConsoleInstallStatus,
   type ConsoleServerMessage,
+  type InstallLogLine,
 } from '@mojito/contract';
 import { getServerLogsFn, createConsoleTokenFn } from '~/server/functions/servers';
+
+export type ConsoleMode = 'connecting' | 'ws' | 'polling';
 
 interface XtermConsoleProps {
   serverId: string;
   isRunning: boolean;
+  /** Install in progress/failed → the caption reflects it. */
+  installActive?: boolean;
   /**
    * Called when the direct agent WS authenticates/disconnects.
    * Non-null = live WS sender usable for console commands/power (bypasses the
@@ -18,6 +24,10 @@ interface XtermConsoleProps {
   onConnection?: (send: ((message: ConsoleClientMessage) => void) | null) => void;
   /** Runtime status pushed by the agent over the WS. */
   onStatus?: (status: ConsoleServerMessage & { type: 'status' }) => void;
+  /** Transport mode change — 'polling' lets the caller fall back to polling. */
+  onMode?: (mode: ConsoleMode) => void;
+  /** Install status pushed by the agent over the WS (steps, %, error). */
+  onInstallStatus?: (status: ConsoleInstallStatus) => void;
 }
 
 /** WS attempts before giving up and degrading to polling. */
@@ -37,20 +47,37 @@ const TOKEN_REFRESH_MARGIN_SECONDS = 60;
  * origin refused), degrade to the polling of incremental logs.
  * The terminal is created dynamically in a useEffect (SSR-safe).
  */
-export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: XtermConsoleProps) {
+export function XtermConsole({
+  serverId,
+  isRunning,
+  installActive = false,
+  onConnection,
+  onStatus,
+  onMode,
+  onInstallStatus,
+}: XtermConsoleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef(0);
   const getLogs = useServerFn(getServerLogsFn);
   const createToken = useServerFn(createConsoleTokenFn);
-  const [mode, setMode] = useState<'connecting' | 'ws' | 'polling'>('connecting');
+  const [mode, setMode] = useState<ConsoleMode>('connecting');
 
   // Callbacks via refs: the WS connection must not be torn down on re-renders
   const onConnectionRef = useRef(onConnection);
   const onStatusRef = useRef(onStatus);
+  const onModeRef = useRef(onMode);
+  const onInstallStatusRef = useRef(onInstallStatus);
   useEffect(() => {
     onConnectionRef.current = onConnection;
     onStatusRef.current = onStatus;
+    onModeRef.current = onMode;
+    onInstallStatusRef.current = onInstallStatus;
   });
+
+  const switchMode = (next: ConsoleMode) => {
+    setMode(next);
+    onModeRef.current?.(next);
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -68,7 +95,7 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
     // ─── Polling fallback (agent incremental logs) ────────────────────────
     const startPolling = () => {
       if (disposed || pollTimer) return;
-      setMode('polling');
+      switchMode('polling');
       term?.reset(); // avoid duplicating lines already streamed via WS
       cursorRef.current = 0;
 
@@ -94,6 +121,23 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
     // ─── Direct WS to the agent (console JWT issued by the panel) ────────
     const notifyConnection = (send: ((message: ConsoleClientMessage) => void) | null) => {
       onConnectionRef.current?.(send);
+    };
+
+    // ─── Install stream rendering (same terminal, ANSI colors) ─────────
+    // step = yellow, error = red, command output = default (gray),
+    // timestamp dim; progress rewrites (\r) erase the previous line.
+    let installRewriteActive = false;
+    const writeInstallLine = (line: InstallLogLine, replace: boolean) => {
+      if (!term) return;
+      const time = new Date(line.timestamp).toLocaleTimeString('fr-FR');
+      const color = line.level === 'step' ? '\x1b[33m' : line.level === 'error' ? '\x1b[31m' : '';
+      const text = `\x1b[90m[${time}]\x1b[0m ${color}${line.message}\x1b[0m`;
+      if (replace && installRewriteActive) {
+        term.write(`\x1b[1A\x1b[2K\r${text}\r\n`);
+      } else {
+        term.writeln(text);
+      }
+      installRewriteActive = replace;
     };
 
     const scheduleRefresh = () => {
@@ -150,7 +194,7 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
         if (message.type === 'auth-ok') {
           if (!authenticated) {
             authenticated = true;
-            setMode('ws');
+            switchMode('ws');
             notifyConnection((clientMessage) => {
               if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify(clientMessage));
@@ -164,6 +208,21 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
           for (const line of message.lines) {
             term?.writeln(line);
           }
+          return;
+        }
+        if (message.type === 'install-log') {
+          if (message.reset) {
+            // Full trail replay (fresh connection or restarted install)
+            term?.reset();
+            installRewriteActive = false;
+          }
+          for (const line of message.lines) {
+            writeInstallLine(line, message.replace && !message.reset && message.lines.length === 1);
+          }
+          return;
+        }
+        if (message.type === 'install-status') {
+          onInstallStatusRef.current?.(message);
           return;
         }
         if (message.type === 'status') {
@@ -270,16 +329,20 @@ export function XtermConsole({ serverId, isRunning, onConnection, onStatus }: Xt
   }, [serverId, getLogs, createToken]);
 
   const caption =
-    mode === 'ws'
-      ? 'Console live (WebSocket direct agent)'
-      : mode === 'polling'
-        ? 'Console live (WS indisponible — rafraîchie toutes les 2 s)'
-        : 'Connexion à la console…';
+    installActive
+      ? mode === 'polling'
+        ? 'Installation — rafraîchie toutes les 2 s (WS indisponible)'
+        : 'Installation en cours — console en direct'
+      : mode === 'ws'
+        ? 'Console live (WebSocket direct agent)'
+        : mode === 'polling'
+          ? 'Console live (WS indisponible — rafraîchie toutes les 2 s)'
+          : 'Connexion à la console…';
 
   return (
     <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
-        {isRunning ? caption : 'Console — le serveur est arrêté'}
+        {installActive || isRunning ? caption : 'Console — le serveur est arrêté'}
       </p>
       <div
         ref={containerRef}

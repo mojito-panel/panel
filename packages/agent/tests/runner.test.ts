@@ -6,7 +6,7 @@ import AdmZip from 'adm-zip';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { parsePlugin, type PluginInput } from '@mojito/contract';
-import { runInstall, type InstallProgress } from '../src/server/installer';
+import { runInstall, type InstallProgress, type InstallEvent } from '../src/server/installer';
 import { resolveVariables, render } from '../src/server/templating';
 import type { SystemVariables } from '../src/server/templating';
 import { resolvePath } from '../src/server/installer/context';
@@ -14,7 +14,7 @@ import { runWrite } from '../src/server/installer/actions/write';
 import { runReplace } from '../src/server/installer/actions/replace';
 import { runConfigFile } from '../src/server/installer/actions/config-file';
 import { runExtract, resolveZipEntryPath } from '../src/server/installer/actions/extract';
-import { exec } from '../src/server/installer/actions/exec';
+import { exec, execProcess } from '../src/server/installer/actions/exec';
 import { runScript } from '../src/server/installer/actions/exec';
 
 let tmpRoot: string;
@@ -274,6 +274,36 @@ describe('exec', () => {
     const sleepCmd = isWindows ? 'ping -n 10 127.0.0.1' : 'sleep 10';
     await expect(exec(sleepCmd, { timeoutMs: 500 })).rejects.toThrow('expirée');
   });
+
+  it('stream les lignes stdout au fil de l’eau (onLine)', async () => {
+    const lines: { stream: string; text: string; rewrite: boolean }[] = [];
+    const result = await execProcess(
+      process.execPath,
+      ['-e', 'console.log("un"); setTimeout(() => { console.log("deux"); }, 80);'],
+      { onLine: (stream, text, rewrite) => lines.push({ stream, text, rewrite }) },
+    );
+    expect(result.code).toBe(0);
+    // Émises PENDANT l’exécution, dans l’ordre — pas après la fin du process
+    expect(lines).toEqual([
+      { stream: 'stdout', text: 'un', rewrite: false },
+      { stream: 'stdout', text: 'deux', rewrite: false },
+    ]);
+  });
+
+  it('marque les réécritures \\r (progress steamcmd) comme rewrite', async () => {
+    const lines: { text: string; rewrite: boolean }[] = [];
+    await execProcess(
+      process.execPath,
+      ['-e', 'process.stdout.write("progress 10%\\rprogress 20%\\rfin\\n");'],
+      { onLine: (_stream, text, rewrite) => lines.push({ text, rewrite }) },
+    );
+    // \r seul = réécriture de la ligne (barre de progression), \r\n = vraie ligne
+    expect(lines).toEqual([
+      { text: 'progress 10%', rewrite: true },
+      { text: 'progress 20%', rewrite: true },
+      { text: 'fin', rewrite: false },
+    ]);
+  });
 });
 
 // ─── action script (direct spawn, Windows quoting) ───────────────────────────
@@ -399,6 +429,120 @@ describe('runInstall', () => {
     });
     expect(result.success).toBe(false);
     expect(result.error).toContain('4096');
+  });
+
+  it('tolère les codes de sortie de successCodes (steamcmd: 7 = auto-update)', async () => {
+    const plugin = makePlugin({
+      install: [
+        { action: 'command', command: 'exit 7', successCodes: [0, 7] },
+      ],
+    });
+    const result = await runInstall({
+      plugin,
+      variables: {},
+      systemVariables: systemVars,
+      installDir: join(tmpRoot, 'srv-exit7-ok'),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('échoue sur un code de sortie non listé dans successCodes', async () => {
+    const plugin = makePlugin({
+      install: [{ action: 'command', command: 'exit 7' }],
+    });
+    const result = await runInstall({
+      plugin,
+      variables: {},
+      systemVariables: systemVars,
+      installDir: join(tmpRoot, 'srv-exit7-ko'),
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('code 7');
+  });
+
+  it('streame la progression via tail d un log écrit par la commande (steamcmd)', async () => {
+    // Helper : écrit 5 lignes dans progress.log, 120 ms d'intervalle —
+    // RIEN sur stdout : la seule source de step-output est le tail.
+    const writer =
+      "const {appendFileSync}=require('node:fs');let i=0;" +
+      "const t=setInterval(()=>{i++;" +
+      "appendFileSync('progress.log','progress line '+i+'\\n');" +
+      "if(i>=5)clearInterval(t);},120);";
+
+    const plugin = makePlugin({
+      install: [
+        { action: 'write', file: 'writer.js', content: writer },
+        {
+          action: 'command',
+          command: 'node writer.js',
+          timeoutMs: 10000,
+          tail: { file: 'progress.log', intervalMs: 100 },
+        },
+        {
+          action: 'command',
+          command: 'node writer.js',
+          timeoutMs: 10000,
+          tail: { file: 'progress.log', intervalMs: 100, filter: 'progress line [13]' },
+        },
+      ],
+    });
+
+    const events: InstallEvent[] = [];
+    const result = await runInstall({
+      plugin,
+      variables: {},
+      systemVariables: systemVars,
+      installDir: join(tmpRoot, 'srv-tail'),
+      onEvent: (event) => events.push(event),
+    });
+    expect(result.success).toBe(true);
+
+    const outputs = (step: number) =>
+      events.flatMap((e) => (e.type === 'step-output' && e.step === step ? [e.text] : []));
+
+    // Étape 1 (sans filtre) : les 5 lignes, streamées avant step-done
+    for (let i = 1; i <= 5; i++) {
+      expect(outputs(1)).toContain(`progress line ${i}`);
+    }
+    const step1Done = events.findIndex((e) => e.type === 'step-done' && e.step === 1);
+    const step1First = events.findIndex((e) => e.type === 'step-output' && e.step === 1);
+    expect(step1Done).toBeGreaterThan(step1First);
+
+    // Étape 2 : le tail repart de la taille actuelle (pas de rejeu des lignes
+    // 1-5) + le filtre ne garde que les lignes 1 et 3
+    expect(outputs(2)).toEqual(['progress line 1', 'progress line 3']);
+  });
+
+  it('stream la sortie des commandes en step-output au fil de l’eau', async () => {
+    if (process.platform !== 'win32') return;
+    // Batch file (spawn via argument array — pas de quoting cmd /c) :
+    // deux lignes espacées de 80 ms prouvent l’émission temps réel.
+    const plugin = makePlugin({
+      install: [
+        {
+          action: 'script',
+          shell: 'cmd',
+          content:
+            '@echo off\nnode -e "console.log(\'ligne1\'); setTimeout(() => console.log(\'ligne2\'), 80)"',
+        },
+      ],
+    });
+    const events: InstallEvent[] = [];
+    const result = await runInstall({
+      plugin,
+      variables: {},
+      systemVariables: systemVars,
+      installDir: join(tmpRoot, 'srv-stream'),
+      onEvent: (event) => events.push(event),
+    });
+    expect(result.success).toBe(true);
+
+    const outputs = events.flatMap((e) => (e.type === 'step-output' ? [e.text] : []));
+    expect(outputs).toEqual(['ligne1', 'ligne2']);
+    // La sortie arrive AVANT la fin de l’étape (streaming, pas de buffer final)
+    const firstOutput = events.findIndex((e) => e.type === 'step-output');
+    const stepDone = events.findIndex((e) => e.type === 'step-done');
+    expect(stepDone).toBeGreaterThan(firstOutput);
   });
 });
 

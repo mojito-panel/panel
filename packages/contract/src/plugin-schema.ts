@@ -118,12 +118,44 @@ const configFileActionSchema = z.object({
   find: z.record(z.string(), z.string()),
 });
 
+/**
+ * Live progress from a log file the command writes while it runs.
+ * Some console tools (steamcmd) stay SILENT on a pipe and only log their
+ * progress to a file — the agent tails it and streams matching lines.
+ */
+const commandTailSchema = z.object({
+  /** Log file (relative to the install dir, templated). */
+  file: z.string().min(1),
+  /** Regex source — only matching lines are streamed (default: all). */
+  filter: z
+    .string()
+    .refine((v) => {
+      try {
+        new RegExp(v);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'Regex de filtre invalide')
+    .optional(),
+  /** Poll interval in ms (default 1000). */
+  intervalMs: z.number().int().min(100).max(10_000).optional(),
+});
+
 const commandActionSchema = z.object({
   action: z.literal('command'),
   command: z.string().min(1),
   cwd: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
   timeoutMs: z.number().int().positive().optional(),
+  /**
+   * Exit codes treated as success (default: [0]).
+   * e.g. steamcmd exits 7 after a self-update ("Update complete, launching...")
+   * even when the requested job succeeded.
+   */
+  successCodes: z.array(z.number().int()).optional(),
+  /** Tail a log file while the command runs (live progress, e.g. steamcmd). */
+  tail: commandTailSchema.optional(),
 });
 
 /**

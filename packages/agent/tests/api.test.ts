@@ -258,6 +258,11 @@ describe('Agent API — POST /servers/install', () => {
     expect(status.status).toBe('installed');
     const logText = status.logs.map((l) => l.message).join('\n');
     expect(logText).toContain('mojito-install-output');
+    // Étapes = niveau 'step' (jaune dans le panel), sortie de commande = 'info' (gris)
+    const stepLine = status.logs.find((l) => l.message.startsWith('Étape 1/1'));
+    expect(stepLine?.level).toBe('step');
+    const outputLine = status.logs.find((l) => l.message === 'mojito-install-output');
+    expect(outputLine?.level).toBe('info');
   });
 
   it('échoue en arrière-plan si une étape du runner échoue (status failed)', async () => {

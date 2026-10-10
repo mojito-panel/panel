@@ -348,6 +348,9 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     const plugin = await em.findOne(Plugin, { id: server.pluginId });
     if (!plugin) throw new HttpError(500, 'Plugin introuvable');
 
+    const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
+    if (!allocation) throw new HttpError(500, 'Allocation introuvable');
+
     try {
       const result = await agentReinstallServer(node, server.id, {
         plugin: plugin.json,
@@ -359,6 +362,34 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
       await em.flush();
       return { id: server.id, status: 'installing', message: result.message };
     } catch (err) {
+      // The agent doesn't know the server (404): its store is only written on
+      // install SUCCESS, so a failed install — or a lost agent dataDir —
+      // leaves the panel DB and the agent out of sync. Fall back to a FULL
+      // install, rebuilt from the panel DB (same installDir convention).
+      if (err instanceof AgentError && err.statusCode === 404) {
+        try {
+          await agentInstallServer(node, {
+            serverId: server.id,
+            name: server.name,
+            plugin: plugin.json,
+            variables: server.variables,
+            installDir: `servers/${server.id}`,
+            allocation: { port: allocation.port, memoryMb: allocation.maxRamMb },
+          });
+          server.status = 'installing';
+          await em.flush();
+          return {
+            id: server.id,
+            status: 'installing',
+            message: 'Réinstallation démarrée (installation complète)',
+          };
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof AgentError) {
+            throw new HttpError(502, `Réinstallation refusée côté agent : ${fallbackErr.message}`);
+          }
+          throw fallbackErr;
+        }
+      }
       if (err instanceof AgentError) {
         throw new HttpError(502, `Réinstallation refusée côté agent : ${err.message}`);
       }

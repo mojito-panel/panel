@@ -60,7 +60,7 @@ export function startTrackedInstall(options: TrackedInstallOptions): void {
               });
               registry.log(
                 serverId,
-                'info',
+                'step',
                 `Étape ${event.step + 1}/${event.totalSteps} — ${event.message}`,
               );
               break;
@@ -69,6 +69,7 @@ export function startTrackedInstall(options: TrackedInstallOptions): void {
                 serverId,
                 event.stream === 'stderr' ? 'error' : 'info',
                 event.text,
+                { rewrite: event.rewrite },
               );
               break;
             case 'step-done':

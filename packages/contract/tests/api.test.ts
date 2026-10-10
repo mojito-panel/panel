@@ -344,6 +344,48 @@ describe('consoleServerMessageSchema', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(true);
   });
 
+  it('valide un install-status (bannière live)', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'install-status',
+        status: 'installing',
+        step: 2,
+        totalSteps: 7,
+        percent: 28,
+        message: 'Étape 2/7 — Téléchargement',
+        error: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('valide un install-log (replay reset + rewrite replace)', () => {
+    const line = { timestamp: new Date().toISOString(), level: 'step', message: 'Étape 1/2' };
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'install-log',
+        lines: [line],
+        reset: true,
+        replace: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'install-log',
+        lines: [{ ...line, level: 'info', message: 'progress 42%' }],
+        replace: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejette un install-log avec un niveau inconnu', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'install-log',
+        lines: [{ timestamp: new Date().toISOString(), level: 'verbose', message: 'x' }],
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejette un code d\'erreur inconnu', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'kaboom' }).success).toBe(false);
   });
@@ -375,6 +417,7 @@ describe('installStatusSchema', () => {
     error: null,
     logs: [
       { timestamp: new Date().toISOString(), level: 'info', message: 'Installation démarrée' },
+      { timestamp: new Date().toISOString(), level: 'step', message: 'Étape 1/6 — Téléchargement de server.jar' },
       { timestamp: new Date().toISOString(), level: 'error', message: 'stderr: warning' },
     ],
     startedAt: new Date().toISOString(),

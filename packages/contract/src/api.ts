@@ -112,7 +112,8 @@ export type InstallProgress = z.infer<typeof installProgressSchema>;
  */
 export const installLogLineSchema = z.object({
   timestamp: z.string().datetime(),
-  level: z.enum(['info', 'error']),
+  /** step = step start/end (yellow in the panel), info = command output (gray), error = stderr/failure. */
+  level: z.enum(['info', 'step', 'error']),
   message: z.string(),
 });
 
@@ -250,9 +251,31 @@ export const consoleServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('log'), lines: z.array(z.string()) }),
   z.object({ type: z.literal('status'), status: serverStatusSchema }),
   z.object({ type: z.literal('error'), code: consoleErrorSchema }),
+  z.object({
+    /** Live install/reinstall status — replaces the panel's install polling. */
+    type: z.literal('install-status'),
+    status: z.enum(['installing', 'installed', 'failed']),
+    step: z.number().int().min(0),
+    totalSteps: z.number().int().min(0),
+    percent: z.number().min(0).max(100),
+    message: z.string(),
+    error: z.string().nullable(),
+  }),
+  z.object({
+    /** Install log lines (leveled: step=yellow, info=gray, error=red). */
+    type: z.literal('install-log'),
+    lines: z.array(installLogLineSchema),
+    /** true = replay of the full trail → the client clears the console first. */
+    reset: z.boolean().default(false),
+    /** true = progress rewrite (bare \r): replaces the previous line. */
+    replace: z.boolean().default(false),
+  }),
 ]);
 
 export type ConsoleServerMessage = z.infer<typeof consoleServerMessageSchema>;
+
+/** install-status WS payload (console page banner). */
+export type ConsoleInstallStatus = Extract<ConsoleServerMessage, { type: 'install-status' }>;
 
 // ─── File browser (panel → agent, panel proxies everything) ──────────────────
 

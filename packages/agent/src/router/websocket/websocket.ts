@@ -8,12 +8,15 @@ import {
 } from '@mojito/contract';
 import type { AgentConfig } from '../../config';
 import type { ServerManager } from '../../server/manager';
+import type { InstallRegistry } from '../../server/installer/registry';
 import { toPanelStatus } from '../../environment/states';
 import { verifyConsoleToken, CLOCK_SKEW_SECONDS } from '../tokens/parser';
 import { hasConsolePermission } from '../tokens/websocket';
 
 /**
  * Browser-facing console WebSocket (Pelican-style direct user ↔ agent socket).
+ * Streams BOTH the runtime logs and the install (steps + logs) — installs use
+ * the same socket instead of a panel polling loop.
  *
  * Auth (aligned with wings, router/websocket/websocket.go):
  * - the socket opens UNauthenticated — the Origin header must match the panel
@@ -42,10 +45,12 @@ const POWER_PERMISSIONS: Record<'start' | 'stop' | 'restart' | 'kill', Permissio
 export interface ConsoleWsOptions {
   config: AgentConfig;
   manager: ServerManager;
+  /** Install states — the install (steps + logs) streams over the SAME socket. */
+  registry: InstallRegistry;
 }
 
 function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): void {
-  const { config, manager } = options;
+  const { config } = options;
 
   // Origins allowed to open the socket (the panel itself + extra origins)
   const allowedOrigins = new Set(config.allowedOrigins);
@@ -72,9 +77,11 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
   );
 
   function handleConsoleSocket(socket: WebSocket, serverId: string): void {
+    const { manager, registry } = options;
     let closed = false;
     let payload: ConsoleTokenPayload | null = null;
     let unsubscribe: (() => void) | null = null;
+    let unsubscribeInstall: (() => void) | null = null;
 
     const send = (message: ConsoleServerMessage): void => {
       if (!closed) socket.send(JSON.stringify(message));
@@ -88,6 +95,27 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
     const sendStatus = (): void => {
       send({ type: 'status', status: toPanelStatus(manager.getState(serverId), false) });
     };
+    /** install-status snapshot (banner: step, percent, error). */
+    const sendInstallStatus = (): void => {
+      const state = registry.get(serverId);
+      if (!state) return;
+      send({
+        type: 'install-status',
+        status: state.status,
+        step: state.step,
+        totalSteps: state.totalSteps,
+        percent: state.percent,
+        message: state.message,
+        error: state.error,
+      });
+    };
+    /** Full install trail replay (new install or fresh connection). */
+    const sendInstallReplay = (): void => {
+      const state = registry.get(serverId);
+      if (!state) return;
+      sendInstallStatus();
+      send({ type: 'install-log', lines: state.logs, reset: true, replace: false });
+    };
 
     /** No `auth` message in time → close (wings does the same). */
     let authTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
@@ -99,6 +127,7 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
       closed = true;
       if (authTimer) clearTimeout(authTimer);
       unsubscribe?.();
+      unsubscribeInstall?.();
     });
 
     /** Full token check: signature, aud, scope, exp, serverId match. */
@@ -138,6 +167,32 @@ function registerConsoleWs(app: FastifyInstance, options: ConsoleWsOptions): voi
       unsubscribe = manager.subscribe(serverId, {
         onLog: (line) => send({ type: 'log', lines: [line] }),
         onState: () => sendStatus(),
+      });
+
+      // ─── Install stream (same socket, same console.read permission) ────
+      // A finished install is not replayed: only an ongoing or failed one
+      // matters to the user opening the console.
+      const install = registry.get(serverId);
+      if (install && install.status !== 'installed') {
+        sendInstallReplay();
+      }
+      unsubscribeInstall = registry.subscribe(serverId, (event) => {
+        if (closed) return;
+        if (event.kind === 'start') {
+          sendInstallReplay();
+          return;
+        }
+        if (event.kind === 'log') {
+          send({
+            type: 'install-log',
+            lines: [event.line],
+            reset: false,
+            replace: event.replace,
+          });
+          return;
+        }
+        // update (step/percent) and the terminal status after finish
+        sendInstallStatus();
       });
     };
 

@@ -86,6 +86,9 @@ src/
 - **Variables** : `env` UPPERCASE (`MINECRAFT_VERSION`) + templating `{{ENV_VAR}}` partout. Champs : `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (validation regex, équivalent des `rules` Laravel de Pelican), `options`.
 - **Variables système réservées** (fournies par l'agent, non déclarables) : `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`.
 - **Actions runner** : `download`, `extract`, `write`, `replace`, `configFile` (parsers `properties`/`ini`/`yaml`/`json` — équivalent `config.files` Pelican), `command`, `script` (fallback ouvert : shell `bash`/`powershell`/`cmd`).
+- **Codes de sortie** : une action `command` peut déclarer `successCodes` (codes de sortie acceptés comme succès, défaut `[0]`). Ex : steamcmd sort avec 7 après son auto-update alors que le job a réussi.
+- **Progression en direct** : une action `command` peut déclarer `tail` (`file`, `filter` regex optionnel, `intervalMs`) — l'agent suit le fichier et streame les nouvelles lignes pendant l'exécution. Requis pour les outils console (steamcmd) qui n'impriment leur progression que sur un vrai terminal, jamais sur un pipe.
+- **Chaîne d'outils embarquée** : un plugin embarque ses outils dans `.bin/<outil>` (JDK dans `.bin/java`, SteamCMD dans `.bin/steamcmd`) — la feature correspondante (`java_version`, `steamcmd`) est déclarative, rien ne l'interprète côté agent.
 - **start** : `command`, `stop` (command/signal + `timeoutMs` → kill), `ready` (`pattern` + `strip` — équivalent `config.startup` Pelican), `workingDirectory`.
 - **Autres** : `logs` (mode stdout/file + stripAnsi), `runtime` (contraintes hôte, remplace `docker_images`, ex: `{ "java": ">=21" }`), `features` (flags Pelican-style), `updateUrl`.
 - Résolution du templating : variables système > variables du serveur > defaults du plugin > env fixe.

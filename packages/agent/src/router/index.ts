@@ -64,7 +64,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
   // `{ websocket: true }` route is registered.
   app.register(async (instance) => {
     await instance.register(websocket);
-    registerConsoleWs(instance, { config, manager });
+    registerConsoleWs(instance, { config, manager, registry });
   });
 
   return app;

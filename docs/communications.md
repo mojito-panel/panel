@@ -96,18 +96,16 @@ sequenceDiagram
         P-->>N: { id } → redirect /servers/$serverId/console
         A->>R: startTrackedInstall (arrière-plan)
         R->>R: étape 1..N : téléchargements, scripts, écritures…
-        R->>R: Registry : chaque étape + sortie stdout/stderr des commandes
-        Note over N,A: Le panneau d'installation remplace la console
-        loop polling (1,5 s)
-            N->>P: GET getInstallStatusFn(serverId)
-            P->>A: GET /servers/:serverId/install
-            A-->>P: { status, step, totalSteps, percent, logs[], error }
-            P-->>N: statut + logs (sync DB : installing → stopped / install_failed)
+        R->>R: Registry : chaque étape + sortie des commandes STREAMÉE ligne par ligne
+        Note over N,A: L'installation streame sur la console WS<br/>(mêmes socket/JWT que les logs runtime)
+        loop WS direct (console)
+            A-->>N: { type: "install-status", step, percent, error } (bannière)
+            A-->>N: { type: "install-log", lines[] } (étapes=jaune, sortie=gris, erreurs=rouge)
         end
         R->>A: store.save(servers.json) si succès
         R-->>A: Registry: status "installed" (+ "failed", erreur à l'étape X sinon)
-        N->>N: status installed → invalidate ['server'] → console normale
-        Note over N: en cas d'échec : erreur affichée + bouton « Réessayer »<br/>(retryInstallFn relance le même serverId)
+        N->>N: install-status terminal → getInstallStatusFn UNE FOIS (sync DB)<br/>→ invalidate ['server'] → console normale
+        Note over N: en cas d'échec : bannière rouge + bouton « Réessayer »<br/>(retryInstallFn relance le même serverId)
     end
 ```
 
@@ -115,7 +113,12 @@ sequenceDiagram
 - Le panel persiste **avant** d'appeler l'agent : l'utilisateur est redirigé immédiatement vers la console du serveur.
 - La validation rapide (variables inconnues/invalides) est refusée **avant** le 202 → le formulaire affiche l'erreur et les lignes DB sont retirées.
 - Un échec du runner (téléchargement 404, script en erreur…) n'est PAS une erreur HTTP : il apparaît dans le statut d'installation (`failed` + `error`), le store n'est pas modifié, la DB passe `install_failed`.
-- Les logs d'installation vivent dans la mémoire de l'agent (registry) : perdus si l'agent redémarre, le statut DB reste `install_failed` avec bouton *Réessayer*.
+- **Pas de polling** en chemin nominal : les étapes et la sortie des commandes sont poussées par l'agent sur le socket console (`install-status` + `install-log`). `getInstallStatusFn` n'est appelé qu'**une fois** à la fin (statut terminal) pour synchroniser la DB (`installing → stopped / install_failed`).
+- **Fallback** : si le WS n'est pas utilisable (proxy sans WS, origine refusée…), la page retombe sur le polling `GET /servers/:serverId/install` (panneau d'installation dédié).
+- Logs d'installation (registry, en mémoire côté agent) : niveaux `step` (jaune), `info` (gris), `error` (rouge) ; la sortie des commandes est streamée **au fil de l'eau** — les réécritures `\r` (barres de progression type steamcmd) remplacent la ligne précédente au lieu de s'empiler, les lignes identiques consécutives sont fusionnées ; plafond 2000 lignes (dernières conservées).
+- **Outils muets sur un pipe** : certains programmes console (steamcmd) n'impriment leur progression que sur un vrai terminal — sur un pipe ils restent silencieux. Une action `command` peut déclarer `tail` (`file` + `filter` regex + `intervalMs`) : l'agent tail le log écrit pendant l'exécution (ex : `logs/content_log.txt` de steamcmd) et streame les nouvelles lignes en direct.
+- Une action `command` peut déclarer `successCodes` (codes de sortie traités comme succès) — steamcmd sort avec le code 7 après son auto-update (`Update complete, launching...`) alors que le job a réussi.
+- Les logs d'installation vivent dans la mémoire de l'agent (registry) : perdus si l'agent redémarre, le statut DB reste `install_failed` avec bouton *Réessayer*. À la (re)connexion WS, une installation **en cours ou échouée** est rejouée (`install-log` + `reset`), une installation terminée ne l'est pas.
 
 ---
 
@@ -138,10 +141,17 @@ sequenceDiagram
     A-->>N: { type: "auth-ok" }
     A-->>N: { type: "log", lines[] } (streaming live)
     A-->>N: { type: "status", status } (running/stopped/crashed)
+    opt installation en cours ou échouée (dernière connue)
+        A-->>N: { type: "install-status", ... } + { type: "install-log", lines[], reset: true } (rejeu du trail)
+    end
 
     Note over N,A: Commandes et actions power en direct
     N->>A: { type: "command", command: "stop" } (stdin du process)
     N->>A: { type: "power", action: "restart" }
+
+    Note over N,A: Installation = même socket : étapes et sortie poussées en direct
+    A-->>N: { type: "install-status", status, step, percent, error } (bannière)
+    A-->>N: { type: "install-log", lines[], replace } (logs, progress \r en place)
 
     Note over N,A: Refresh du token AVANT expiration (re-auth sans reconnexion)
     N->>P: POST createConsoleTokenFn (nouveau JWT)
@@ -164,6 +174,8 @@ sequenceDiagram
         P-->>N: lignes ajoutées au terminal (curseur next)
     end
 ```
+
+En mode dégradé, une installation en cours bascule aussi sur le polling : le panneau d'installation dédié (`getInstallStatusFn` → `GET /servers/:serverId/install`) remplace la console.
 
 **Sécurité console**
 - JWT court (300 s), rafraîchi par re-`auth` — jamais de token dans l'URL/query string.
@@ -216,9 +228,11 @@ sequenceDiagram
     P->>D: UPDATE server.status = installing
     P-->>N: redirect → console (panneau d'installation)
     A->>R: arrière-plan : STOP du process si running, puis runner
-    Note over N,R: Le suivi est identique au flux d'installation<br/>(polling GET /servers/:serverId/install)
+    Note over N,R: Le suivi est identique au flux d'installation<br/>(console WS : install-status + install-log, cf. §2)
     R->>A: store.save (plugin/variables mis à jour) si succès
 ```
+
+**Serveur inconnu côté agent** — le store de l'agent (`servers.json`) n'est écrit qu'en cas de **succès** d'installation. Une installation échouée (ou un dataDir agent perdu) laisse donc la DB panel et le store agent désynchronisés, et `/reinstall` répond 404. Le panel gère ce cas : sur 404, `reinstallServerFn` retombe sur une **installation complète** (`POST /servers/install`) reconstruite depuis la DB (plugin courant, variables, allocation, `installDir` = `servers/<uuid>`).
 
 ---
 
@@ -251,7 +265,7 @@ stateDiagram-v2
 | `GET /health` | Public — healthcheck (version, uptime) |
 | `POST /servers/install` | Démarre une installation (202) — validation sync 400/422 |
 | `POST /servers/:serverId/reinstall` | Réinstalle en place (202, arrête le serveur d'abord) |
-| `GET /servers/:serverId/install` | Statut d'installation + logs (polling console) |
+| `GET /servers/:serverId/install` | Statut d'installation + logs (sync fin d'install + fallback polling) |
 | `GET /servers` | Liste des serveurs de l'agent |
 | `GET /servers/:serverId` | Info runtime (statut, logs récents) |
 | `GET /servers/:serverId/logs?after=N` | Logs incrémentaux (fallback console) |
@@ -265,8 +279,10 @@ stateDiagram-v2
 | Message (→ agent) | Message (← agent) |
 |---|---|
 | `{ type: "auth", token }` | `{ type: "auth-ok" }` |
-| `{ type: "command", command }` | `{ type: "log", lines[] }` |
+| `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime) |
 | `{ type: "power", action }` | `{ type: "status", status }` |
+| | `{ type: "install-status", status, step, totalSteps, percent, message, error }` |
+| | `{ type: "install-log", lines[], reset, replace }` — `reset` = rejeu complet (effacer la console), `replace` = réécriture `\r` (progress), niveaux `step`/`info`/`error` |
 | | `{ type: "error", code }` |
 
 ### Server functions exposées au navigateur (`packages/panel/src/server/functions/`)
@@ -274,7 +290,7 @@ stateDiagram-v2
 | Fonction | Méthode | Rôle |
 |---|---|---|
 | `installServerFn` | POST | Créer + démarrer l'installation |
-| `getInstallStatusFn` | GET | Statut/logs d'installation (polling) |
+| `getInstallStatusFn` | GET | Statut/logs d'installation (sync fin d'install + fallback polling) |
 | `retryInstallFn` | POST | Relancer une installation échouée |
 | `listServersFn` | GET | Liste (admin : tout, sinon les siens) |
 | `getServerFn` | GET | Détail + sync runtime + logs |

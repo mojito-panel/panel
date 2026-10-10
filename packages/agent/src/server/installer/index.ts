@@ -12,7 +12,7 @@ import { runReplace } from './actions/replace';
 import { runConfigFile } from './actions/config-file';
 import { runDownload } from './actions/download';
 import { runExtract } from './actions/extract';
-import { runCommand, runScript, type ExecResult } from './actions/exec';
+import { runCommand, runScript, type ExecOptions } from './actions/exec';
 
 export interface InstallOptions {
   plugin: Plugin;
@@ -35,10 +35,14 @@ export interface InstallProgress {
   percent: number;
 }
 
-/** Fine-grained install event (debug trail streamed to the panel). */
+/**
+ * Fine-grained install event (debug trail streamed to the panel).
+ * step-output.rewrite: true = progress-bar rewrite of the previous rewrite
+ * line (bare \r, e.g. steamcmd download %) — the consumer replaces, not appends.
+ */
 export type InstallEvent =
   | { type: 'step-start'; step: number; totalSteps: number; message: string }
-  | { type: 'step-output'; step: number; stream: 'stdout' | 'stderr'; text: string }
+  | { type: 'step-output'; step: number; stream: 'stdout' | 'stderr'; text: string; rewrite: boolean }
   | { type: 'step-done'; step: number; message: string };
 
 export interface InstallResult {
@@ -99,18 +103,13 @@ export function validateInstall(
   return null;
 }
 
-/** Emits command/script output as step-output events (non-empty lines only). */
-function emitExecOutput(
+/** Live step-output emitter for the current step (streamed line by line). */
+function stepOutputEmitter(
   onEvent: InstallOptions['onEvent'],
   step: number,
-  result: ExecResult,
-): void {
-  for (const line of result.stdout.split(/\r?\n/)) {
-    if (line.trim()) onEvent?.({ type: 'step-output', step, stream: 'stdout', text: line });
-  }
-  for (const line of result.stderr.split(/\r?\n/)) {
-    if (line.trim()) onEvent?.({ type: 'step-output', step, stream: 'stderr', text: line });
-  }
+): ExecOptions['onLine'] {
+  if (!onEvent) return undefined;
+  return (stream, text, rewrite) => onEvent({ type: 'step-output', step, stream, text, rewrite });
 }
 
 /**
@@ -173,14 +172,12 @@ export async function runInstall(options: InstallOptions): Promise<InstallResult
           break;
         }
         case 'command': {
-          const result = await runCommand(action, ctx);
-          emitExecOutput(onEvent, step, result);
+          const result = await runCommand(action, ctx, stepOutputEmitter(onEvent, step));
           doneMessage = `terminé (code ${result.code})`;
           break;
         }
         case 'script': {
-          const result = await runScript(action, ctx);
-          emitExecOutput(onEvent, step, result);
+          const result = await runScript(action, ctx, stepOutputEmitter(onEvent, step));
           doneMessage = `terminé (code ${result.code})`;
           break;
         }

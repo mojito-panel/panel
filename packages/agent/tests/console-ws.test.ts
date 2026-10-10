@@ -350,3 +350,124 @@ describe('Console WS — expiration & refresh (re-auth)', () => {
     20000,
   );
 });
+
+// ─── Install stream (same socket: steps + logs, no panel polling) ────────────
+
+describe('Console WS — installation en direct', () => {
+  const auth = { authorization: `Bearer ${AGENT_TOKEN}` };
+  const INSTALL_SERVER_ID = randomUUID();
+
+  const installPayload = (serverId: string, plugin: unknown, installDir: string) => ({
+    serverId,
+    name: 'ws-install-server',
+    plugin,
+    variables: {},
+    installDir,
+    allocation: { port: 27015, memoryMb: 512 },
+  });
+
+  it('streame les étapes et la sortie des commandes sur le socket', async () => {
+    const plugin = parsePlugin({
+      schemaVersion: 2,
+      id: 'ws-install-plugin',
+      name: 'WS Install',
+      author: 'moi',
+      variables: [],
+      install: [
+        { action: 'command', command: 'echo ws-install-output' },
+        { action: 'write', file: 'marker.txt', content: 'ok' },
+      ],
+      start: { command: 'echo hello' },
+    });
+
+    // Connected console BEFORE the install starts
+    const socket = await authenticatedConsole(INSTALL_SERVER_ID);
+    expect(socket.messages.filter((m) => m.type === 'install-log').length).toBe(0);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installPayload(
+        INSTALL_SERVER_ID,
+        plugin,
+        join(dataDir, 'srv-install-ws'),
+      ),
+    });
+    expect(res.statusCode).toBe(202);
+
+    // Live: install-status (installing) → replay reset → steps → output → installed
+    await waitForMessage(
+      socket.messages,
+      (m) => m.type === 'install-status' && m.status === 'installed',
+    );
+
+    const statuses = socket.messages.filter((m) => m.type === 'install-status');
+    expect(statuses[0].status).toBe('installing');
+
+    const logs = socket.messages.filter((m) => m.type === 'install-log');
+    const replay = logs.find((m) => m.reset);
+    expect(replay).toBeDefined(); // «Installation … démarrée» rejouée à l'event start
+    if (!replay) throw new Error('replay manquant');
+    expect(replay.lines.length).toBe(1);
+
+    const texts = logs.flatMap((m) => m.lines.map((l) => l.message));
+    expect(texts.some((t) => t.startsWith('Étape 1/2'))).toBe(true);
+    expect(texts.some((t) => t.includes('ws-install-output'))).toBe(true);
+    expect(logs.some((m) => m.lines.some((l) => l.level === 'step'))).toBe(true);
+    await closeQuietly(socket.ws);
+  }, 20000);
+
+  it('ne rejoue pas une installation terminée à la reconnexion', async () => {
+    const socket = await authenticatedConsole(INSTALL_SERVER_ID);
+    await waitForMessage(socket.messages, (m) => m.type === 'status');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(socket.messages.filter((m) => m.type === 'install-log').length).toBe(0);
+    await closeQuietly(socket.ws);
+  }, 15000);
+
+  it('rejoue une installation échouée à la reconnexion (retry/debug)', async () => {
+    const FAIL_SERVER_ID = randomUUID();
+    const plugin = parsePlugin({
+      schemaVersion: 2,
+      id: 'ws-fail-plugin',
+      name: 'WS Fail',
+      author: 'moi',
+      variables: [],
+      install: [
+        { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
+      ],
+      start: { command: 'echo hello' },
+    });
+
+    const socket = await authenticatedConsole(FAIL_SERVER_ID);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installPayload(FAIL_SERVER_ID, plugin, join(dataDir, 'srv-fail-ws')),
+    });
+    expect(res.statusCode).toBe(202);
+
+    await waitForMessage(
+      socket.messages,
+      (m) => m.type === 'install-status' && m.status === 'failed',
+    );
+    await closeQuietly(socket.ws);
+
+    // Reconnexion → le trail échoué est rejoué (reset) + status failed
+    const second = await authenticatedConsole(FAIL_SERVER_ID);
+    const replay = await waitForMessage(
+      second.messages,
+      (m) => m.type === 'install-log' && m.reset,
+    );
+    if (replay.type !== 'install-log') throw new Error('replay manquant');
+    expect(replay.lines.some((l) => l.level === 'error')).toBe(true);
+    const status = second.messages.find(
+      (m): m is Extract<ConsoleServerMessage, { type: 'install-status' }> =>
+        m.type === 'install-status',
+    );
+    expect(status?.status).toBe('failed');
+    await closeQuietly(second.ws);
+  }, 20000);
+});
