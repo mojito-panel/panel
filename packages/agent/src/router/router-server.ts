@@ -7,6 +7,8 @@ import {
   reinstallServerRequestSchema,
   serverActionRequestSchema,
   sendCommandRequestSchema,
+  updateServerVariablesRequestSchema,
+  validateVariableValue,
 } from '@mojito/contract';
 import type { AgentConfig } from '../config';
 import { ServerManager, PowerActionError } from '../server/manager';
@@ -280,6 +282,54 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       runtimeState: manager.getState(serverId),
     };
   });
+
+  // ─── Variable update (panel "Variables" page) ──────────────────────────
+  // The panel sends the FULL variable record; values are validated against
+  // the stored plugin definitions. Only the stored entry changes — a
+  // running process keeps its original environment until the next start.
+  app.post<{ Params: { serverId: string } }>(
+    '/servers/:serverId/variables',
+    async (request, reply) => {
+      const parsed = updateServerVariablesRequestSchema.safeParse({
+        serverId: request.params.serverId,
+        ...(request.body as object),
+      });
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'Requête invalide',
+          details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        });
+      }
+
+      const stored = await store.get(parsed.data.serverId);
+      if (!stored) {
+        return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+      }
+
+      // An install in flight resolves variables upfront — refuse instead of
+      // letting the runner and this update race on the same record
+      if (registry.isInstalling(parsed.data.serverId)) {
+        return reply.code(409).send({
+          error: 'Une installation est en cours',
+          code: 'already_installing',
+        });
+      }
+
+      const variables = { ...stored.variables, ...parsed.data.variables };
+      for (const variable of stored.plugin.variables) {
+        const value = variables[variable.env];
+        if (value !== undefined) {
+          const error = validateVariableValue(variable, value);
+          if (error) {
+            return reply.code(422).send({ error });
+          }
+        }
+      }
+
+      await store.save({ ...stored, variables });
+      return { serverId: stored.serverId, variables };
+    },
+  );
 
   // ─── Server deletion (full cleanup) ────────────────────────────
   app.delete<{ Params: { serverId: string } }>(

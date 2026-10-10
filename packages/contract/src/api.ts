@@ -51,6 +51,22 @@ export const reinstallServerRequestSchema = z.object({
 
 export type ReinstallServerRequest = z.infer<typeof reinstallServerRequestSchema>;
 
+/**
+ * Variable update — the panel re-sends the server's FULL variable record
+ * (all env → value entries, not only the edited ones). The agent validates
+ * each value against the plugin's variable definitions, then updates its
+ * stored entry: the new values are used on the NEXT start (a running
+ * process keeps its original environment).
+ */
+export const updateServerVariablesRequestSchema = z.object({
+  serverId: z.string().uuid(),
+  variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+});
+
+export type UpdateServerVariablesRequest = z.infer<
+  typeof updateServerVariablesRequestSchema
+>;
+
 export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
 
 export type ServerAction = z.infer<typeof serverActionSchema>;
@@ -451,6 +467,7 @@ export const AGENT_ROUTES = {
   command: 'POST /servers/:serverId/command',
   info: 'GET /servers/:serverId',
   installStatus: 'GET /servers/:serverId/install',
+  variablesUpdate: 'POST /servers/:serverId/variables',
   list: 'GET /servers',
   delete: 'DELETE /servers/:serverId',
   /** File browser — every path is relative to the server's installDir. */

@@ -652,3 +652,122 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     expect(info.json().status).toBe('stopped');
   });
 });
+
+describe('Agent API — POST /servers/:serverId/variables', () => {
+  const VARS_ID = '770e8400-e29b-41d4-a716-446655440000';
+  let app: FastifyInstance;
+  const auth = { authorization: `Bearer ${TEST_TOKEN}` };
+
+  const varsPlugin = () => ({
+    schemaVersion: 2,
+    id: 'vars-plugin',
+    name: 'Vars',
+    author: 'moi',
+    variables: [
+      { env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 },
+      {
+        env: 'GAME_VERSION',
+        name: 'Version',
+        type: 'string',
+        defaultValue: '1.21',
+        pattern: '^\\d+\\.\\d+(\\.\\d+)?$',
+      },
+    ],
+    install: [{ action: 'write', file: 'marker.txt', content: 'v' }],
+    start: { command: 'echo {{GAME_VERSION}}' },
+  });
+
+  beforeAll(async () => {
+    app = createAgentServer(config);
+    await app.ready();
+
+    // Install a server with an initial variable override
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: {
+        serverId: VARS_ID,
+        name: 'vars-server',
+        plugin: varsPlugin(),
+        variables: { RAM_MB: 2048 },
+        installDir: join(config.dataDir, 'vars-srv'),
+        allocation: { port: 25566, memoryMb: 2048 },
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    const status = await waitForInstall(app, VARS_ID, auth);
+    expect(status.status).toBe('installed');
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('retourne 401 sans token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${VARS_ID}/variables`,
+      payload: { variables: { GAME_VERSION: '1.20' } },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('retourne 404 pour un serveur inconnu', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${OTHER_ID}/variables`,
+      headers: auth,
+      payload: { variables: { GAME_VERSION: '1.20' } },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('retourne 400 si la requête est invalide', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${VARS_ID}/variables`,
+      headers: auth,
+      payload: { variables: 'not-a-record' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Requête invalide');
+  });
+
+  it('retourne 422 si une valeur viole les règles du plugin', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${VARS_ID}/variables`,
+      headers: auth,
+      payload: { variables: { RAM_MB: 'not-a-number' } },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toContain('RAM');
+  });
+
+  it('retourne 422 si une valeur ne respecte pas la regex du plugin', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${VARS_ID}/variables`,
+      headers: auth,
+      payload: { variables: { GAME_VERSION: 'latest' } },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toContain('Version');
+  });
+
+  it('met à jour la variable demandée et préserve les autres (fusion)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${VARS_ID}/variables`,
+      headers: auth,
+      payload: { variables: { GAME_VERSION: '1.20.4' } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.serverId).toBe(VARS_ID);
+    // The untouched override survives, the edited one is applied
+    expect(body.variables.RAM_MB).toBe(2048);
+    expect(body.variables.GAME_VERSION).toBe('1.20.4');
+  });
+});

@@ -34,8 +34,8 @@ import { Route as ServersServerIdFilesRouteImport } from './routes/servers/$serv
 import { Route as ServersServerIdNetworkRouteImport } from './routes/servers/$serverId/network'
 import { Route as ServersServerIdSchedulesRouteImport } from './routes/servers/$serverId/schedules'
 import { Route as ServersServerIdSettingsRouteImport } from './routes/servers/$serverId/settings'
-import { Route as ServersServerIdStartupRouteImport } from './routes/servers/$serverId/startup'
 import { Route as ServersServerIdUsersRouteImport } from './routes/servers/$serverId/users'
+import { Route as ServersServerIdVariablesRouteImport } from './routes/servers/$serverId/variables'
 import { Route as AdminPluginsPluginIdIndexRouteImport } from './routes/admin/plugins/$pluginId/index'
 import { Route as AdminPluginsNewIndexRouteImport } from './routes/admin/plugins/new/index'
 
@@ -164,16 +164,17 @@ const ServersServerIdSettingsRoute = ServersServerIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ServersServerIdRouteRoute,
 } as any)
-const ServersServerIdStartupRoute = ServersServerIdStartupRouteImport.update({
-  id: '/startup',
-  path: '/startup',
-  getParentRoute: () => ServersServerIdRouteRoute,
-} as any)
 const ServersServerIdUsersRoute = ServersServerIdUsersRouteImport.update({
   id: '/users',
   path: '/users',
   getParentRoute: () => ServersServerIdRouteRoute,
 } as any)
+const ServersServerIdVariablesRoute =
+  ServersServerIdVariablesRouteImport.update({
+    id: '/variables',
+    path: '/variables',
+    getParentRoute: () => ServersServerIdRouteRoute,
+  } as any)
 const AdminPluginsPluginIdIndexRoute =
   AdminPluginsPluginIdIndexRouteImport.update({
     id: '/plugins/$pluginId/',
@@ -208,8 +209,8 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/network': typeof ServersServerIdNetworkRoute
   '/servers/$serverId/schedules': typeof ServersServerIdSchedulesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
-  '/servers/$serverId/startup': typeof ServersServerIdStartupRoute
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
+  '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers/': typeof AppServersIndexRoute
   '/admin/plugins/': typeof AdminPluginsIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
@@ -236,8 +237,8 @@ export interface FileRoutesByTo {
   '/servers/$serverId/network': typeof ServersServerIdNetworkRoute
   '/servers/$serverId/schedules': typeof ServersServerIdSchedulesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
-  '/servers/$serverId/startup': typeof ServersServerIdStartupRoute
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
+  '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers': typeof AppServersIndexRoute
   '/admin/plugins': typeof AdminPluginsIndexRoute
   '/servers/$serverId': typeof ServersServerIdIndexRoute
@@ -268,8 +269,8 @@ export interface FileRoutesById {
   '/servers/$serverId/network': typeof ServersServerIdNetworkRoute
   '/servers/$serverId/schedules': typeof ServersServerIdSchedulesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
-  '/servers/$serverId/startup': typeof ServersServerIdStartupRoute
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
+  '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/_app/servers/': typeof AppServersIndexRoute
   '/admin/plugins/': typeof AdminPluginsIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
@@ -300,8 +301,8 @@ export interface FileRouteTypes {
     | '/servers/$serverId/network'
     | '/servers/$serverId/schedules'
     | '/servers/$serverId/settings'
-    | '/servers/$serverId/startup'
     | '/servers/$serverId/users'
+    | '/servers/$serverId/variables'
     | '/servers/'
     | '/admin/plugins/'
     | '/servers/$serverId/'
@@ -328,8 +329,8 @@ export interface FileRouteTypes {
     | '/servers/$serverId/network'
     | '/servers/$serverId/schedules'
     | '/servers/$serverId/settings'
-    | '/servers/$serverId/startup'
     | '/servers/$serverId/users'
+    | '/servers/$serverId/variables'
     | '/servers'
     | '/admin/plugins'
     | '/servers/$serverId'
@@ -359,8 +360,8 @@ export interface FileRouteTypes {
     | '/servers/$serverId/network'
     | '/servers/$serverId/schedules'
     | '/servers/$serverId/settings'
-    | '/servers/$serverId/startup'
     | '/servers/$serverId/users'
+    | '/servers/$serverId/variables'
     | '/_app/servers/'
     | '/admin/plugins/'
     | '/servers/$serverId/'
@@ -555,18 +556,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdSettingsRouteImport
       parentRoute: typeof ServersServerIdRouteRoute
     }
-    '/servers/$serverId/startup': {
-      id: '/servers/$serverId/startup'
-      path: '/startup'
-      fullPath: '/servers/$serverId/startup'
-      preLoaderRoute: typeof ServersServerIdStartupRouteImport
-      parentRoute: typeof ServersServerIdRouteRoute
-    }
     '/servers/$serverId/users': {
       id: '/servers/$serverId/users'
       path: '/users'
       fullPath: '/servers/$serverId/users'
       preLoaderRoute: typeof ServersServerIdUsersRouteImport
+      parentRoute: typeof ServersServerIdRouteRoute
+    }
+    '/servers/$serverId/variables': {
+      id: '/servers/$serverId/variables'
+      path: '/variables'
+      fullPath: '/servers/$serverId/variables'
+      preLoaderRoute: typeof ServersServerIdVariablesRouteImport
       parentRoute: typeof ServersServerIdRouteRoute
     }
     '/admin/plugins/$pluginId/': {
@@ -636,8 +637,8 @@ interface ServersServerIdRouteRouteChildren {
   ServersServerIdNetworkRoute: typeof ServersServerIdNetworkRoute
   ServersServerIdSchedulesRoute: typeof ServersServerIdSchedulesRoute
   ServersServerIdSettingsRoute: typeof ServersServerIdSettingsRoute
-  ServersServerIdStartupRoute: typeof ServersServerIdStartupRoute
   ServersServerIdUsersRoute: typeof ServersServerIdUsersRoute
+  ServersServerIdVariablesRoute: typeof ServersServerIdVariablesRoute
   ServersServerIdIndexRoute: typeof ServersServerIdIndexRoute
 }
 
@@ -649,8 +650,8 @@ const ServersServerIdRouteRouteChildren: ServersServerIdRouteRouteChildren = {
   ServersServerIdNetworkRoute: ServersServerIdNetworkRoute,
   ServersServerIdSchedulesRoute: ServersServerIdSchedulesRoute,
   ServersServerIdSettingsRoute: ServersServerIdSettingsRoute,
-  ServersServerIdStartupRoute: ServersServerIdStartupRoute,
   ServersServerIdUsersRoute: ServersServerIdUsersRoute,
+  ServersServerIdVariablesRoute: ServersServerIdVariablesRoute,
   ServersServerIdIndexRoute: ServersServerIdIndexRoute,
 }
 

@@ -15,10 +15,13 @@ import {
   agentSendCommand,
   agentDeleteServer,
   agentReinstallServer,
+  agentUpdateServerVariables,
   AgentError,
 } from '../agent/client';
+import { validateVariableValue } from '@mojito/contract';
 import {
   createServerSchema,
+  updateServerVariablesSchema,
   serverActionInputSchema,
   sendCommandSchema,
   serverLogsQuerySchema,
@@ -395,6 +398,71 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
       }
       throw err;
     }
+  });
+
+// ─── Variable update (panel DB = source of truth, agent cache synced) ────────
+
+export const updateServerVariablesFn = createServerFn({ method: 'POST' })
+  .validator(updateServerVariablesSchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+
+    const plugin = await em.findOne(Plugin, { id: server.pluginId });
+    if (!plugin) throw new HttpError(500, 'Plugin introuvable');
+    const pluginJson = plugin.json as PluginContract;
+
+    // Merge: only userEditable variables accept the submitted values, the
+    // others keep their current value (Pelican semantics — non-editable
+    // variables are read-only for the owner)
+    const variables: Record<string, string | number | boolean> = { ...server.variables };
+    for (const variable of pluginJson.variables ?? []) {
+      if (variable.userEditable && data.variables[variable.env] !== undefined) {
+        variables[variable.env] = data.variables[variable.env];
+      }
+    }
+
+    // Same validation rules as the install (contract reuse)
+    for (const variable of pluginJson.variables ?? []) {
+      const value = variables[variable.env];
+      if ((value === undefined || value === '') && variable.required) {
+        throw new HttpError(422, `${variable.name} est requis`);
+      }
+      if (value !== undefined && value !== '') {
+        const error = validateVariableValue(variable, value);
+        if (error) throw new HttpError(422, error);
+      }
+    }
+
+    // Sync the agent's cache first — it resolves variables at start (including
+    // starts triggered directly over the browser WS, without the panel). A 404
+    // (the agent doesn't know the server: failed install, lost dataDir) is
+    // tolerated: the panel DB keeps the values and the agent will receive
+    // them on the next full install
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (node) {
+      try {
+        await agentUpdateServerVariables(node, server.id, variables);
+      } catch (err) {
+        if (err instanceof AgentError && err.statusCode === 404) {
+          // tolerated — agent out of sync, DB remains the source of truth
+        } else {
+          if (err instanceof AgentError) {
+            throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
+          }
+          throw err;
+        }
+      }
+    }
+
+    server.variables = variables;
+    await em.flush();
+
+    return { id: server.id, variables };
   });
 
 // ─── Console command ──────────────────────────────────────────────────────────

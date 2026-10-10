@@ -10,6 +10,14 @@ import { createServerSchema, type CreateServerDto } from '~/validators/server';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { VariableField } from '~/components/variable-field';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 
 export const Route = createFileRoute('/_app/servers/new')({
@@ -67,50 +75,12 @@ function NewServerPage() {
   const renderVariableField = (variable: PluginVariable) => (
     <form.Field name={`variables.${variable.env}`} key={variable.env}>
       {(field) => (
-        <div className="space-y-2">
-          <Label htmlFor={variable.env}>{variable.name}</Label>
-          {variable.type === 'boolean' ? (
-            <select
-              id={variable.env}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={String(field.state.value)}
-              onChange={(e) => field.handleChange(e.target.value === 'true')}
-              onBlur={field.handleBlur}
-            >
-              <option value="true">Activé</option>
-              <option value="false">Désactivé</option>
-            </select>
-          ) : variable.options ? (
-            <select
-              id={variable.env}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={String(field.state.value)}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-            >
-              {variable.options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              id={variable.env}
-              type={variable.type === 'number' ? 'number' : 'text'}
-              value={String(field.state.value)}
-              onChange={(e) =>
-                field.handleChange(
-                  variable.type === 'number' ? Number(e.target.value) : e.target.value,
-                )
-              }
-              onBlur={field.handleBlur}
-            />
-          )}
-          {variable.description && (
-            <p className="text-xs text-muted-foreground">{variable.description}</p>
-          )}
-        </div>
+        <VariableField
+          variable={variable}
+          value={field.state.value}
+          onChange={field.handleChange}
+          onBlur={field.handleBlur}
+        />
       )}
     </form.Field>
   );
@@ -162,20 +132,21 @@ function NewServerPage() {
               {(field) => (
                 <div className="space-y-2">
                   <Label htmlFor="nodeId">Node</Label>
-                  <select
-                    id="nodeId"
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  <Select
                     value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
+                    onValueChange={(v) => field.handleChange(v)}
                   >
-                    <option value="">— Choisir un node —</option>
-                    {nodes.map((node) => (
-                      <option key={node.id} value={node.id}>
-                        {node.name} ({node.fqdn}:{node.agentPort})
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="nodeId" className="w-full" onBlur={field.handleBlur}>
+                      <SelectValue placeholder="— Choisir un node —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {nodes.map((node) => (
+                        <SelectItem key={node.id} value={node.id}>
+                          {node.name} ({node.fqdn}:{node.agentPort})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">
                       {field.state.meta.errors[0]?.message}
@@ -189,20 +160,21 @@ function NewServerPage() {
               {(field) => (
                 <div className="space-y-2">
                   <Label htmlFor="pluginId">Plugin</Label>
-                  <select
-                    id="pluginId"
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  <Select
                     value={field.state.value}
-                    onChange={(e) => selectPlugin(e.target.value)}
-                    onBlur={field.handleBlur}
+                    onValueChange={(v) => selectPlugin(v)}
                   >
-                    <option value="">— Choisir un plugin —</option>
-                    {plugins.map((plugin) => (
-                      <option key={plugin.id} value={plugin.id}>
-                        {plugin.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="pluginId" className="w-full" onBlur={field.handleBlur}>
+                      <SelectValue placeholder="— Choisir un plugin —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {plugins.map((plugin) => (
+                        <SelectItem key={plugin.id} value={plugin.id}>
+                          {plugin.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">
                       {field.state.meta.errors[0]?.message}

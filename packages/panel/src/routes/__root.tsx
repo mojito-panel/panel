@@ -9,6 +9,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import type { RouterContext } from '~/router';
 import { getSession } from '~/server/functions/auth';
 import { AuthProvider } from '~/contexts/use-auth';
+import { Toaster } from '~/components/ui/sonner';
 import styles from '~/styles.css?url';
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -60,6 +61,8 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
+        {/* richColors: success/error/warning toasts get their own palette */}
+        <Toaster richColors closeButton position="bottom-right" />
         <Scripts />
       </body>
     </html>

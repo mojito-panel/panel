@@ -165,6 +165,24 @@ export async function agentGetServerLogs(
   return agentCall(node, `/servers/${serverId}/logs?after=${after}`);
 }
 
+/**
+ * Syncs the agent's variable cache (its servers.json entry) with the panel
+ * DB values. Panel DB stays the source of truth — the agent uses its copy
+ * at start (including starts triggered directly over the browser WS, where
+ * the panel is not in the loop). Same role as wings' config pull, but
+ * pushed: the agent has no credentials to call the panel back.
+ */
+export async function agentUpdateServerVariables(
+  node: INode,
+  serverId: string,
+  variables: Record<string, string | number | boolean>,
+): Promise<{ serverId: string; variables: Record<string, string | number | boolean> }> {
+  return agentCall(node, `/servers/${serverId}/variables`, {
+    method: 'POST',
+    body: { variables },
+  });
+}
+
 export async function agentServerAction(
   node: INode,
   serverId: string,

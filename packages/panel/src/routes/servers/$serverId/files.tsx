@@ -21,6 +21,13 @@ import { MAX_UPLOAD_SIZE, type FileObject } from '@mojito/contract';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import {
   listFilesFn,
   readFileFn,
   saveFileFn,
@@ -419,15 +426,18 @@ function CreateEntryForm({
       </form.Field>
       <form.Field name="type">
         {(field) => (
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
+          <Select
             value={field.state.value}
-            onChange={(e) => field.handleChange(e.target.value as 'file' | 'directory')}
-            onBlur={field.handleBlur}
+            onValueChange={(v) => field.handleChange(v as 'file' | 'directory')}
           >
-            <option value="file">Fichier</option>
-            <option value="directory">Dossier</option>
-          </select>
+            <SelectTrigger id="new-entry-type" className="w-full" onBlur={field.handleBlur}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="file">Fichier</SelectItem>
+              <SelectItem value="directory">Dossier</SelectItem>
+            </SelectContent>
+          </Select>
         )}
       </form.Field>
       <Button type="submit" size="sm" disabled={pending}>
