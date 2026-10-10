@@ -7,9 +7,7 @@
  *
  * Le compte doit exister (inscription via /register).
  */
-import { DatabaseSync } from 'node:sqlite';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import pg from 'pg';
 
 const email = process.argv[2];
 if (!email) {
@@ -17,17 +15,21 @@ if (!email) {
   process.exit(1);
 }
 
-const dbPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'mojito.db');
-const db = new DatabaseSync(dbPath);
+const client = new pg.Client({
+  connectionString:
+    process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito',
+});
+await client.connect();
 
-const user = db.prepare('SELECT id, email, role FROM user WHERE email = ?').get(email);
-if (!user) {
+const user = await client.query('SELECT id, email, role FROM "user" WHERE email = $1', [email]);
+if (user.rowCount === 0) {
   console.error(`Aucun compte avec l'email « ${email} » — inscris-toi d'abord via /register.`);
+  await client.end();
   process.exit(1);
 }
 
-db.exec(`UPDATE user SET role = 'admin' WHERE email = '${email.replace(/'/g, "''")}'`);
-const updated = db.prepare('SELECT email, role FROM user WHERE email = ?').get(email);
-db.close();
+await client.query('UPDATE "user" SET role = $1 WHERE email = $2', ['admin', email]);
+const updated = await client.query('SELECT email, role FROM "user" WHERE email = $1', [email]);
+await client.end();
 
-console.log(`OK : ${updated.email} → ${updated.role}`);
+console.log(`OK : ${updated.rows[0].email} → ${updated.rows[0].role}`);

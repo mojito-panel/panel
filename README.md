@@ -9,14 +9,14 @@ Architecture type Pelican/Pterodactyl : **Panel** (TanStack Start) + **Agent** (
 |---|---|
 | Panel front | TanStack Start + shadcn/ui + TanStack Table |
 | Auth | better-auth (email/mot de passe, rôles admin/user) |
-| DB | SQLite (`node:sqlite`) — better-auth + MikroORM v7 partagent le même fichier |
+| DB | Postgres 17 (docker compose) — MikroORM v7 gère toutes les tables (y compris better-auth) |
 | Contrat panel ↔ agent | Schémas Zod partagés (`@mojito/contract`) |
 | Agent | Node pur (Fastify + Bearer token) |
 | Tests | Vitest |
 
 ## Prérequis
 
-- **Node.js 24** (fixé via `.nvmrc` et `mise.toml`) — `node:sqlite` est requis
+- **Node.js 24** (fixé via `.nvmrc` et `mise.toml`)
 - **npm 11** (inclus avec Node 24)
 - **Docker** (pour Postgres en dev, optionnel)
 - **mise** (recommandé pour gérer les versions)
@@ -38,9 +38,7 @@ mise run setup:dev
 #   docker compose -f docker-compose.dev.yml up -d
 #   node scripts/copy-env.mjs
 
-# 3. Migrations better-auth (tables user/session/account/verification)
-mise run migrate
-# ou: npm run auth:migrate -w @mojito/panel
+# 3. Rien à faire — les migrations MikroORM s'appliquent au boot du serveur (src/server.ts)
 ```
 
 ## Développement
@@ -84,7 +82,7 @@ Les fichiers `.env.default` sont copiés en `.env` par `mise run setup:dev` (ou 
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `DATABASE_PATH` | `./data/mojito.db` | Chemin de la base SQLite (partagée better-auth + MikroORM) |
+| `DATABASE_URL` | `postgres://mojito:mojito@localhost:5432/mojito` | Connexion Postgres (partagée better-auth + MikroORM) |
 | `PANEL_URL` | `http://localhost:3000` | URL publique du panel |
 | `BETTER_AUTH_SECRET` | — | Secret better-auth (32+ caractères) |
 
@@ -100,7 +98,7 @@ Les fichiers `.env.default` sont copiés en `.env` par `mise run setup:dev` (ou 
 
 ### Base de données (Docker)
 
-`docker-compose.dev.yml` démarre un Postgres 17 pour le dev (optionnel, V1 utilise SQLite) :
+`docker-compose.dev.yml` démarre un Postgres 17 pour le dev :
 
 | Service | Port | Credentials |
 |---|---|---|
@@ -108,14 +106,16 @@ Les fichiers `.env.default` sont copiés en `.env` par `mise run setup:dev` (ou 
 
 ## Migrations
 
-Deux systèmes de migrations cohabitent (même fichier SQLite) :
+MikroORM gère **toutes** les tables (better-auth + métier). Les migrations
+s'appliquent automatiquement au démarrage du serveur (`src/server.ts` →
+`orm.migrator.up()`) :
 
 ```bash
-# Tables better-auth (user, session, account, verification)
-npm run auth:migrate -w @mojito/panel
+# Générer une migration après une évolution du schéma des entités
+npm run db:migrate -w @mojito/panel
 
-# Tables métier MikroORM (node, plugin, server, server_allocation)
-# via mikro-orm CLI (à venir en phase 3)
+# Appliquer les migrations manuellement (le boot le fait déjà)
+npm run db:migrate:up -w @mojito/panel
 ```
 
 ## Roadmap

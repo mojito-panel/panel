@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { config } from 'dotenv';
+
+config({ quiet: true });
 
 /**
  * Configuration de l'agent, chargée depuis les variables d'environnement

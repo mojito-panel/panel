@@ -6,9 +6,9 @@ Monorepo npm workspaces : `contract` (Zod), `panel` (TanStack Start), `agent` (F
 ## Commandes
 
 ```bash
-npm install                    # Dépendances (Node 24 requis — node:sqlite)
+npm install                    # Dépendances (Node 24 requis)
 mise run setup:dev             # Docker Postgres + copie .env.default → .env
-mise run migrate               # Migrations better-auth (tables user/session/account/verification)
+npm run db:migrate -w @mojito/panel   # Génère une migration MikroORM (appliquée au boot par src/server.ts)
 npm run dev                    # Panel — http://localhost:5173 (strictPort)
 npm run dev:agent              # Agent Fastify
 npm test                       # Tous les tests (workspaces)
@@ -25,12 +25,12 @@ npm run build                  # Build panel (vite, client + SSR)
 
 | Techno | Contraintes |
 |---|---|
-| Node.js 24 | `node:sqlite` — PAS de better-sqlite3 (ne compile pas sur Windows) |
+| Node.js 24 | `pg` (Postgres) — PAS de better-sqlite3 (ne compile pas sur Windows) |
 | TypeScript | `erasableSyntaxOnly: true` partout — PAS de parameter properties, enums, namespaces |
 | Visibilité | Champs/méthodes privés avec `#` (syntaxe JS native) — JAMAIS `private`/`public`/`protected` |
 | React 19.3 | PAS de `useCallback`/`useMemo`/`forwardRef` — React Compiler activé |
 | MikroORM v7 | `defineEntity`/`p` (decorator-less) — PAS de EntitySchema ni de décorateurs |
-| better-auth | `node:sqlite` direct, plugin `tanstackStartCookies` — PAS d'adaptateur MikroORM |
+| better-auth | `pg` Pool + mapping snake_case (`user.fields` etc.), plugin `tanstackStartCookies` — tables gérées par MikroORM |
 | Zod 4 | Standard Schema — validateur natif de TanStack Form (pas d'adapter) |
 
 ## Conventions panel (packages/panel)
@@ -70,7 +70,7 @@ src/
 - **Session** : fetchée en SSR dans `beforeLoad` de `__root.tsx` via `queryClient.fetchQuery({ queryKey: ['auth'] })`. Après login/register/signOut : `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
 - **Composants shadcn** : `ref` en prop (React 19), pas de `React.forwardRef`.
 - **Routes** : en dossiers. Une page = un dossier avec `index.tsx`. Regroupements via pathless layouts (`_auth/`).
-- **DB** : better-auth et MikroORM partagent le même fichier SQLite mais ont DEUX pipelines de migrations séparés (`npm run auth:migrate` pour better-auth, Migrator MikroORM pour le métier).
+- **DB** : Postgres — MikroORM gère TOUTES les tables (y compris better-auth). Migrations au boot via `src/server.ts` (`orm.migrator.up()`). JAMAIS de `schema.update()` (MikroORM v7 drop les tables inconnues par défaut). Le mapping snake_case better-auth est dans `src/lib/auth.ts` (`user.fields` etc.).
 - **better-auth** : `baseURL: process.env.BETTER_AUTH_URL` — PAS de `trustedOrigins` custom. Le port du dev server est fixé dans `vite.config.ts` (`strictPort: true`).
 
 ## Conventions agent (packages/agent)

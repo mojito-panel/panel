@@ -101,7 +101,7 @@ export const Server = defineEntity({
     pluginId: p.string().fieldName('plugin_id'),
     ownerId: p.string().fieldName('owner_id'),
     status: p.string().default('stopped'),
-    variables: p.json<Record<string, string | number | boolean>>().default({} as Record<string, string | number | boolean>),
+    variables: p.json<Record<string, string | number | boolean>>(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },
