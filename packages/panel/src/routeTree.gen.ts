@@ -16,15 +16,17 @@ import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminNodesRouteImport } from './routes/admin/nodes'
-import { Route as AdminPluginsRouteImport } from './routes/admin/plugins'
 import { Route as ServersServerIdRouteRouteImport } from './routes/servers/$serverId/route'
 import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
 import { Route as AppServersNewRouteImport } from './routes/_app/servers/new'
+import { Route as AdminPluginsIndexRouteImport } from './routes/admin/plugins/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ServersServerIdIndexRouteImport } from './routes/servers/$serverId/index'
 import { Route as ServersServerIdConsoleRouteImport } from './routes/servers/$serverId/console'
 import { Route as ServersServerIdFilesRouteImport } from './routes/servers/$serverId/files'
 import { Route as ServersServerIdSettingsRouteImport } from './routes/servers/$serverId/settings'
+import { Route as AdminPluginsPluginIdIndexRouteImport } from './routes/admin/plugins/$pluginId/index'
+import { Route as AdminPluginsNewIndexRouteImport } from './routes/admin/plugins/new/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -60,11 +62,6 @@ const AdminNodesRoute = AdminNodesRouteImport.update({
   path: '/nodes',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminPluginsRoute = AdminPluginsRouteImport.update({
-  id: '/plugins',
-  path: '/plugins',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
 const ServersServerIdRouteRoute = ServersServerIdRouteRouteImport.update({
   id: '/servers/$serverId',
   path: '/servers/$serverId',
@@ -79,6 +76,11 @@ const AppServersNewRoute = AppServersNewRouteImport.update({
   id: '/servers/new',
   path: '/servers/new',
   getParentRoute: () => AppRoute,
+} as any)
+const AdminPluginsIndexRoute = AdminPluginsIndexRouteImport.update({
+  id: '/plugins/',
+  path: '/plugins/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -105,6 +107,17 @@ const ServersServerIdSettingsRoute = ServersServerIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ServersServerIdRouteRoute,
 } as any)
+const AdminPluginsPluginIdIndexRoute =
+  AdminPluginsPluginIdIndexRouteImport.update({
+    id: '/plugins/$pluginId/',
+    path: '/plugins/$pluginId/',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminPluginsNewIndexRoute = AdminPluginsNewIndexRouteImport.update({
+  id: '/plugins/new/',
+  path: '/plugins/new/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -113,7 +126,6 @@ export interface FileRoutesByFullPath {
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
   '/admin/nodes': typeof AdminNodesRoute
-  '/admin/plugins': typeof AdminPluginsRoute
   '/admin/': typeof AdminIndexRoute
   '/servers/new': typeof AppServersNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -121,14 +133,16 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/files': typeof ServersServerIdFilesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
   '/servers/': typeof AppServersIndexRoute
+  '/admin/plugins/': typeof AdminPluginsIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
+  '/admin/plugins/$pluginId/': typeof AdminPluginsPluginIdIndexRoute
+  '/admin/plugins/new/': typeof AdminPluginsNewIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
   '/admin/nodes': typeof AdminNodesRoute
-  '/admin/plugins': typeof AdminPluginsRoute
   '/admin': typeof AdminIndexRoute
   '/servers/new': typeof AppServersNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -136,7 +150,10 @@ export interface FileRoutesByTo {
   '/servers/$serverId/files': typeof ServersServerIdFilesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
   '/servers': typeof AppServersIndexRoute
+  '/admin/plugins': typeof AdminPluginsIndexRoute
   '/servers/$serverId': typeof ServersServerIdIndexRoute
+  '/admin/plugins/$pluginId': typeof AdminPluginsPluginIdIndexRoute
+  '/admin/plugins/new': typeof AdminPluginsNewIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -147,7 +164,6 @@ export interface FileRoutesById {
   '/_auth/login': typeof AuthLoginRoute
   '/_auth/register': typeof AuthRegisterRoute
   '/admin/nodes': typeof AdminNodesRoute
-  '/admin/plugins': typeof AdminPluginsRoute
   '/admin/': typeof AdminIndexRoute
   '/_app/servers/new': typeof AppServersNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -155,7 +171,10 @@ export interface FileRoutesById {
   '/servers/$serverId/files': typeof ServersServerIdFilesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
   '/_app/servers/': typeof AppServersIndexRoute
+  '/admin/plugins/': typeof AdminPluginsIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
+  '/admin/plugins/$pluginId/': typeof AdminPluginsPluginIdIndexRoute
+  '/admin/plugins/new/': typeof AdminPluginsNewIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -166,7 +185,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/admin/nodes'
-    | '/admin/plugins'
     | '/admin/'
     | '/servers/new'
     | '/api/auth/$'
@@ -174,14 +192,16 @@ export interface FileRouteTypes {
     | '/servers/$serverId/files'
     | '/servers/$serverId/settings'
     | '/servers/'
+    | '/admin/plugins/'
     | '/servers/$serverId/'
+    | '/admin/plugins/$pluginId/'
+    | '/admin/plugins/new/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/register'
     | '/admin/nodes'
-    | '/admin/plugins'
     | '/admin'
     | '/servers/new'
     | '/api/auth/$'
@@ -189,7 +209,10 @@ export interface FileRouteTypes {
     | '/servers/$serverId/files'
     | '/servers/$serverId/settings'
     | '/servers'
+    | '/admin/plugins'
     | '/servers/$serverId'
+    | '/admin/plugins/$pluginId'
+    | '/admin/plugins/new'
   id:
     | '__root__'
     | '/'
@@ -199,7 +222,6 @@ export interface FileRouteTypes {
     | '/_auth/login'
     | '/_auth/register'
     | '/admin/nodes'
-    | '/admin/plugins'
     | '/admin/'
     | '/_app/servers/new'
     | '/api/auth/$'
@@ -207,7 +229,10 @@ export interface FileRouteTypes {
     | '/servers/$serverId/files'
     | '/servers/$serverId/settings'
     | '/_app/servers/'
+    | '/admin/plugins/'
     | '/servers/$serverId/'
+    | '/admin/plugins/$pluginId/'
+    | '/admin/plugins/new/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -271,13 +296,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminNodesRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/plugins': {
-      id: '/admin/plugins'
-      path: '/plugins'
-      fullPath: '/admin/plugins'
-      preLoaderRoute: typeof AdminPluginsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
     '/servers/$serverId': {
       id: '/servers/$serverId'
       path: '/servers/$serverId'
@@ -298,6 +316,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/servers/new'
       preLoaderRoute: typeof AppServersNewRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/admin/plugins/': {
+      id: '/admin/plugins/'
+      path: '/plugins'
+      fullPath: '/admin/plugins/'
+      preLoaderRoute: typeof AdminPluginsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -334,19 +359,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdSettingsRouteImport
       parentRoute: typeof ServersServerIdRouteRoute
     }
+    '/admin/plugins/$pluginId/': {
+      id: '/admin/plugins/$pluginId/'
+      path: '/plugins/$pluginId'
+      fullPath: '/admin/plugins/$pluginId/'
+      preLoaderRoute: typeof AdminPluginsPluginIdIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/plugins/new/': {
+      id: '/admin/plugins/new/'
+      path: '/plugins/new'
+      fullPath: '/admin/plugins/new/'
+      preLoaderRoute: typeof AdminPluginsNewIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
   }
 }
 
 interface AdminRouteRouteChildren {
   AdminNodesRoute: typeof AdminNodesRoute
-  AdminPluginsRoute: typeof AdminPluginsRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminPluginsIndexRoute: typeof AdminPluginsIndexRoute
+  AdminPluginsPluginIdIndexRoute: typeof AdminPluginsPluginIdIndexRoute
+  AdminPluginsNewIndexRoute: typeof AdminPluginsNewIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminNodesRoute: AdminNodesRoute,
-  AdminPluginsRoute: AdminPluginsRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminPluginsIndexRoute: AdminPluginsIndexRoute,
+  AdminPluginsPluginIdIndexRoute: AdminPluginsPluginIdIndexRoute,
+  AdminPluginsNewIndexRoute: AdminPluginsNewIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(

@@ -25,6 +25,13 @@ export const getPluginSchema = z.object({
 
 export type GetPluginDto = z.infer<typeof getPluginSchema>;
 
+export const createPluginSchema = z.object({
+  /** New plugin JSON — fully revalidated by `parsePlugin`. */
+  json: z.string().min(1, 'Le JSON du plugin est requis'),
+});
+
+export type CreatePluginDto = z.infer<typeof createPluginSchema>;
+
 export const updatePluginSchema = z.object({
   pluginId: z.string().min(1),
   /** Modified plugin JSON — fully revalidated by `parsePlugin`. */

@@ -11,6 +11,7 @@ import { createNodeSchema, deleteNodeSchema } from '~/validators/node';
 import {
   importPluginsSchema,
   getPluginSchema,
+  createPluginSchema,
   updatePluginSchema,
   deletePluginSchema,
 } from '~/validators/plugin';
@@ -253,6 +254,46 @@ export const getPluginFn = createServerFn({ method: 'POST' })
       /** Pretty-printed raw JSON — used for editing AND export. */
       json: JSON.stringify(plugin.json, null, 2),
     };
+  });
+
+/**
+ * Creates a new plugin from the editor UI (JSON payload validated against
+ * the v2 contract). Unlike an import (upsert), a slug clash is REJECTED —
+ * the editor shows the conflict instead of silently overwriting.
+ */
+export const createPluginFn = createServerFn({ method: 'POST' })
+  .validator(createPluginSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    let pluginJson: PluginDefinition;
+    try {
+      pluginJson = parsePluginJson(data.json);
+    } catch (err) {
+      throw new HttpError(400, `Plugin invalide : ${pluginErrorMessage(err)}`);
+    }
+
+    const clash = await em.findOne(Plugin, { slug: pluginJson.id });
+    if (clash) {
+      throw new HttpError(409, `Un plugin avec le slug « ${pluginJson.id} » existe déjà`);
+    }
+
+    const now = new Date();
+    const plugin = em.create(Plugin, {
+      id: randomUUID(),
+      slug: pluginJson.id,
+      name: pluginJson.name,
+      schemaVersion: pluginJson.schemaVersion,
+      json: pluginJson,
+      createdAt: now,
+      updatedAt: now,
+    });
+    em.persist(plugin);
+    await em.flush();
+
+    return { id: plugin.id, slug: plugin.slug, name: plugin.name };
   });
 
 /**

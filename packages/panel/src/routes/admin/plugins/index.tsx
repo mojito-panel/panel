@@ -2,27 +2,19 @@ import { useState, type FormEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { Pencil, Download, RefreshCw } from 'lucide-react';
+import { Pencil, Download, RefreshCw, Plus } from 'lucide-react';
 import {
   listPluginsFn,
   importPluginsFn,
   getPluginFn,
-  updatePluginFn,
   deletePluginFn,
 } from '~/server/functions/admin';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '~/components/ui/sheet';
 
-export const Route = createFileRoute('/admin/plugins')({
+export const Route = createFileRoute('/admin/plugins/')({
   component: AdminPluginsPage,
 });
 
@@ -33,31 +25,12 @@ function AdminPluginsPage() {
   const listPlugins = useServerFn(listPluginsFn);
   const importPlugins = useServerFn(importPluginsFn);
   const getPlugin = useServerFn(getPluginFn);
-  const updatePlugin = useServerFn(updatePluginFn);
   const deletePlugin = useServerFn(deletePluginFn);
 
   const query = useQuery({ queryKey: ['plugins'], queryFn: () => listPlugins() });
 
-  /** Plugin being edited (id), or null when the panel is closed. */
-  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
-
-  const editingQuery = useQuery({
-    queryKey: ['plugin', editing?.id],
-    enabled: editing !== null,
-    queryFn: () => getPlugin({ data: { pluginId: editing?.id ?? '' } }),
-  });
-
   const importMutation = useMutation({
     mutationFn: (input: ImportMutationInput) => importPlugins({ data: input }),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (input: { pluginId: string; json: string }) => updatePlugin({ data: input }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['plugins'] });
-      await queryClient.invalidateQueries({ queryKey: ['plugin'] });
-      setEditing(null);
-    },
   });
 
   const remove = useMutation({
@@ -108,21 +81,24 @@ function AdminPluginsPage() {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
-  const onEditSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!editing) return;
-    const json = String(new FormData(e.currentTarget).get('pluginJson') ?? '');
-    updateMutation.mutate({ pluginId: editing.id, json });
-  };
-
   return (
     <div>
-      <h1 className="text-3xl font-bold tracking-tight">Plugins</h1>
-      <p className="text-muted-foreground">
-        Eggs JSON (format v2, compatible Pelican-like) installables sur les serveurs.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Plugins</h1>
+          <p className="text-muted-foreground">
+            Eggs (format v2, compatible Pelican-like) installables sur les serveurs.
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/admin/plugins/new">
+            <Plus />
+            Créer un plugin
+          </Link>
+        </Button>
+      </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2">
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Importer des plugins</CardTitle>
@@ -232,13 +208,14 @@ function AdminPluginsPage() {
                       Mettre à jour
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditing({ id: plugin.id, name: plugin.name })}
-                  >
-                    <Pencil />
-                    Éditer
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link
+                      to="/admin/plugins/$pluginId"
+                      params={{ pluginId: plugin.id }}
+                    >
+                      <Pencil />
+                      Éditer
+                    </Link>
                   </Button>
                   <Button
                     variant="ghost"
@@ -272,50 +249,6 @@ function AdminPluginsPage() {
           )}
         </div>
       </div>
-
-      <Sheet
-        open={editing !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditing(null);
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full gap-0 overflow-y-auto sm:max-w-2xl"
-        >
-          <SheetHeader>
-            <SheetTitle>Éditer « {editing?.name} »</SheetTitle>
-            <SheetDescription>
-              Le JSON complet est revalidé (schéma v2). L'id peut être modifié —
-              l'unicité du slug est revérifiée.
-            </SheetDescription>
-          </SheetHeader>
-
-          {editingQuery.data && (
-            <form
-              key={editingQuery.data.id}
-              onSubmit={onEditSubmit}
-              className="flex flex-1 flex-col gap-4 p-6 pt-0"
-            >
-              <textarea
-                name="pluginJson"
-                rows={22}
-                defaultValue={editingQuery.data.json}
-                className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
-              />
-              <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
-              </Button>
-              {updateMutation.isError && (
-                <p className="text-sm text-destructive">{updateMutation.error.message}</p>
-              )}
-            </form>
-          )}
-          {editingQuery.isLoading && (
-            <p className="p-6 text-sm text-muted-foreground">Chargement du plugin…</p>
-          )}
-        </SheetContent>
-      </Sheet>
 
       <p className="mt-8">
         <Button variant="ghost" asChild>
