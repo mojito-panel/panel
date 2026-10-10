@@ -1,17 +1,21 @@
-import { cn } from '~/lib/utils';
+import * as React from "react"
+import { cn } from "cn"
+import { Label as LabelPrimitive } from "radix-ui"
 
-// React 19 : ref est passé comme prop, plus besoin de forwardRef
-function Label({ className, ref, ...props }: React.ComponentProps<'label'>) {
+function Label({
+  className,
+  ...props
+}: React.ComponentProps<typeof LabelPrimitive.Root>) {
   return (
-    <label
-      ref={ref}
+    <LabelPrimitive.Root
+      data-slot="label"
       className={cn(
-        'text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70',
-        className,
+        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className
       )}
       {...props}
     />
-  );
+  )
 }
 
-export { Label };
+export { Label }

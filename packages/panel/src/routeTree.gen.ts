@@ -10,18 +10,23 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
-import { Route as AdminNodesRouteImport } from './routes/admin/nodes'
-import { Route as AdminPluginsRouteImport } from './routes/admin/plugins'
-import { Route as ServersIndexRouteImport } from './routes/servers/index'
-import { Route as ServersServerIdRouteImport } from './routes/servers/$serverId'
-import { Route as ServersNewRouteImport } from './routes/servers/new'
+import { Route as AppAdminNodesRouteImport } from './routes/_app/admin/nodes'
+import { Route as AppAdminPluginsRouteImport } from './routes/_app/admin/plugins'
+import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
+import { Route as AppServersServerIdRouteImport } from './routes/_app/servers/$serverId'
+import { Route as AppServersNewRouteImport } from './routes/_app/servers/new'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
@@ -34,30 +39,30 @@ const AuthRegisterRoute = AuthRegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminNodesRoute = AdminNodesRouteImport.update({
+const AppAdminNodesRoute = AppAdminNodesRouteImport.update({
   id: '/admin/nodes',
   path: '/admin/nodes',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const AdminPluginsRoute = AdminPluginsRouteImport.update({
+const AppAdminPluginsRoute = AppAdminPluginsRouteImport.update({
   id: '/admin/plugins',
   path: '/admin/plugins',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const ServersIndexRoute = ServersIndexRouteImport.update({
+const AppServersIndexRoute = AppServersIndexRouteImport.update({
   id: '/servers/',
   path: '/servers/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const ServersServerIdRoute = ServersServerIdRouteImport.update({
+const AppServersServerIdRoute = AppServersServerIdRouteImport.update({
   id: '/servers/$serverId',
   path: '/servers/$serverId',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const ServersNewRoute = ServersNewRouteImport.update({
+const AppServersNewRoute = AppServersNewRouteImport.update({
   id: '/servers/new',
   path: '/servers/new',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -69,35 +74,36 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
-  '/admin/nodes': typeof AdminNodesRoute
-  '/admin/plugins': typeof AdminPluginsRoute
-  '/servers/$serverId': typeof ServersServerIdRoute
-  '/servers/new': typeof ServersNewRoute
-  '/servers/': typeof ServersIndexRoute
+  '/admin/nodes': typeof AppAdminNodesRoute
+  '/admin/plugins': typeof AppAdminPluginsRoute
+  '/servers/$serverId': typeof AppServersServerIdRoute
+  '/servers/new': typeof AppServersNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/servers/': typeof AppServersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
-  '/admin/nodes': typeof AdminNodesRoute
-  '/admin/plugins': typeof AdminPluginsRoute
-  '/servers/$serverId': typeof ServersServerIdRoute
-  '/servers/new': typeof ServersNewRoute
-  '/servers': typeof ServersIndexRoute
+  '/admin/nodes': typeof AppAdminNodesRoute
+  '/admin/plugins': typeof AppAdminPluginsRoute
+  '/servers/$serverId': typeof AppServersServerIdRoute
+  '/servers/new': typeof AppServersNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/servers': typeof AppServersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
   '/_auth/login': typeof AuthLoginRoute
   '/_auth/register': typeof AuthRegisterRoute
-  '/admin/nodes': typeof AdminNodesRoute
-  '/admin/plugins': typeof AdminPluginsRoute
-  '/servers/$serverId': typeof ServersServerIdRoute
-  '/servers/new': typeof ServersNewRoute
-  '/servers/': typeof ServersIndexRoute
+  '/_app/admin/nodes': typeof AppAdminNodesRoute
+  '/_app/admin/plugins': typeof AppAdminPluginsRoute
+  '/_app/servers/$serverId': typeof AppServersServerIdRoute
+  '/_app/servers/new': typeof AppServersNewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/_app/servers/': typeof AppServersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -109,8 +115,8 @@ export interface FileRouteTypes {
     | '/admin/plugins'
     | '/servers/$serverId'
     | '/servers/new'
-    | '/servers/'
     | '/api/auth/$'
+    | '/servers/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -120,30 +126,27 @@ export interface FileRouteTypes {
     | '/admin/plugins'
     | '/servers/$serverId'
     | '/servers/new'
-    | '/servers'
     | '/api/auth/$'
+    | '/servers'
   id:
     | '__root__'
     | '/'
+    | '/_app'
     | '/_auth/login'
     | '/_auth/register'
-    | '/admin/nodes'
-    | '/admin/plugins'
-    | '/servers/$serverId'
-    | '/servers/new'
-    | '/servers/'
+    | '/_app/admin/nodes'
+    | '/_app/admin/plugins'
+    | '/_app/servers/$serverId'
+    | '/_app/servers/new'
     | '/api/auth/$'
+    | '/_app/servers/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
   AuthLoginRoute: typeof AuthLoginRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
-  AdminNodesRoute: typeof AdminNodesRoute
-  AdminPluginsRoute: typeof AdminPluginsRoute
-  ServersServerIdRoute: typeof ServersServerIdRoute
-  ServersNewRoute: typeof ServersNewRoute
-  ServersIndexRoute: typeof ServersIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -154,6 +157,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth/login': {
@@ -170,40 +180,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/nodes': {
-      id: '/admin/nodes'
+    '/_app/admin/nodes': {
+      id: '/_app/admin/nodes'
       path: '/admin/nodes'
       fullPath: '/admin/nodes'
-      preLoaderRoute: typeof AdminNodesRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppAdminNodesRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/admin/plugins': {
-      id: '/admin/plugins'
+    '/_app/admin/plugins': {
+      id: '/_app/admin/plugins'
       path: '/admin/plugins'
       fullPath: '/admin/plugins'
-      preLoaderRoute: typeof AdminPluginsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppAdminPluginsRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/servers/': {
-      id: '/servers/'
+    '/_app/servers/': {
+      id: '/_app/servers/'
       path: '/servers'
       fullPath: '/servers/'
-      preLoaderRoute: typeof ServersIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppServersIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/servers/$serverId': {
-      id: '/servers/$serverId'
+    '/_app/servers/$serverId': {
+      id: '/_app/servers/$serverId'
       path: '/servers/$serverId'
       fullPath: '/servers/$serverId'
-      preLoaderRoute: typeof ServersServerIdRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppServersServerIdRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/servers/new': {
-      id: '/servers/new'
+    '/_app/servers/new': {
+      id: '/_app/servers/new'
       path: '/servers/new'
       fullPath: '/servers/new'
-      preLoaderRoute: typeof ServersNewRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppServersNewRouteImport
+      parentRoute: typeof AppRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -215,15 +225,29 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppRouteChildren {
+  AppAdminNodesRoute: typeof AppAdminNodesRoute
+  AppAdminPluginsRoute: typeof AppAdminPluginsRoute
+  AppServersServerIdRoute: typeof AppServersServerIdRoute
+  AppServersNewRoute: typeof AppServersNewRoute
+  AppServersIndexRoute: typeof AppServersIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAdminNodesRoute: AppAdminNodesRoute,
+  AppAdminPluginsRoute: AppAdminPluginsRoute,
+  AppServersServerIdRoute: AppServersServerIdRoute,
+  AppServersNewRoute: AppServersNewRoute,
+  AppServersIndexRoute: AppServersIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
   AuthLoginRoute: AuthLoginRoute,
   AuthRegisterRoute: AuthRegisterRoute,
-  AdminNodesRoute: AdminNodesRoute,
-  AdminPluginsRoute: AdminPluginsRoute,
-  ServersServerIdRoute: ServersServerIdRoute,
-  ServersNewRoute: ServersNewRoute,
-  ServersIndexRoute: ServersIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

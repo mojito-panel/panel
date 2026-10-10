@@ -5,7 +5,7 @@ import { listServersFn, deleteServerFn } from '~/server/functions/servers';
 import { Button } from '~/components/ui/button';
 import { useAuth } from '~/contexts/use-auth';
 
-export const Route = createFileRoute('/servers/')({
+export const Route = createFileRoute('/_app/servers/')({
   component: ServersPage,
 });
 

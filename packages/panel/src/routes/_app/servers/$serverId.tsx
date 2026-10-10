@@ -12,7 +12,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { XtermConsole } from '~/components/console/xterm-console';
 
-export const Route = createFileRoute('/servers/$serverId')({
+export const Route = createFileRoute('/_app/servers/$serverId')({
   component: ServerDetailPage,
 });
 

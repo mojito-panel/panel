@@ -41,11 +41,14 @@ npm run build                  # Build panel (vite, client + SSR)
 src/
 ├── routes/            # TanStack Router file-based, en DOSSIERS (pas de flat names)
 │   ├── __root.tsx     # createRootRouteWithContext + beforeLoad (session SSR)
-│   ├── index.tsx      # /
-│   ├── _auth/         # pathless layout → /login, /register
-│   ├── servers/       # /servers (index.tsx)
+│   ├── index.tsx      # / → redirect (connecté → /servers, sinon /login)
+│   ├── _auth/         # pathless layout → /login, /register (PAS de sidebar)
+│   ├── _app.tsx       # layout protégé : SidebarProvider + AppSidebar + guard
+│   ├── _app/servers/  # /servers, /servers/new, /servers/$serverId
+│   ├── _app/admin/    # /admin/nodes, /admin/plugins
 │   └── api/auth/$.ts  # catch-all better-auth
-├── components/ui/     # shadcn/ui
+├── components/ui/     # shadcn/ui (généré par le CLI — ne pas éditer à la main)
+├── components/app-sidebar.tsx  # Sidebar de l'app (menu + footer user/logout)
 ├── contexts/          # React contexts (AuthProvider, useAuth)
 ├── lib/               # auth.ts (better-auth), auth-client.ts, utils.ts
 ├── db/
