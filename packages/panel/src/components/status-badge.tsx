@@ -8,8 +8,8 @@
 
 /** Ball color per status (LED tint) — defaults to neutral gray. */
 const BALL_COLORS: Record<string, string> = {
-  running: 'bg-green-500',
-  online: 'bg-green-500',
+  running: 'bg-lime-400',
+  online: 'bg-lime-400',
   installing: 'bg-blue-500 animate-pulse',
   crashed: 'bg-red-500',
   install_failed: 'bg-red-500',
@@ -18,8 +18,8 @@ const BALL_COLORS: Record<string, string> = {
 
 /** Pill tint per status — defaults to neutral gray. */
 const PILL_COLORS: Record<string, string> = {
-  running: 'bg-green-100 text-green-700',
-  online: 'bg-green-100 text-green-700',
+  running: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
+  online: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   installing: 'bg-blue-100 text-blue-700',
   crashed: 'bg-red-100 text-red-700',
   install_failed: 'bg-red-100 text-red-700',
