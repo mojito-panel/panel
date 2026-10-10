@@ -254,6 +254,83 @@ export const consoleServerMessageSchema = z.discriminatedUnion('type', [
 
 export type ConsoleServerMessage = z.infer<typeof consoleServerMessageSchema>;
 
+// ─── File browser (panel → agent, panel proxies everything) ──────────────────
+
+/**
+ * Pelican parity: the panel PROXIES every file operation to the agent
+ * (server-side fetch, panel token) — the browser never talks to the agent
+ * directly for files. All paths are RELATIVE to the server's installDir,
+ * POSIX-style (`plugins/config.yml`), and validated by the agent against
+ * directory traversal (see the agent's resolveServerPath).
+ */
+
+/** Max size of a file the editor will read/write through the panel (1 Mo). */
+export const MAX_EDITABLE_FILE_SIZE = 1024 * 1024;
+
+/** Max decoded size of an upload carried through the panel (10 Mo). */
+export const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+
+export const fileObjectSchema = z.object({
+  name: z.string().min(1),
+  /** Relative POSIX path from the server root (dir + name). */
+  path: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  isDirectory: z.boolean(),
+  modifiedAt: z.string().datetime().nullable(),
+});
+
+export type FileObject = z.infer<typeof fileObjectSchema>;
+
+export const listFilesResponseSchema = z.object({
+  files: z.array(fileObjectSchema),
+});
+
+export type ListFilesResponse = z.infer<typeof listFilesResponseSchema>;
+
+export const readFileResponseSchema = z.object({
+  path: z.string().min(1),
+  /** UTF-8 text content — binary files must not be read through this route. */
+  content: z.string(),
+  size: z.number().int().nonnegative(),
+});
+
+export type ReadFileResponse = z.infer<typeof readFileResponseSchema>;
+
+export const writeFileRequestSchema = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
+export type WriteFileRequest = z.infer<typeof writeFileRequestSchema>;
+
+export const createEntryRequestSchema = z.object({
+  path: z.string().min(1),
+  type: z.enum(['file', 'directory']),
+});
+
+export type CreateEntryRequest = z.infer<typeof createEntryRequestSchema>;
+
+export const renameEntryRequestSchema = z.object({
+  path: z.string().min(1),
+  newPath: z.string().min(1),
+});
+
+export type RenameEntryRequest = z.infer<typeof renameEntryRequestSchema>;
+
+export const deleteEntriesRequestSchema = z.object({
+  paths: z.array(z.string().min(1)).min(1).max(100),
+});
+
+export type DeleteEntriesRequest = z.infer<typeof deleteEntriesRequestSchema>;
+
+export const uploadFileRequestSchema = z.object({
+  path: z.string().min(1),
+  /** Base64 of the raw bytes — the agent enforces MAX_UPLOAD_SIZE decoded. */
+  contentBase64: z.string().min(1),
+});
+
+export type UploadFileRequest = z.infer<typeof uploadFileRequestSchema>;
+
 // ─── HTTP routes (reference) ──────────────────────────────────────────────────
 
 /**
@@ -269,6 +346,14 @@ export const AGENT_ROUTES = {
   installStatus: 'GET /servers/:serverId/install',
   list: 'GET /servers',
   delete: 'DELETE /servers/:serverId',
+  /** File browser — every path is relative to the server's installDir. */
+  filesList: 'GET /servers/:serverId/files',
+  fileRead: 'GET /servers/:serverId/files/content',
+  fileWrite: 'POST /servers/:serverId/files/content',
+  fileCreate: 'POST /servers/:serverId/files/create',
+  fileRename: 'POST /servers/:serverId/files/rename',
+  fileDelete: 'POST /servers/:serverId/files/delete',
+  fileUpload: 'POST /servers/:serverId/files/upload',
   /** Browser-facing console socket — auth by console JWT (?token=), NOT the panel token. */
   consoleWs: 'GET /servers/:serverId/ws',
 } as const;

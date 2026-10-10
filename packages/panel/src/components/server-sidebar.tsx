@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { Terminal, Settings, Server } from 'lucide-react';
+import { Terminal, Settings, Server, FolderOpen } from 'lucide-react';
 import type { ServerStatus } from '@mojito/contract';
 
 /** Panel-side status (contract status + the install_failed state). */
@@ -16,9 +16,10 @@ import {
   SidebarMenuItem,
 } from '~/components/ui/sidebar';
 
-/** Server navigation — Pelican-style tabs (V1: console + settings). */
+/** Server navigation — Pelican-style tabs (V1: console + files + settings). */
 const serverItems = [
   { title: 'Console', url: '/servers/$serverId/console', icon: Terminal },
+  { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen },
   { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings },
 ];
 

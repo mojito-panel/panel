@@ -7,6 +7,7 @@ import { InstallRegistry } from '../server/installer/registry';
 import { registerAuthenticationHook, hashToken } from './middleware';
 import { registerSystemRoutes } from './router-system';
 import { registerServerRoutes } from './router-server';
+import { registerFilesRoutes } from './router-files';
 import { registerConsoleWs } from './websocket/websocket';
 
 /**
@@ -25,6 +26,9 @@ function redactTokenFromUrl(url: string): string {
  */
 export function createAgentServer(config: AgentConfig): FastifyInstance {
   const app = Fastify({
+    // File API: uploads (10 Mo decoded ≈ 13.7 Mo base64) and text writes must
+    // reach the handlers — the SERVICE enforces the real per-route limits.
+    bodyLimit: 32 * 1024 * 1024,
     logger: {
       level: 'info',
       serializers: {
@@ -51,6 +55,9 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
 
   // ─── Server routes (panel token) ─────────────────────────────────────────
   registerServerRoutes(app, { config, manager, store, registry });
+
+  // ─── File browser routes (panel token, sandboxed to installDir) ─────────
+  registerFilesRoutes(app, { store });
 
   // ─── Browser console WS (JWT auth, log streaming, commands, power) ──────
   // Own scope: the websocket plugin must be booted BEFORE the

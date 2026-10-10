@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { initOrm } from '~/db';
 import { Node, Plugin, Server, ServerAllocation } from '~/db/entities';
 import type { Plugin as PluginContract } from '@mojito/contract';
-import { requireUser, HttpError } from '../session';
+import { requireUser, HttpError, loadOwnedServer } from '../session';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import {
@@ -30,20 +30,6 @@ type ServerStatusDb =
   | 'stopped'
   | 'running'
   | 'crashed';
-
-/** Loads a server + checks ownership (admin = access to everything). */
-async function loadOwnedServer(serverId: string, userId: string, isAdmin: boolean) {
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const server = await em.findOne(Server, { id: serverId });
-  if (!server) {
-    throw new HttpError(404, 'Serveur introuvable');
-  }
-  if (!isAdmin && server.ownerId !== userId) {
-    throw new HttpError(403, 'Ce serveur ne t’appartient pas');
-  }
-  return { em, server };
-}
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 

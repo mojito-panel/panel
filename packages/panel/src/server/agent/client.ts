@@ -1,5 +1,5 @@
 import type { INode } from '~/db/types';
-import type { InstallStatus, ServerAction } from '@mojito/contract';
+import type { InstallStatus, ServerAction, FileObject } from '@mojito/contract';
 import { decryptSecret } from '../crypto';
 
 /**
@@ -172,4 +172,86 @@ export async function agentDeleteServer(
   serverId: string,
 ): Promise<{ serverId: string; removed: boolean }> {
   return agentCall(node, `/servers/${serverId}`, { method: 'DELETE' });
+}
+
+// ─── File browser (panel proxies everything — see contract api.ts) ──────────
+
+/** Lists a directory (relative POSIX path, '' = server root). */
+export async function agentListFiles(
+  node: INode,
+  serverId: string,
+  path: string,
+): Promise<{ files: FileObject[] }> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : '';
+  return agentCall(node, `/servers/${serverId}/files${query}`);
+}
+
+export async function agentReadFile(
+  node: INode,
+  serverId: string,
+  path: string,
+): Promise<{ path: string; content: string; size: number }> {
+  return agentCall(
+    node,
+    `/servers/${serverId}/files/content?path=${encodeURIComponent(path)}`,
+  );
+}
+
+export async function agentWriteFile(
+  node: INode,
+  serverId: string,
+  path: string,
+  content: string,
+): Promise<void> {
+  await agentCall(node, `/servers/${serverId}/files/content`, {
+    method: 'POST',
+    body: { path, content },
+  });
+}
+
+export async function agentCreateEntry(
+  node: INode,
+  serverId: string,
+  path: string,
+  type: 'file' | 'directory',
+): Promise<void> {
+  await agentCall(node, `/servers/${serverId}/files/create`, {
+    method: 'POST',
+    body: { path, type },
+  });
+}
+
+export async function agentRenameEntry(
+  node: INode,
+  serverId: string,
+  path: string,
+  newPath: string,
+): Promise<void> {
+  await agentCall(node, `/servers/${serverId}/files/rename`, {
+    method: 'POST',
+    body: { path, newPath },
+  });
+}
+
+export async function agentDeleteEntries(
+  node: INode,
+  serverId: string,
+  paths: string[],
+): Promise<void> {
+  await agentCall(node, `/servers/${serverId}/files/delete`, {
+    method: 'POST',
+    body: { paths },
+  });
+}
+
+export async function agentUploadFile(
+  node: INode,
+  serverId: string,
+  path: string,
+  contentBase64: string,
+): Promise<void> {
+  await agentCall(node, `/servers/${serverId}/files/upload`, {
+    method: 'POST',
+    body: { path, contentBase64 },
+  });
 }
