@@ -20,7 +20,7 @@ const BALL_COLORS: Record<string, string> = {
 const PILL_COLORS: Record<string, string> = {
   running: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   online: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
-  installing: 'bg-blue-100 text-blue-700',
+  installing: 'border border-blue-500/50 bg-blue-500/15 text-blue-500',
   crashed: 'bg-red-100 text-red-700',
   install_failed: 'bg-red-100 text-red-700',
   offline: 'bg-red-100 text-red-700',
