@@ -111,6 +111,94 @@ export const wsMessageSchema = z.discriminatedUnion('type', [
 
 export type WsMessage = z.infer<typeof wsMessageSchema>;
 
+// ─── Console permissions & JWT (browser ↔ agent, token issued by the panel) ───
+
+/**
+ * Closed permission list (Pelican-style subset). The agent gates EVERY incoming
+ * console action on these — the panel decides who gets what, the agent enforces it.
+ */
+export const permissionSchema = z.enum([
+  'console.read',
+  'console.write',
+  'power.start',
+  'power.stop',
+  'power.restart',
+  'power.kill',
+  'variables.read',
+  'variables.write',
+]);
+
+export type Permission = z.infer<typeof permissionSchema>;
+
+/**
+ * V1: no invitations/sub-users — owners and admins get every permission.
+ * The closed list above already exists so V2 can narrow it down.
+ */
+export const ALL_PERMISSIONS: readonly Permission[] = permissionSchema.options;
+
+/** TTL of a console JWT, in seconds. Short on purpose: revocation = reconnect. */
+export const CONSOLE_TOKEN_TTL_SECONDS = 300;
+
+/**
+ * Payload of the console JWT (HS256, signed by the panel, verified by the agent).
+ * `serverId` must match the WS route parameter; `permissions` gate every message.
+ */
+export const consoleTokenPayloadSchema = z.object({
+  iss: z.literal('mojito-panel'),
+  aud: z.literal('mojito-agent'),
+  sub: z.string().min(1), // user id
+  serverId: z.string().uuid(),
+  permissions: z.array(permissionSchema),
+  iat: z.number().int().nonnegative(),
+  exp: z.number().int().positive(),
+  jti: z.string().min(1),
+});
+
+export type ConsoleTokenPayload = z.infer<typeof consoleTokenPayloadSchema>;
+
+/** Panel → browser response for "give me a console token". */
+export const consoleTokenResponseSchema = z.object({
+  token: z.string().min(1),
+  wsUrl: z.string().min(1),
+});
+
+export type ConsoleTokenResponse = z.infer<typeof consoleTokenResponseSchema>;
+
+// ─── Console WebSocket messages (browser ↔ agent) ─────────────────────────────
+
+/** Browser → agent. */
+export const consoleClientMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('command'),
+    command: z.string().min(1).max(1000),
+  }),
+  z.object({
+    type: z.literal('power'),
+    action: serverActionSchema,
+  }),
+]);
+
+export type ConsoleClientMessage = z.infer<typeof consoleClientMessageSchema>;
+
+export const consoleErrorSchema = z.enum([
+  'unauthorized',
+  'forbidden',
+  'invalid-message',
+  'rate-limited',
+]);
+
+export type ConsoleError = z.infer<typeof consoleErrorSchema>;
+
+/** Agent → browser. */
+export const consoleServerMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('auth-ok') }),
+  z.object({ type: z.literal('log'), lines: z.array(z.string()) }),
+  z.object({ type: z.literal('status'), status: serverStatusSchema }),
+  z.object({ type: z.literal('error'), code: consoleErrorSchema }),
+]);
+
+export type ConsoleServerMessage = z.infer<typeof consoleServerMessageSchema>;
+
 // ─── HTTP routes (reference) ──────────────────────────────────────────────────
 
 /**
@@ -124,4 +212,6 @@ export const AGENT_ROUTES = {
   info: 'GET /servers/:serverId',
   list: 'GET /servers',
   delete: 'DELETE /servers/:serverId',
+  /** Browser-facing console socket — auth by console JWT (?token=), NOT the panel token. */
+  consoleWs: 'GET /servers/:serverId/ws',
 } as const;

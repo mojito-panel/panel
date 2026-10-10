@@ -8,6 +8,14 @@ import {
   installProgressSchema,
   logLineSchema,
   wsMessageSchema,
+  permissionSchema,
+  ALL_PERMISSIONS,
+  CONSOLE_TOKEN_TTL_SECONDS,
+  consoleTokenPayloadSchema,
+  consoleTokenResponseSchema,
+  consoleClientMessageSchema,
+  consoleServerMessageSchema,
+  consoleErrorSchema,
   AGENT_ROUTES,
 } from '../src/api';
 
@@ -184,5 +192,152 @@ describe('AGENT_ROUTES', () => {
     expect(AGENT_ROUTES.info).toBe('GET /servers/:serverId');
     expect(AGENT_ROUTES.list).toBe('GET /servers');
     expect(AGENT_ROUTES.delete).toBe('DELETE /servers/:serverId');
+    expect(AGENT_ROUTES.consoleWs).toBe('GET /servers/:serverId/ws');
   });
+});
+
+describe('permissionSchema', () => {
+  it('accepte chaque permission de la liste fermée', () => {
+    for (const permission of ALL_PERMISSIONS) {
+      expect(permissionSchema.safeParse(permission).success).toBe(true);
+    }
+  });
+
+  it('contient les permissions console/power/variables attendues', () => {
+    expect(ALL_PERMISSIONS).toContain('console.read');
+    expect(ALL_PERMISSIONS).toContain('console.write');
+    expect(ALL_PERMISSIONS).toContain('power.start');
+    expect(ALL_PERMISSIONS).toContain('power.stop');
+    expect(ALL_PERMISSIONS).toContain('power.restart');
+    expect(ALL_PERMISSIONS).toContain('power.kill');
+    expect(ALL_PERMISSIONS).toContain('variables.read');
+    expect(ALL_PERMISSIONS).toContain('variables.write');
+  });
+
+  it('rejette une permission hors liste', () => {
+    expect(permissionSchema.safeParse('files.read').success).toBe(false);
+  });
+});
+
+describe('consoleTokenPayloadSchema', () => {
+  const validPayload = {
+    iss: 'mojito-panel',
+    aud: 'mojito-agent',
+    sub: 'user_123',
+    serverId: '550e8400-e29b-41d4-a716-446655440000',
+    permissions: [...ALL_PERMISSIONS],
+    iat: 1760000000,
+    exp: 1760000000 + CONSOLE_TOKEN_TTL_SECONDS,
+    jti: 'tok_abc',
+  };
+
+  it('valide un payload complet', () => {
+    expect(consoleTokenPayloadSchema.safeParse(validPayload).success).toBe(true);
+  });
+
+  it('rejette un issuer inconnu', () => {
+    expect(
+      consoleTokenPayloadSchema.safeParse({ ...validPayload, iss: 'evil' }).success,
+    ).toBe(false);
+  });
+
+  it('rejette une audience autre que mojito-agent', () => {
+    expect(
+      consoleTokenPayloadSchema.safeParse({ ...validPayload, aud: 'mojito-panel' }).success,
+    ).toBe(false);
+  });
+
+  it('rejette une permission inconnue dans le payload', () => {
+    expect(
+      consoleTokenPayloadSchema.safeParse({
+        ...validPayload,
+        permissions: ['console.read', 'admin.*'],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejette un payload sans serverId ni jti', () => {
+    const { serverId, jti, ...without } = validPayload;
+    expect(consoleTokenPayloadSchema.safeParse(without).success).toBe(false);
+    expect(serverId).toBeDefined();
+    expect(jti).toBeDefined();
+  });
+});
+
+describe('consoleTokenResponseSchema', () => {
+  it('valide une réponse token + wsUrl', () => {
+    expect(
+      consoleTokenResponseSchema.safeParse({
+        token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig',
+        wsUrl: 'ws://localhost:8080/servers/550e8400-e29b-41d4-a716-446655440000/ws',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejette une réponse sans token', () => {
+    expect(consoleTokenResponseSchema.safeParse({ wsUrl: 'ws://localhost/ws' }).success).toBe(false);
+  });
+});
+
+describe('consoleClientMessageSchema', () => {
+  it('valide une commande console', () => {
+    expect(
+      consoleClientMessageSchema.safeParse({ type: 'command', command: 'say hello' }).success,
+    ).toBe(true);
+  });
+
+  it('rejette une commande vide', () => {
+    expect(
+      consoleClientMessageSchema.safeParse({ type: 'command', command: '' }).success,
+    ).toBe(false);
+  });
+
+  it('valide une action power', () => {
+    expect(
+      consoleClientMessageSchema.safeParse({ type: 'power', action: 'restart' }).success,
+    ).toBe(true);
+  });
+
+  it('rejette une action power inconnue', () => {
+    expect(
+      consoleClientMessageSchema.safeParse({ type: 'power', action: 'pause' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('consoleServerMessageSchema', () => {
+  it('valide auth-ok', () => {
+    expect(consoleServerMessageSchema.safeParse({ type: 'auth-ok' }).success).toBe(true);
+  });
+
+  it('valide un batch de logs', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'log',
+        lines: ['[12:00:00] [Server thread/INFO]: Done!'],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('valide un statut et une erreur', () => {
+    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'running' }).success).toBe(true);
+    expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(true);
+  });
+
+  it('rejette un code d\'erreur inconnu', () => {
+    expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'kaboom' }).success).toBe(false);
+  });
+
+  it('rejette un type inconnu', () => {
+    expect(consoleServerMessageSchema.safeParse({ type: 'install-progress' }).success).toBe(false);
+  });
+});
+
+describe('consoleErrorSchema', () => {
+  it.each(['unauthorized', 'forbidden', 'invalid-message', 'rate-limited'] as const)(
+    'accepte le code %s',
+    (code) => {
+      expect(consoleErrorSchema.safeParse(code).success).toBe(true);
+    },
+  );
 });
