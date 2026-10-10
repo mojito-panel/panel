@@ -84,18 +84,18 @@ Les fichiers `.env.default` sont copiés en `.env` par `mise run setup:dev` (ou 
 |---|---|---|
 | `DATABASE_URL` | `postgres://mojito:mojito@localhost:5432/mojito` | Connexion Postgres (partagée better-auth + MikroORM) |
 | `PANEL_URL` | `http://localhost:3000` | URL publique du panel |
-| `BETTER_AUTH_SECRET` | — | Secret better-auth (32+ caractères) |
+| `BETTER_AUTH_SECRET` | — | Secret better-auth (32+ caractères) — **aussi** la clé de chiffrement des tokens agent au repos |
 
 ### Agent (`packages/agent/.env`)
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `AGENT_TOKEN` | — | **Requis** — token Bearer (32+ caractères) |
-| `AGENT_JWT_SECRET` | — | **Requis** — identique à `PANEL_JWT_SECRET`, vérifie les JWT console |
+| `AGENT_TOKEN` | — | **Requis** — token Bearer (32+ caractères). **Aussi** la clé HS256 des JWT console (secret unique par node, comme Pelican) |
 | `AGENT_PORT` | `8080` | Port d'écoute |
 | `AGENT_HOST` | `0.0.0.0` | Interface d'écoute |
 | `AGENT_DATA_DIR` | `C:\PanelData` | Dossier de données des serveurs |
-| `PANEL_URL` | — | URL du panel (pour connexion WS sortante) |
+| `PANEL_URL` | — | URL du panel — **origine autorisée** à ouvrir le WS console |
+| `AGENT_ALLOWED_ORIGINS` | — | Origines supplémentaires autorisées (séparées par des virgules) |
 
 ### Console live & JWT (navigateur ↔ agent direct)
 
@@ -106,13 +106,16 @@ l'agent valide ce JWT et gate chaque action sur les permissions du payload :
 ```
 Navigateur ──POST createConsoleToken──▶ Panel (requireUser + ownership)
 Navigateur ◀──{ token, wsUrl }───────── Panel (JWT HS256, TTL 5 min, permissions V1 = toutes)
-Navigateur ──WS wsUrl?token=jwt───────▶ Agent (vérifie signature/aud/exp/serverId)
+Navigateur ──WS wsUrl (sans token)────▶ Agent (origin check, puis message auth = 1er message WS)
 Navigateur ◀──auth-ok + logs stream──── Agent (permissions re-validées à CHAQUE message)
 ```
 
-- `PANEL_JWT_SECRET` (panel) et `AGENT_JWT_SECRET` (agent) doivent être **identiques**.
+- **Secret unique par node** (comme Pelican) : le JWT console est signé par le panel avec le token agent du node, l’agent vérifie avec son propre token — pas de secret partagé supplémentaire à synchroniser.
+- Le token agent est chiffré au repos dans la DB du panel (AES-256-GCM, clé dérivée de `BETTER_AUTH_SECRET`) — il est à la fois credential et clé de signature.
+- Le JWT voyage en **premier message WS** (`auth`), jamais dans l’URL ; l’agent vérifie l’en-tête Origin (URL du panel ou `AGENT_ALLOWED_ORIGINS`).
+- Le token est rafraîchi **en place** (re-`auth`) avant expiration — pas de reconnexion.
 - Fallback : si le WS échoue à l'ouverture, la console retombe sur le polling des logs (`GET /logs?after=N`).
-- Le JWT (query string) et le token agent ne sont JAMAIS loggés (redaction du logger agent).
+- Le token agent n’est JAMAIS loggé.
 
 ### Base de données (Docker)
 

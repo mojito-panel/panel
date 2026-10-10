@@ -36,7 +36,7 @@ Panel (TanStack Start)  <--HTTPS + Bearer token / WS-->  Agent (Node + Fastify, 
 | Bridage RAM/CPU | Windows Job Objects | **V2** — pas en V1 |
 | Isolation FS | Users Windows locaux + ACL NTFS | **V2** — pas en V1 |
 | Auth panel ↔ agent | Token statique (32 bytes random) en HTTPS | mTLS/rotation plus tard |
-| Auth user → agent | JWT HS256 court (TTL ~5 min) émis par le panel | Secret partagé, payload = serverId + permissions — cf. Phase 5 |
+| Auth user → agent | JWT HS256 court (TTL ~5 min), signé avec le token du node (secret unique par node, comme Pelican) | Payload = serverId + scope + permissions ; transport = 1er message WS |
 | Logs live | WebSocket navigateur → agent (direct, type Pelican) | Remplace le polling de la phase 3 — cf. Phase 5 |
 
 ---
@@ -196,8 +196,10 @@ mojito-panel/
 ### User ↔ Agent (JWT, type Pelican)
 
 - Le navigateur parle **directement** à l'agent (WS console) — le panel ne relaie plus les logs.
-- Le panel émet un **JWT HS256 court** (TTL ~5 min), signé avec un secret partagé panel/agent
-  (`PANEL_JWT_SECRET` / `AGENT_JWT_SECRET`, 32+ caractères, jamais loggé).
+- Le panel émet un **JWT HS256 court** (TTL ~5 min), signé avec le **token agent du node** —
+  le même que le Bearer panel ↔ agent (secret unique par node, comme le daemon_token de Pelican).
+  Pas de secret JWT séparé. Le token agent est chiffré au repos dans la DB panel (AES-256-GCM,
+  clé dérivée de `BETTER_AUTH_SECRET`) car il devient aussi une clé de signature. Jamais loggé.
 - Payload validé par l'agent à CHAQUE requête/message : `aud: 'mojito-agent'`, `serverId`,
   `sub` (userId), `permissions[]`, `exp`, `jti`.
 - L'agent vérifie : signature, `aud`, `exp`, `serverId` du token === paramètre de la route,
@@ -309,7 +311,7 @@ Notes d'implémentation :
 
 #### E2 — Agent : secret JWT dans la config (`packages/agent/src/config.ts` + tests)
 
-- [x] `AGENT_JWT_SECRET` requis (32+ caractères), à côté du token statique panel
+- [x] ~~`AGENT_JWT_SECRET` requis~~ — **supersédé** : l’agent vérifie avec son propre `AGENT_TOKEN`
 - [x] Ne JAMAIS le logger (logger redacted comme pour le token)
 
 #### E3 — Agent : vérification JWT (`packages/agent/src/api/jwt.ts` + tests)
@@ -322,8 +324,7 @@ Notes d'implémentation :
 #### E4 — Agent : endpoint WS console (`packages/agent/src/api/index.ts`, `process/registry.ts`)
 
 - [x] Dépendance `@fastify/websocket` + `ws`
-- [x] `GET /servers/:serverId/ws?token=<jwt>` — token en query param (le navigateur
-  ne peut pas poser de header sur un WS). Token NEVER loggé (attention logger fastify).
+- [x] `GET /servers/:serverId/ws` — socket NON authentifié, JWT en 1er message WS (`auth`, jamais en query string).
 - [x] Handshake : vérif JWT + `serverId` du token === paramètre de route → `auth-ok`,
   batch initial du ring buffer, statut courant ; refus → close code 4001/4003 (pas de leak)
 - [x] Streaming : subscribe au callback de logs du registry (déjà en place pour le polling)
@@ -333,7 +334,7 @@ Notes d'implémentation :
 
 #### E5 — Panel : émission du JWT (`packages/panel/src/server/functions/servers.ts` + `.env.default` + tests)
 
-- [x] `PANEL_JWT_SECRET` (même secret que l'agent) dans `.env.default`
+- [x] ~~`PANEL_JWT_SECRET`~~ — **supersédé par l’alignement Pelican** : le JWT est signé avec le token du node (chiffré au repos via `BETTER_AUTH_SECRET`)
 - [x] Server function `createConsoleToken(serverId)` : `requireUser()` + check ownership
   (ou admin), puis signe HS256 (`node:crypto`, même code de base que E3 partagé via une
   petite fonction `signJwt` — pas de dépendance)
@@ -364,12 +365,23 @@ Notes d'implémentation :
 - [x] `npm test` vert (54 tests + les nouveaux)
 - [x] README (schéma du flux JWT) + mise à jour de ce plan (cocher les cases)
 
+#### Alignement Pelican (post-E8, appliqué)
+
+Après lecture du code réel de pelican/panel + pelican/wings, alignement sur leur modèle :
+- Secret unique par node : le JWT console est signé/vérifié avec le token agent (leur `daemon_token`) — plus de `PANEL_JWT_SECRET`/`AGENT_JWT_SECRET`.
+- Token chiffré au repos côté panel (AES-256-GCM depuis `BETTER_AUTH_SECRET`, leur équivalent = cast `encrypted`).
+- Handshake : le socket s’ouvre NON authentifié, le JWT voyage en 1er message WS (`auth`) — jamais en query string. Re-`auth` = refresh sans reconnexion.
+- Origin check avant l’upgrade (leur `CheckOrigin`) : `PANEL_URL` + `AGENT_ALLOWED_ORIGINS`.
+- Claim `scope: websocket` vérifié en plus des permissions (leurs scopes node JWT).
+- Expiry re-vérifiée à CHAQUE message entrant (leur `TokenValid`).
+- Écart assumé : pas de denylist JTI/déauthorize panel→agent en V1 (TTL 5 min + refresh en place suffisent).
+
 #### Flux cible
 
 ```
 Navigateur ──POST createConsoleToken──▶ Panel (requireUser + ownership)
 Navigateur ◀──{ token, wsUrl }────────── Panel (JWT HS256, TTL 5 min, permissions: all en V1)
-Navigateur ──WS wsUrl?token=jwt────────▶ Agent (vérif signature/aud/exp/serverId)
+Navigateur ──WS wsUrl (sans token)────▶ Agent (origin check + message auth = 1er message WS)
 Navigateur ◀──auth-ok + logs stream───── Agent (chaque message entrant re-validé par permissions)
 ```
 
@@ -405,7 +417,7 @@ Navigateur ◀──auth-ok + logs stream───── Agent (chaque message e
 - [ ] Timeout de stop gracieux avant kill forcé
 - [ ] Console de logs : virtualisation obligatoire (Minecraft spamme)
 - [ ] SteamCmd en cache global, pas par serveur
-- [x] JWT console : jamais dans les logs — serializer req du logger agent (redaction ?token=)
+- [x] JWT console : jamais dans l’URL ni les logs — transport = 1er message WS (`auth`) ; origin check sur l’upgrade
 - [x] WS console : permissions du JWT re-validées à CHAQUE message, pas seulement à l'ouverture
 
 ---
