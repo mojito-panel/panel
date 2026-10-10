@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { Plus, Trash2 } from 'lucide-react';
 import { listServersFn, deleteServerFn } from '~/server/functions/servers';
 import { Button } from '~/components/ui/button';
 import { useAuth } from '~/contexts/use-auth';
@@ -51,7 +52,10 @@ function ServersPage() {
             </>
           )}
           <Button asChild>
-            <Link to="/servers/new">Nouveau serveur</Link>
+            <Link to="/servers/new">
+              <Plus />
+              Nouveau serveur
+            </Link>
           </Button>
         </div>
       </div>
@@ -65,7 +69,10 @@ function ServersPage() {
         <div className="mt-8 rounded-lg border p-8 text-center">
           <p className="text-muted-foreground">Aucun serveur pour l'instant.</p>
           <Button className="mt-4" asChild>
-            <Link to="/servers/new">Créer mon premier serveur</Link>
+            <Link to="/servers/new">
+              <Plus />
+              Créer mon premier serveur
+            </Link>
           </Button>
         </div>
       )}
@@ -110,6 +117,7 @@ function ServersPage() {
                   }
                 }}
               >
+                <Trash2 />
                 Supprimer
               </Button>
             </div>

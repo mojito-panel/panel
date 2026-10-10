@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useState } from 'react';
 import { useRef } from 'react';
 import type { FormEvent } from 'react';
+import { Play, Square, RotateCw, Skull, Send } from 'lucide-react';
 import type { ConsoleClientMessage, ServerStatus } from '@mojito/contract';
 import {
   getServerFn,
@@ -105,14 +106,14 @@ function ServerConsolePage() {
   const installStatus = installQuery.data;
   if (installStatus && (installStatus.status === 'installing' || installStatus.status === 'failed')) {
     return (
-      <main className="mx-auto max-w-4xl p-8">
+      <main className="mx-auto max-w-6xl p-8">
         <InstallPanel serverId={serverId} status={installStatus} />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="mx-auto max-w-6xl p-8">
       {query.isError && (
         <p className="mb-4 text-sm text-destructive">Erreur : {query.error.message}</p>
       )}
@@ -123,6 +124,7 @@ function ServerConsolePage() {
           onClick={() => runAction('start')}
           disabled={action.isPending || isRunning}
         >
+          <Play />
           Démarrer
         </Button>
         <Button
@@ -130,6 +132,7 @@ function ServerConsolePage() {
           onClick={() => runAction('stop')}
           disabled={action.isPending || !isRunning}
         >
+          <Square />
           Arrêter
         </Button>
         <Button
@@ -137,6 +140,7 @@ function ServerConsolePage() {
           onClick={() => runAction('restart')}
           disabled={action.isPending || !isRunning}
         >
+          <RotateCw />
           Redémarrer
         </Button>
         <Button
@@ -146,6 +150,7 @@ function ServerConsolePage() {
           }}
           disabled={action.isPending || !isRunning}
         >
+          <Skull />
           Kill
         </Button>
       </div>
@@ -171,6 +176,7 @@ function ServerConsolePage() {
             disabled={!isRunning || submitCommand.isPending}
           />
           <Button type="submit" disabled={!isRunning || submitCommand.isPending || !command.trim()}>
+            <Send />
             Envoyer
           </Button>
         </form>

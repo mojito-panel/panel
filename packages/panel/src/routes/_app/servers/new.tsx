@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { Plus } from 'lucide-react';
 import type { PluginVariable } from '@mojito/contract';
 import { listNodesFn, listPluginsFn } from '~/server/functions/admin';
 import { installServerFn } from '~/server/functions/servers';
@@ -275,6 +276,7 @@ function NewServerPage() {
             )}
 
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
+              <Plus />
               {mutation.isPending ? 'Création…' : 'Créer et installer'}
             </Button>
           </form>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { RefreshCw } from 'lucide-react';
 import type { InstallStatus } from '@mojito/contract';
 import { retryInstallFn } from '~/server/functions/servers';
 import { Button } from '~/components/ui/button';
@@ -105,6 +106,7 @@ export function InstallPanel({ serverId, status }: InstallPanelProps) {
       {failed && (
         <CardFooter>
           <Button onClick={() => retry.mutate()} disabled={retry.isPending}>
+            <RefreshCw className={retry.isPending ? 'animate-spin' : undefined} />
             {retry.isPending ? 'Relance…' : 'Réessayer l’installation'}
           </Button>
           {retry.isError && (

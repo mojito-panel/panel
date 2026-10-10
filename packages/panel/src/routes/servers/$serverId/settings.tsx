@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { RefreshCw, Trash2 } from 'lucide-react';
 import {
   getServerFn,
   reinstallServerFn,
@@ -133,6 +134,7 @@ function ServerSettingsPage() {
             onClick={confirmReinstall}
             disabled={reinstallMutation.isPending}
           >
+            <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
             {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
           </Button>
           {reinstallMutation.isError && (
@@ -163,6 +165,7 @@ function ServerSettingsPage() {
             }}
             disabled={remove.isPending}
           >
+            <Trash2 />
             Supprimer
           </Button>
           {remove.isSuccess && (
