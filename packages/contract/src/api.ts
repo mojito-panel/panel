@@ -123,4 +123,5 @@ export const AGENT_ROUTES = {
   command: 'POST /servers/:serverId/command',
   info: 'GET /servers/:serverId',
   list: 'GET /servers',
+  delete: 'DELETE /servers/:serverId',
 } as const;

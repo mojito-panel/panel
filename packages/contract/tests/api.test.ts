@@ -183,5 +183,6 @@ describe('AGENT_ROUTES', () => {
     expect(AGENT_ROUTES.command).toBe('POST /servers/:serverId/command');
     expect(AGENT_ROUTES.info).toBe('GET /servers/:serverId');
     expect(AGENT_ROUTES.list).toBe('GET /servers');
+    expect(AGENT_ROUTES.delete).toBe('DELETE /servers/:serverId');
   });
 });

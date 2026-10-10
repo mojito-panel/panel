@@ -219,7 +219,7 @@ mojito-panel/
 - [x] Console : envoi de commandes, buffer de logs (ring buffer)
 - [x] Stop gracieux (command/signal + timeout → poll → kill)
 - [x] Crash detection minimale + anti-crash-loop
-- [ ] Cleanup : suppression dossier à la suppression du serveur
+- [x] Cleanup : suppression dossier à la suppression du serveur (`DELETE /servers/:serverId`)
 
 #### Spec process manager (alignée sur wings — server/power.go, environment/docker/power.go)
 

@@ -116,6 +116,14 @@ export class ProcessRegistry {
     return this.#getEntry(serverId).manager.isAlive();
   }
 
+  /**
+   * Retire un serveur du registry (après suppression du store).
+   * L'appelant doit vérifier que le process est arrêté avant.
+   */
+  forget(serverId: string): boolean {
+    return this.#servers.delete(serverId);
+  }
+
   async sendCommand(serverId: string, command: string): Promise<boolean> {
     const stored = await this.#store.get(serverId);
     if (!stored) {

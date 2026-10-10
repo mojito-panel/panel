@@ -1,5 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { rm } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 import type { AgentConfig } from '../config';
 import {
   installServerRequestSchema,
@@ -181,6 +183,44 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
       } catch (err) {
         return powerErrorReply(err, reply);
       }
+    },
+  );
+
+  // ─── Suppression d'un serveur (cleanup complet) ────────────────────────────
+  app.delete<{ Params: { serverId: string } }>(
+    '/servers/:serverId',
+    async (request, reply) => {
+      const { serverId } = request.params;
+      const stored = await store.get(serverId);
+      if (!stored) {
+        return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+      }
+
+      // Refuser si le process tourne — le panel doit stop/kill d'abord
+      if (registry.isRunning(serverId)) {
+        return reply.code(409).send({
+          error: 'Le serveur est en cours d’exécution',
+          code: 'already_running',
+        });
+      }
+
+      registry.forget(serverId);
+      await store.delete(serverId);
+
+      // Suppression du dossier — uniquement s'il est sous le dataDir de l'agent
+      // (garde anti-suppression accidentelle d'un chemin hors de notre périmètre)
+      const normalizedDataDir = resolve(config.dataDir);
+      const normalizedInstallDir = resolve(stored.installDir);
+      let removed = false;
+      if (
+        normalizedInstallDir === normalizedDataDir ||
+        normalizedInstallDir.startsWith(normalizedDataDir + sep)
+      ) {
+        await rm(stored.installDir, { recursive: true, force: true });
+        removed = true;
+      }
+
+      return { serverId, removed, installDir: stored.installDir };
     },
   );
 

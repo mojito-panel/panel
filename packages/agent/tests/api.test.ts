@@ -120,7 +120,7 @@ describe('Agent API — POST /servers/install', () => {
     name: 'mon-serveur',
     plugin: validPlugin,
     variables: {},
-    installDir: join(tmpDir, 'srv'),
+    installDir: join(config.dataDir, 'srv'),
     allocation: { port: 25565, memoryMb: 2048 },
     ...overrides,
   });
@@ -172,7 +172,7 @@ describe('Agent API — POST /servers/install', () => {
 
     // Le runner a bien exécuté l'action write avec la variable système SERVER_PORT
     const { readFile } = await import('node:fs/promises');
-    const marker = await readFile(join(tmpDir, 'srv', 'marker.txt'), 'utf-8');
+    const marker = await readFile(join(config.dataDir, 'srv', 'marker.txt'), 'utf-8');
     expect(marker).toBe('port=25565');
   });
 
@@ -248,5 +248,105 @@ describe('Agent API — POST /servers/install', () => {
     expect(list.statusCode).toBe(200);
     const ids = list.json().servers.map((s: { serverId: string }) => s.serverId);
     expect(ids).toContain(serverId);
+  });
+
+  it('DELETE : 404 inconnu, supprime store + dossier, GET → 404 ensuite', async () => {
+    const serverId = '550e8400-e29b-41d4-a716-446655440000';
+    const { access } = await import('node:fs/promises');
+
+    // DELETE sur un serveur inconnu → 404
+    const del404 = await app.inject({
+      method: 'DELETE',
+      url: '/servers/660e8400-e29b-41d4-a716-446655440000',
+      headers: auth,
+    });
+    expect(del404.statusCode).toBe(404);
+
+    // Installe un serveur
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody(),
+    });
+    expect(install.statusCode).toBe(200);
+
+    // Le dossier existe
+    await expect(access(join(config.dataDir, 'srv', 'marker.txt'))).resolves.toBeUndefined();
+
+    // DELETE → 200, dossier supprimé (installDir sous dataDir)
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().removed).toBe(true);
+    await expect(access(join(config.dataDir, 'srv'))).rejects.toThrow();
+
+    // Le serveur n'est plus connu
+    const info = await app.inject({ method: 'GET', url: `/servers/${serverId}`, headers: auth });
+    expect(info.statusCode).toBe(404);
+
+    // DELETE encore → 404
+    const again = await app.inject({
+      method: 'DELETE',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(again.statusCode).toBe(404);
+  });
+
+  it('DELETE : 409 si le process tourne, 200 après kill', async () => {
+    const serverId = '550e8400-e29b-41d4-a716-446655440000';
+
+    // Installe un serveur avec un process long
+    const install = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: installBody({
+        plugin: {
+          ...validPlugin,
+          start: { command: `"${process.execPath}" -e "setInterval(() => {}, 1000);"` },
+        },
+      }),
+    });
+    expect(install.statusCode).toBe(200);
+
+    // Démarre le process
+    const start = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/action`,
+      headers: auth,
+      payload: { action: 'start' },
+    });
+    expect(start.statusCode).toBe(200);
+    expect(start.json().status).toBe('running');
+
+    // DELETE pendant que ça tourne → 409
+    const del409 = await app.inject({
+      method: 'DELETE',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(del409.statusCode).toBe(409);
+
+    // Kill puis DELETE → 200
+    const kill = await app.inject({
+      method: 'POST',
+      url: `/servers/${serverId}/action`,
+      headers: auth,
+      payload: { action: 'kill' },
+    });
+    expect(kill.statusCode).toBe(200);
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/servers/${serverId}`,
+      headers: auth,
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().removed).toBe(true);
   });
 });
