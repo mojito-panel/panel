@@ -66,11 +66,10 @@ beforeAll(async () => {
     version: '0.1.0-test',
   };
   app = createAgentServer(config);
-  await app.listen({ host: '127.0.0.1', port: 0 });
-  const address = app.server.address() as AddressInfo;
-  wsBase = `ws://127.0.0.1:${address.port}`;
 
-  // Stored server whose start command prints a line then exits cleanly
+  // Stored server whose start command prints a line then exits cleanly.
+  // Saved BEFORE listen: the boot-restore hook reads and caches servers.json
+  // when the app becomes ready (same order as production).
   store = new ServerStore(dataDir);
   const plugin = parsePlugin({
     schemaVersion: 2,
@@ -94,6 +93,10 @@ beforeAll(async () => {
     allocation: { port: 25565, memoryMb: 1024, ip: '0.0.0.0' },
     installedAt: new Date().toISOString(),
   });
+
+  await app.listen({ host: '127.0.0.1', port: 0 });
+  const address = app.server.address() as AddressInfo;
+  wsBase = `ws://127.0.0.1:${address.port}`;
 });
 
 afterAll(async () => {

@@ -1,6 +1,7 @@
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import type { StopConfig } from '@mojito/contract';
 import { toPanelStatus, type ProcessState } from './states';
+import { isPidAlive } from './pid';
 
 export interface ProcessSpawnConfig {
   /** Templated start command. */
@@ -31,6 +32,8 @@ export interface ProcessEvents {
 const DEFAULT_STOP_TIMEOUT_MS = 30_000;
 const KILL_POLL_INTERVAL_MS = 500;
 const KILL_POLL_TIMEOUT_MS = 10_000;
+/** How often an adopted (re-attached) process is probed for liveness. */
+const ADOPT_POLL_INTERVAL_MS = 1_500;
 
 /**
  * Manages a server process: spawn with piped stdin/stdout
@@ -42,6 +45,9 @@ const KILL_POLL_TIMEOUT_MS = 10_000;
  */
 export class ServerProcessManager {
   #child: ChildProcess | null = null;
+  /** PID of an adopted process started by a previous agent run (no pipes). */
+  #adoptedPid: number | null = null;
+  #adoptTimer: ReturnType<typeof setInterval> | null = null;
   #state: ProcessState = 'offline';
   #stoppedVoluntarily = false;
   #logBuffer: string[] = [];
@@ -84,6 +90,52 @@ export class ServerProcessManager {
     return { lines: this.#logBuffer.slice(after - start), next };
   }
 
+  /** PID of the tracked process (spawned child or adopted orphan), else null. */
+  getPid(): number | null {
+    return this.#child?.pid ?? this.#adoptedPid;
+  }
+
+  /** True when the tracked process was adopted from a previous agent run. */
+  isAdopted(): boolean {
+    return this.#adoptedPid !== null;
+  }
+
+  #clearAdoptTimer(): void {
+    if (this.#adoptTimer) {
+      clearInterval(this.#adoptTimer);
+      this.#adoptTimer = null;
+    }
+  }
+
+  /**
+   * Adopts a still-running process started by a previous agent run
+   * (≈ wings re-attaching to a running Docker container at boot).
+   * Without pipes we cannot stream new output or send commands — the server
+   * is marked running and probed for liveness; an unexpected death goes
+   * through the normal crash-detection path. No-op if the pid is dead.
+   */
+  adopt(pid: number): void {
+    if (this.#child || this.#adoptedPid) {
+      throw new Error('Le process est déjà en cours d’exécution');
+    }
+    if (!isPidAlive(pid)) return;
+
+    this.#stoppedVoluntarily = false;
+    this.#adoptedPid = pid;
+    this.#setState('running');
+
+    this.#adoptTimer = setInterval(() => {
+      const current = this.#adoptedPid;
+      if (current === null) return;
+      if (isPidAlive(current)) return;
+      this.#adoptedPid = null;
+      this.#clearAdoptTimer();
+      this.#setState('offline');
+      this.#events.onExit?.(null, this.#stoppedVoluntarily);
+    }, ADOPT_POLL_INTERVAL_MS);
+    this.#adoptTimer.unref?.();
+  }
+
   #setState(next: ProcessState): void {
     if (this.#state === next) return;
     this.#state = next;
@@ -105,7 +157,7 @@ export class ServerProcessManager {
    * (like wings) — the readyPattern emits the `ready` event separately.
    */
   spawn(config: ProcessSpawnConfig): void {
-    if (this.#child) {
+    if (this.#child || this.#adoptedPid) {
       throw new Error('Le process est déjà en cours d’exécution');
     }
 
@@ -174,6 +226,18 @@ export class ServerProcessManager {
    * 4. still alive → kill the process tree
    */
   async stop(): Promise<void> {
+    if (this.#state === 'offline') return;
+
+    // Adopted process: no stdin pipe → straight to the tree kill. The adopt
+    // poller flips the state to offline once the pid is confirmed dead.
+    if (this.#adoptedPid) {
+      this.#stoppedVoluntarily = true;
+      this.#setState('stopping');
+      await this.#killPidTree(this.#adoptedPid);
+      await this.#waitForExit(DEFAULT_STOP_TIMEOUT_MS, KILL_POLL_INTERVAL_MS);
+      return;
+    }
+
     if (!this.#child || this.#state === 'offline') return;
 
     this.#stoppedVoluntarily = true;
@@ -200,6 +264,17 @@ export class ServerProcessManager {
 
   /** Immediately kills the process tree (force-passes everything). */
   async killTree(): Promise<void> {
+    if (this.#state === 'offline') return;
+
+    if (this.#adoptedPid) {
+      this.#stoppedVoluntarily = true;
+      this.#setState('stopping');
+      await this.#killPidTree(this.#adoptedPid);
+      // Confirmation poll (500ms for 10s — like wings)
+      await this.#waitForExit(KILL_POLL_TIMEOUT_MS, KILL_POLL_INTERVAL_MS);
+      return;
+    }
+
     if (!this.#child || this.#state === 'offline') return;
 
     this.#stoppedVoluntarily = true;
@@ -211,25 +286,31 @@ export class ServerProcessManager {
       return;
     }
 
+    await this.#killPidTree(pid);
+
+    // Confirmation poll (500ms for 10s — like wings)
+    await this.#waitForExit(KILL_POLL_TIMEOUT_MS, KILL_POLL_INTERVAL_MS);
+  }
+
+  /** Kills a whole process tree by PID — taskkill /T /F on Windows. */
+  #killPidTree(pid: number): Promise<void> {
     if (process.platform === 'win32') {
-      // taskkill /T kills the whole tree, /F forces
-      await new Promise<void>((resolve) => {
+      return new Promise<void>((resolve) => {
         execFile('taskkill', ['/PID', String(pid), '/T', '/F'], () => resolve());
       });
-    } else {
+    }
+    return new Promise<void>((resolve) => {
       try {
         process.kill(-pid, 'SIGKILL');
       } catch {
         try {
-          this.#child.kill('SIGKILL');
+          process.kill(pid, 'SIGKILL');
         } catch {
           /* already dead */
         }
       }
-    }
-
-    // Confirmation poll (500ms for 10s — like wings)
-    await this.#waitForExit(KILL_POLL_TIMEOUT_MS, KILL_POLL_INTERVAL_MS);
+      resolve();
+    });
   }
 
   #sendSignal(signal: string): void {
@@ -247,7 +328,9 @@ export class ServerProcessManager {
     return new Promise((resolve) => {
       const deadline = Date.now() + timeoutMs;
       const check = () => {
-        if (this.#state === 'offline' || !this.#child) {
+        // Adopted processes have no child handle — the state only flips to
+        // offline once the adopt poller confirms the pid is dead.
+        if (this.#state === 'offline' || (!this.#child && !this.#adoptedPid)) {
           resolve(true);
           return;
         }

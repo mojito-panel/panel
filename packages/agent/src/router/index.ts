@@ -3,6 +3,8 @@ import websocket from '@fastify/websocket';
 import type { AgentConfig } from '../config';
 import { ServerManager } from '../server/manager';
 import { ServerStore } from '../internal/server-store';
+import { StateStore } from '../internal/state-store';
+import { restoreServers } from '../server/restore';
 import { InstallRegistry } from '../server/installer/registry';
 import { SystemStatsCollector } from '../system/stats';
 import { registerAuthenticationHook, hashToken } from './middleware';
@@ -47,7 +49,8 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
   });
 
   const store = new ServerStore(config.dataDir);
-  const manager = new ServerManager({ store });
+  const stateStore = new StateStore(config.dataDir);
+  const manager = new ServerManager({ store, stateStore });
   const registry = new InstallRegistry();
   const collector = new SystemStatsCollector({
     dataDir: config.dataDir,
@@ -65,7 +68,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
   registerSystemRoutes(app, { config, collector });
 
   // ─── Server routes (panel token) ─────────────────────────────────────────
-  registerServerRoutes(app, { config, manager, store, registry });
+  registerServerRoutes(app, { config, manager, store, stateStore, registry });
 
   // ─── File browser routes (panel token, sandboxed to installDir) ─────────
   registerFilesRoutes(app, { store });
@@ -77,6 +80,20 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
     await instance.register(websocket);
     registerConsoleWs(instance, { config, manager, registry });
     registerHealthWs(instance, { config, collector });
+  });
+
+  // ─── Boot restore (≈ wings boot loop) ────────────────────────────────────
+  // Runs once the HTTP server is up, without blocking it: a hanging start
+  // (e.g. a long tool download) must not keep the whole agent offline.
+  app.addHook('onReady', () => {
+    void restoreServers({
+      store,
+      stateStore,
+      manager,
+      onError: (serverId, error) => {
+        app.log.warn({ serverId, error }, 'failed to restore server state at boot');
+      },
+    });
   });
 
   return app;

@@ -15,11 +15,13 @@ import { startTrackedInstall } from '../server/installer/tracked';
 import type { InstallRegistry } from '../server/installer/registry';
 import { toPanelStatus } from '../environment/states';
 import type { ServerStore } from '../internal/server-store';
+import type { StateStore } from '../internal/state-store';
 
 export interface ServerRoutesOptions {
   config: AgentConfig;
   manager: ServerManager;
   store: ServerStore;
+  stateStore: StateStore;
   registry: InstallRegistry;
 }
 
@@ -36,7 +38,7 @@ function powerErrorReply(err: unknown, reply: FastifyReply): FastifyReply {
 
 /** Server routes (≈ wings router_server.go). All behind the panel token. */
 export function registerServerRoutes(app: FastifyInstance, options: ServerRoutesOptions): void {
-  const { config, manager, store, registry } = options;
+  const { config, manager, store, stateStore, registry } = options;
 
   // ─── Server install (background, tracked step by step) ────────────────
   app.post('/servers/install', async (request, reply) => {
@@ -308,6 +310,9 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
 
       manager.forget(serverId);
       await store.delete(serverId);
+      // Boot-restore artifact: a stale states.json entry would be ignored at
+      // boot, but keeping it around would resurrect a deleted id.
+      await stateStore.delete(serverId);
 
       // Folder removal — only if it is under the agent's dataDir
       // (guard against accidental deletion of a path outside our scope)

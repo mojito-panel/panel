@@ -2,6 +2,7 @@ import type { ServerAction } from '@mojito/contract';
 import { ServerProcessManager, type ProcessEvents } from '../environment/process';
 import type { ProcessState } from '../environment/states';
 import type { ServerStore } from '../internal/server-store';
+import type { StateStore } from '../internal/state-store';
 import { ServerInstance, type RegistryListener } from './server';
 import { PowerActionError } from './errors';
 import { handlePowerAction } from './power';
@@ -12,6 +13,8 @@ export { PowerActionError };
 
 export interface ServerManagerOptions {
   store: ServerStore;
+  /** Runtime state persistence (states.json) — omitted in unit tests. */
+  stateStore?: StateStore;
   /** Anti-crash-loop: no auto restart if the last crash is < N seconds ago. */
   crashLoopSeconds?: number;
   /** Event factory for a server's manager (extra listeners, phase 3). */
@@ -26,11 +29,13 @@ export interface ServerManagerOptions {
 export class ServerManager {
   readonly #servers = new Map<string, ServerInstance>();
   readonly #store: ServerStore;
+  readonly #stateStore: StateStore | undefined;
   readonly #crashLoopMs: number;
   readonly #createEvents: ((serverId: string) => ProcessEvents) | undefined;
 
   constructor(options: ServerManagerOptions) {
     this.#store = options.store;
+    this.#stateStore = options.stateStore;
     this.#crashLoopMs = (options.crashLoopSeconds ?? 60) * 1000;
     this.#createEvents = options.createEvents;
   }
@@ -44,6 +49,18 @@ export class ServerManager {
     return instance;
   }
 
+  /** Persists the current runtime state + pid of a server (states.json). */
+  #persistState(serverId: string): void {
+    if (!this.#stateStore) return;
+    const instance = this.#servers.get(serverId);
+    if (!instance) return;
+    void this.#stateStore.write(serverId, {
+      state: instance.manager.getState(),
+      pid: instance.manager.getPid(),
+      adopted: instance.manager.isAdopted(),
+    });
+  }
+
   #buildEvents(serverId: string): ProcessEvents {
     const custom = this.#createEvents?.(serverId);
     return {
@@ -55,6 +72,7 @@ export class ServerManager {
       onStateChange: (state) => {
         custom?.onStateChange?.(state);
         this.#servers.get(serverId)?.emitState(state);
+        this.#persistState(serverId);
       },
       onExit: (code, clean) => {
         custom?.onExit?.(code, clean);
@@ -96,6 +114,11 @@ export class ServerManager {
   /** Subscribes to a server's live logs/state (console WS) — returns the unsubscribe function. */
   subscribe(serverId: string, listener: RegistryListener): () => void {
     return this.#getOrCreate(serverId).subscribe(listener);
+  }
+
+  /** Adopts a still-running process from a previous agent run (boot restore). */
+  adopt(serverId: string, pid: number): void {
+    this.#getOrCreate(serverId).manager.adopt(pid);
   }
 
   async sendCommand(serverId: string, command: string): Promise<boolean> {
