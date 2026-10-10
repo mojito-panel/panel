@@ -1,8 +1,17 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
+import { NotImplemented } from '~/components/not-implemented';
 
-/** /admin → /admin/nodes. */
+/** /admin — vue d'ensemble de l'administration (Pelican admin overview). */
 export const Route = createFileRoute('/admin/')({
-  beforeLoad: () => {
-    throw redirect({ to: '/admin/nodes' });
-  },
+  component: AdminOverviewPage,
 });
+
+function AdminOverviewPage() {
+  return (
+    <NotImplemented
+      title="Vue d'ensemble"
+      description="Tableau de bord de l'infrastructure : compteurs de serveurs, nodes et utilisateurs, état des agents, dernières installations."
+      pelican="Overview (zone admin)"
+    />
+  );
+}

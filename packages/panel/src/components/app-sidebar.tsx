@@ -71,7 +71,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip="Administration">
-                    <Link to="/admin/nodes">
+                    <Link to="/admin">
                       <Shield />
                       <span>Administration</span>
                     </Link>
