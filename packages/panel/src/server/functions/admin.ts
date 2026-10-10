@@ -1,15 +1,18 @@
 import { createServerFn } from '@tanstack/react-start';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { ZodError } from 'zod';
+import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Plugin, Server } from '~/db/entities';
-import { parsePlugin } from '@mojito/contract';
+import { parsePlugin, type Plugin as PluginDefinition } from '@mojito/contract';
 import { requireUser, requireAdmin, HttpError } from '../session';
+import { createNodeSchema, deleteNodeSchema } from '~/validators/node';
 import {
-  createNodeSchema,
-  deleteNodeSchema,
-  createPluginSchema,
+  importPluginsSchema,
+  getPluginSchema,
+  updatePluginSchema,
   deletePluginSchema,
-} from '~/validators/node';
+} from '~/validators/plugin';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
@@ -89,54 +92,200 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
 
 // ─── Plugins ───────────────────────────────────────────────────────────────────
 
+/** Parse un JSON brut et le valide contre le schéma v2 du contract. */
+function parsePluginJson(raw: string): PluginDefinition {
+  return parsePlugin(JSON.parse(raw));
+}
+
+/** Message d'erreur lisible (ZodError → liste des champs en erreur). */
+function pluginErrorMessage(err: unknown): string {
+  if (err instanceof ZodError) {
+    return err.issues.map((i) => `${i.path.join('.') || 'plugin'} : ${i.message}`).join(' · ');
+  }
+  return (err as Error).message;
+}
+
+/**
+ * Convertit une URL github.com/…/blob/… en raw.githubusercontent.com/…/raw/…
+ * (les URLs GitHub du catalogue pointent vers la page web, pas le fichier brut).
+ */
+function normalizePluginUrl(url: string): string {
+  const parsed = new URL(url);
+  if (parsed.hostname === 'github.com' && parsed.pathname.includes('/blob/')) {
+    return `https://raw.githubusercontent.com${parsed.pathname.replace('/blob/', '/raw/')}${parsed.search}`;
+  }
+  return url;
+}
+
+/** Télécharge le JSON d'un plugin depuis une URL (extension .json requise). */
+async function fetchPluginJsonFromUrl(url: string): Promise<string> {
+  const normalized = normalizePluginUrl(url);
+  if (!new URL(normalized).pathname.toLowerCase().endsWith('.json')) {
+    throw new HttpError(400, 'Seules les URLs pointant vers un .json sont supportées');
+  }
+  let res: Response;
+  try {
+    res = await fetch(normalized, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    throw new HttpError(502, `Téléchargement impossible : ${(err as Error).message}`);
+  }
+  if (!res.ok) {
+    throw new HttpError(502, `Téléchargement échoué (HTTP ${res.status})`);
+  }
+  const body = await res.text();
+  if (body.length > 2_000_000) {
+    throw new HttpError(413, 'Fichier trop volumineux (> 2 Mo)');
+  }
+  return body;
+}
+
+/**
+ * Crée le plugin ou met à jour celui qui porte le même slug (upsert —
+ * un re-import met à jour la définition, comme les eggs Pelican).
+ */
+async function upsertPlugin(
+  em: EntityManager,
+  pluginJson: PluginDefinition,
+): Promise<{ slug: string; name: string; created: boolean }> {
+  const existing = await em.findOne(Plugin, { slug: pluginJson.id });
+  const now = new Date();
+
+  if (existing) {
+    existing.name = pluginJson.name;
+    existing.schemaVersion = pluginJson.schemaVersion;
+    existing.json = pluginJson;
+    existing.updatedAt = now;
+    await em.flush();
+    return { slug: existing.slug, name: existing.name, created: false };
+  }
+
+  const plugin = em.create(Plugin, {
+    id: randomUUID(),
+    slug: pluginJson.id,
+    name: pluginJson.name,
+    schemaVersion: pluginJson.schemaVersion,
+    json: pluginJson,
+    createdAt: now,
+    updatedAt: now,
+  });
+  em.persist(plugin);
+  await em.flush();
+  return { slug: plugin.slug, name: plugin.name, created: true };
+}
+
 export const listPluginsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireUser();
   const orm = await initOrm();
   const em = orm.em.fork();
   const plugins = await em.find(Plugin, {});
-  return plugins.map((plugin) => ({
-    id: plugin.id,
-    slug: plugin.slug,
-    name: plugin.name,
-    schemaVersion: plugin.schemaVersion,
-    /** Définitions des variables (formulaire auto-généré à la création). */
-    variables: (plugin.json as ReturnType<typeof parsePlugin>).variables ?? [],
-    createdAt: plugin.createdAt,
-  }));
+  return plugins.map((plugin) => {
+    const def = plugin.json as PluginDefinition;
+    return {
+      id: plugin.id,
+      slug: plugin.slug,
+      name: plugin.name,
+      schemaVersion: plugin.schemaVersion,
+      /** Définitions des variables (formulaire auto-généré à la création). */
+      variables: def.variables ?? [],
+      /** URL de mise à jour (re-import) si définie par le plugin. */
+      updateUrl: def.updateUrl ?? null,
+      createdAt: plugin.createdAt,
+    };
+  });
 });
 
-export const createPluginFn = createServerFn({ method: 'POST' })
-  .validator(createPluginSchema)
+/**
+ * Import de plugins en batch : JSON bruts (textarea/fichiers) + URLs.
+ * Chaque source est traitée indépendamment — les échecs n'annulent pas
+ * les succès (rapport par plugin, comme l'import d'eggs Pelican).
+ */
+export const importPluginsFn = createServerFn({ method: 'POST' })
+  .validator(importPluginsSchema)
   .handler(async ({ data }) => {
     await requireAdmin();
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    // Validation stricte du JSON (schéma v2 du contract)
-    let pluginJson: ReturnType<typeof parsePlugin>;
+    const imported: Array<{ slug: string; name: string; created: boolean; source: string }> = [];
+    const failed: Array<{ source: string; error: string }> = [];
+
+    const sources: Array<{ raw?: string; url?: string }> = [
+      ...(data.jsons ?? []).map((raw) => ({ raw })),
+      ...(data.urls ?? []).map((url) => ({ url })),
+    ];
+
+    for (const [index, source] of sources.entries()) {
+      const label = source.url ?? `JSON #${index + 1}`;
+      try {
+        const raw = source.url ? await fetchPluginJsonFromUrl(source.url) : source.raw;
+        if (!raw) throw new HttpError(400, 'JSON vide');
+        const pluginJson = parsePluginJson(raw);
+        const saved = await upsertPlugin(em, pluginJson);
+        imported.push({ ...saved, source: label });
+      } catch (err) {
+        failed.push({ source: label, error: pluginErrorMessage(err) });
+      }
+    }
+
+    return { imported, failed };
+  });
+
+export const getPluginFn = createServerFn({ method: 'POST' })
+  .validator(getPluginSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const plugin = await em.findOne(Plugin, { id: data.pluginId });
+    if (!plugin) throw new HttpError(404, 'Plugin introuvable');
+
+    return {
+      id: plugin.id,
+      slug: plugin.slug,
+      name: plugin.name,
+      schemaVersion: plugin.schemaVersion,
+      /** JSON brut pretty-printé — sert l'édition ET l'export. */
+      json: JSON.stringify(plugin.json, null, 2),
+    };
+  });
+
+/**
+ * Édite un plugin existant : le JSON complet est revalidé par le schéma v2.
+ * Le slug (id) peut changer — l'unicité est revérifiée.
+ */
+export const updatePluginFn = createServerFn({ method: 'POST' })
+  .validator(updatePluginSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const plugin = await em.findOne(Plugin, { id: data.pluginId });
+    if (!plugin) throw new HttpError(404, 'Plugin introuvable');
+
+    let pluginJson: PluginDefinition;
     try {
-      pluginJson = parsePlugin(JSON.parse(data.json));
+      pluginJson = parsePluginJson(data.json);
     } catch (err) {
-      throw new HttpError(400, `Plugin invalide : ${(err as Error).message}`);
+      throw new HttpError(400, `Plugin invalide : ${pluginErrorMessage(err)}`);
     }
 
-    // Slug unique
-    const existing = await em.findOne(Plugin, { slug: pluginJson.id });
-    if (existing) {
-      throw new HttpError(409, `Un plugin avec le slug « ${pluginJson.id} » existe déjà`);
+    if (pluginJson.id !== plugin.slug) {
+      const clash = await em.findOne(Plugin, { slug: pluginJson.id });
+      if (clash) {
+        throw new HttpError(409, `Un plugin avec le slug « ${pluginJson.id} » existe déjà`);
+      }
+      plugin.slug = pluginJson.id;
     }
 
-    const now = new Date();
-    const plugin = em.create(Plugin, {
-      id: randomUUID(),
-      slug: pluginJson.id,
-      name: pluginJson.name,
-      schemaVersion: pluginJson.schemaVersion,
-      json: pluginJson,
-      createdAt: now,
-      updatedAt: now,
-    });
-    em.persist(plugin);
+    plugin.name = pluginJson.name;
+    plugin.schemaVersion = pluginJson.schemaVersion;
+    plugin.json = pluginJson;
+    plugin.updatedAt = new Date();
     await em.flush();
 
     return { id: plugin.id, slug: plugin.slug, name: plugin.name };
