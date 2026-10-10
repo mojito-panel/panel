@@ -3,13 +3,11 @@ import { loadConfig, agentConfigSchema } from '../src/config';
 
 describe('agentConfigSchema', () => {
   it('applique les valeurs par défaut', () => {
-    const result = agentConfigSchema.parse({
-      token: 'a'.repeat(64),
-      jwtSecret: 'b'.repeat(64),
-    });
+    const result = agentConfigSchema.parse({ token: 'a'.repeat(64) });
     expect(result.port).toBe(8080);
     expect(result.host).toBe('0.0.0.0');
     expect(result.dataDir).toBe('C:\PanelData');
+    expect(result.allowedOrigins).toEqual([]);
   });
 
   it('rejette un token trop court', () => {
@@ -17,22 +15,8 @@ describe('agentConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejette un secret JWT trop court', () => {
-    const result = agentConfigSchema.safeParse({ token: 'a'.repeat(64), jwtSecret: 'short' });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejette un secret JWT manquant', () => {
-    const result = agentConfigSchema.safeParse({ token: 'a'.repeat(64) });
-    expect(result.success).toBe(false);
-  });
-
   it('convertit le port string en number', () => {
-    const result = agentConfigSchema.parse({
-      token: 'a'.repeat(64),
-      jwtSecret: 'b'.repeat(64),
-      port: '9090',
-    });
+    const result = agentConfigSchema.parse({ token: 'a'.repeat(64), port: '9090' });
     expect(result.port).toBe(9090);
   });
 });
@@ -43,23 +27,22 @@ describe('loadConfig', () => {
       AGENT_PORT: '9000',
       AGENT_HOST: '127.0.0.1',
       AGENT_TOKEN: 'c'.repeat(64),
-      AGENT_JWT_SECRET: 'd'.repeat(64),
       PANEL_URL: 'https://panel.example.com',
+      AGENT_ALLOWED_ORIGINS: ' https://panel.example.com , https://other.example.com ',
       AGENT_DATA_DIR: '/data',
     });
     expect(config.port).toBe(9000);
     expect(config.host).toBe('127.0.0.1');
     expect(config.token).toBe('c'.repeat(64));
-    expect(config.jwtSecret).toBe('d'.repeat(64));
     expect(config.panelUrl).toBe('https://panel.example.com');
+    expect(config.allowedOrigins).toEqual([
+      'https://panel.example.com',
+      'https://other.example.com',
+    ]);
     expect(config.dataDir).toBe('/data');
   });
 
   it('lance si AGENT_TOKEN est manquant', () => {
     expect(() => loadConfig({})).toThrow();
-  });
-
-  it('lance si AGENT_JWT_SECRET est manquant', () => {
-    expect(() => loadConfig({ AGENT_TOKEN: 'c'.repeat(64) })).toThrow();
   });
 });

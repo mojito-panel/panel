@@ -20,7 +20,7 @@ export class ConsoleTokenError extends Error {
 }
 
 /** Accepted clock skew (seconds) when checking `exp` and `iat`. */
-const CLOCK_SKEW_SECONDS = 5;
+export const CLOCK_SKEW_SECONDS = 5;
 
 function base64UrlDecode(input: string): Buffer {
   return Buffer.from(input.replace(/-/g, '+').replace(/_/g, '/'), 'base64');

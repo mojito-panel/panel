@@ -21,6 +21,7 @@ function validPayload(now: number): Record<string, unknown> {
     sub: 'user_1',
     serverId: SERVER_ID,
     permissions: [...ALL_PERMISSIONS],
+    scope: 'websocket',
     iat: now,
     exp: now + 300,
     jti: 'tok_test',
