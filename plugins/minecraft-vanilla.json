@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "id": "minecraft-vanilla",
+  "name": "Minecraft Vanilla",
+  "author": "Mojito Panel",
+  "description": "Serveur Minecraft officiel (vanilla) de Mojang. Le JAR est résolu depuis le manifeste piston-meta, toute version publiée ou 'latest' est supportée.",
+  "tags": ["minecraft", "vanilla", "mojang"],
+  "features": ["eula", "java_version"],
+  "requirements": {
+    "minRamMb": 1024
+  },
+  "runtime": {
+    "java": ">=17"
+  },
+  "variables": [
+    {
+      "env": "MINECRAFT_VERSION",
+      "name": "Version de Minecraft",
+      "description": "Version publiée par Mojang (ex: 1.21.4) ou 'latest' pour la dernière release stable.",
+      "type": "string",
+      "defaultValue": "latest",
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 1,
+      "required": false,
+      "pattern": "^(latest|[0-9]+\\.[0-9]+(\\.[0-9]+)?)$"
+    },
+    {
+      "env": "ACCEPT_EULA",
+      "name": "Accepter l'EULA Mojang",
+      "description": "Le serveur refusera de démarrer tant que l'EULA (https://aka.ms/MinecraftEULA) n'est pas accepté.",
+      "type": "boolean",
+      "defaultValue": false,
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 2,
+      "required": false
+    },
+    {
+      "env": "SERVER_MOTD",
+      "name": "Message du jour (MOTD)",
+      "description": "Message affiché dans la liste des serveurs du client.",
+      "type": "string",
+      "defaultValue": "Un serveur Minecraft heberge par Mojito",
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 3,
+      "required": false
+    },
+    {
+      "env": "MAX_PLAYERS",
+      "name": "Joueurs max",
+      "type": "number",
+      "defaultValue": 20,
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 4,
+      "required": false,
+      "min": 1,
+      "max": 500
+    },
+    {
+      "env": "ONLINE_MODE",
+      "name": "Online mode",
+      "description": "Vérifie les comptes Minecraft officiels. Désactiver uniquement pour un réseau offline dédié.",
+      "type": "boolean",
+      "defaultValue": true,
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 5,
+      "required": false
+    },
+    {
+      "env": "VIEW_DISTANCE",
+      "name": "Distance de vue",
+      "description": "En chunks. Réduire si la RAM ou le CPU sont limités.",
+      "type": "number",
+      "defaultValue": 10,
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 6,
+      "required": false,
+      "min": 3,
+      "max": 32
+    },
+    {
+      "env": "JVM_ARGS",
+      "name": "Arguments JVM supplémentaires",
+      "description": "Ajoutés à la ligne de commande java (ex: -XX:+UseG1GC). -Xms/-Xmx sont gérés par le panel.",
+      "type": "string",
+      "defaultValue": "",
+      "userViewable": true,
+      "userEditable": true,
+      "sort": 7,
+      "required": false,
+      "pattern": "^$|^[-A-Za-z0-9_=:.%+ ]+$"
+    }
+  ],
+  "install": [
+    {
+      "action": "script",
+      "shell": "powershell",
+      "content": "$ErrorActionPreference = 'Stop'\n$ProgressPreference = 'SilentlyContinue'\n$version = '{{MINECRAFT_VERSION}}'\n$manifest = Invoke-RestMethod -Uri 'https://piston-meta.mojang.com/mc/game/version_manifest.json'\nif ($version -eq 'latest') { $version = $manifest.latest.release }\n$entry = $manifest.versions | Where-Object { $_.id -eq $version }\nif (-not $entry) { throw \"Version Minecraft inconnue : $version\" }\n$meta = Invoke-RestMethod -Uri $entry.url\nInvoke-WebRequest -Uri $meta.downloads.server.url -OutFile 'server.jar'",
+      "timeoutMs": 600000
+    },
+    {
+      "action": "write",
+      "file": "eula.txt",
+      "content": "# En acceptant l'EULA Mojang (https://aka.ms/MinecraftEULA), vous confirmez avoir lu et accepte les conditions.\neula={{ACCEPT_EULA}}\n"
+    },
+    {
+      "action": "configFile",
+      "file": "server.properties",
+      "parser": "properties",
+      "find": {
+        "server-port": "{{SERVER_PORT}}",
+        "motd": "{{SERVER_MOTD}}",
+        "max-players": "{{MAX_PLAYERS}}",
+        "online-mode": "{{ONLINE_MODE}}",
+        "view-distance": "{{VIEW_DISTANCE}}",
+        "level-name": "{{SERVER_NAME}}"
+      }
+    }
+  ],
+  "start": {
+    "command": "java -Xms{{SERVER_MEMORY}}M -Xmx{{SERVER_MEMORY}}M {{JVM_ARGS}} -jar server.jar --port {{SERVER_PORT}} --nogui",
+    "stop": {
+      "type": "command",
+      "value": "stop",
+      "timeoutMs": 60000
+    },
+    "ready": {
+      "pattern": "Done",
+      "strip": "\\[[0-9]{2}:[0-9]{2}:[0-9]{2}\\] \\[[^\\]]+\\]:\\s?"
+    },
+    "workingDirectory": "{{SERVER_INSTALL_DIR}}"
+  },
+  "logs": {
+    "mode": "stdout",
+    "stripAnsi": true
+  }
+}
