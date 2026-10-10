@@ -1,11 +1,12 @@
-import { useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from '@tanstack/react-form';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { signUp } from '~/lib/auth-client';
+import { registerSchema, type RegisterDto } from '~/validators/auth';
 
 export const Route = createFileRoute('/_auth/register')({
   component: RegisterPage,
@@ -14,34 +15,24 @@ export const Route = createFileRoute('/_auth/register')({
 function RegisterPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  const mutation = useMutation({
+    mutationFn: async (data: RegisterDto) => {
+      const { error } = await signUp.email(data);
+      if (error) throw new Error(error.message ?? "Erreur lors de l'inscription");
+    },
+    onSuccess: async () => {
+      // Invalide le cache auth pour refetch la session côté serveur
+      await queryClient.invalidateQueries({ queryKey: ['auth'] });
+      await navigate({ to: '/' });
+    },
+  });
 
-    const { error: signUpError } = await signUp.email({
-      name,
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (signUpError) {
-      setError(signUpError.message ?? "Erreur lors de l'inscription");
-      return;
-    }
-
-    // Invalide le cache auth pour refetch la session côté serveur
-    await queryClient.invalidateQueries({ queryKey: ['auth'] });
-    navigate({ to: '/' });
-  };
+  const form = useForm({
+    validators: { onChange: registerSchema },
+    defaultValues: { name: '', email: '', password: '' },
+    onSubmit: ({ value }) => mutation.mutate(value),
+  });
 
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
@@ -51,47 +42,86 @@ function RegisterPage() {
           <CardDescription>Crée ton compte sur le panel Mojito</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nom</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Ton nom"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="8 caractères minimum"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Inscription...' : "S'inscrire"}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              form.handleSubmit();
+            }}
+            className="space-y-4"
+          >
+            <form.Field name="name">
+              {(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nom</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Ton nom"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    autoComplete="name"
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="email">
+              {(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="admin@example.com"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    autoComplete="email"
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="password">
+              {(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="password">Mot de passe</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="8 caractères minimum"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    autoComplete="new-password"
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            {mutation.isError && (
+              <p className="text-sm text-destructive">{mutation.error.message}</p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Inscription...' : "S'inscrire"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
