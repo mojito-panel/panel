@@ -77,6 +77,8 @@ export const Node = defineEntity({
     name: p.string().length(128),
     fqdn: p.string().length(255),
     agentPort: p.integer().fieldName('agent_port').default(8080),
+    /** SFTP listen port of the agent (shard.yml `sftp.port`), shown to users. */
+    sftpPort: p.integer().fieldName('sftp_port').default(2022),
     /** Agent token (Bearer) — sent to the agent on every request. */
     agentToken: p.text().fieldName('agent_token'),
     lastSeenAt: p.datetime().fieldName('last_seen_at').nullable(),

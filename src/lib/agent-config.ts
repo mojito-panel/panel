@@ -13,6 +13,8 @@ export interface AgentConfigNode {
   name: string;
   fqdn: string;
   agentPort: number;
+  /** SFTP listen port — `sftp.port` in the generated file. */
+  sftpPort: number;
   agentToken: string;
   panelUrl: string;
 }
@@ -29,6 +31,10 @@ export function buildAgentConfig(node: AgentConfigNode): string {
     `  port: ${node.agentPort}`,
     'system:',
     "  data_dir: 'C:\\PanelData'",
+    'sftp:',
+    '  enabled: true',
+    '  host: 0.0.0.0',
+    `  port: ${node.sftpPort}`,
     'allowed_origins:',
     `  - ${node.panelUrl}`,
     '',

@@ -5,7 +5,7 @@ import { ZodError } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
-import { parseRecipe, type Recipe as RecipeDefinition } from '~/contract';
+import { parseRecipe, DEFAULT_SFTP_PORT, type Recipe as RecipeDefinition } from '~/contract';
 import { requireUser, requirePanelPermission, HttpError } from '../session';
 import { encryptSecret, decryptSecret } from '../crypto';
 import { agentHealth, agentGetStats, agentUpdateAllocation, AgentError } from '../agent/client';
@@ -65,6 +65,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       name: data.name,
       fqdn: data.fqdn,
       agentPort: data.agentPort,
+      sftpPort: data.sftpPort ?? DEFAULT_SFTP_PORT,
       // Encrypted at rest — the token doubles as the console-JWT signing key
       agentToken: encryptSecret(token),
       lastSeenAt: null,
@@ -82,6 +83,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       name: node.name,
       fqdn: node.fqdn,
       agentPort: node.agentPort,
+      sftpPort: node.sftpPort,
       agentToken: token,
       // Panel URL injected into the generated agent config (shard.yml).
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
@@ -158,6 +160,7 @@ export const getNodeFn = createServerFn({ method: 'GET' })
       name: node.name,
       fqdn: node.fqdn,
       agentPort: node.agentPort,
+      sftpPort: node.sftpPort,
       status: node.status,
       lastSeenAt: node.lastSeenAt,
       createdAt: node.createdAt,
@@ -184,6 +187,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
     node.name = data.name;
     node.fqdn = data.fqdn;
     node.agentPort = data.agentPort;
+    node.sftpPort = data.sftpPort;
     await em.flush();
 
     return { updated: true };

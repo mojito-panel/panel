@@ -556,6 +556,57 @@ export const backupDownloadTokenPayloadSchema = z.object({
 
 export type BackupDownloadTokenPayload = z.infer<typeof backupDownloadTokenPayloadSchema>;
 
+// ─── SFTP authentication (agent → panel, wings /api/sftp/auth model) ────────
+
+/**
+ * Pelican parity: the AGENT (shard) runs the SFTP server but delegates
+ * credential validation to the panel — its password callback POSTs here,
+ * authenticated with the node's agent token (the same shared per-node
+ * secret the panel uses in the other direction). The username format is
+ * `{email}.{serverId}` (split at the LAST dot — an email may contain
+ * dots), and the password is the user's PANEL account password (like
+ * Pelican, which verifies it against the user's account hash).
+ */
+
+/** Default SFTP listen port (wings default) — the node's `sftp_port`. */
+export const DEFAULT_SFTP_PORT = 2022;
+
+/**
+ * Closed SFTP permission list enforced by the agent on every operation
+ * (wings sftp/handler.go). `"*"` (owner/admin) is only ever granted by the
+ * panel, never submitted.
+ */
+export const sftpPermissionSchema = z.enum([
+  'file.read',
+  'file.read-content',
+  'file.create',
+  'file.update',
+  'file.delete',
+]);
+
+export type SftpPermission = z.infer<typeof sftpPermissionSchema>;
+
+/** Shard → panel credential check. `ip` is informational (logging). */
+export const sftpAuthRequestSchema = z.object({
+  username: z.string().min(1).max(512),
+  password: z.string().min(1).max(1024),
+  ip: z.string().max(64).optional(),
+});
+
+export type SftpAuthRequest = z.infer<typeof sftpAuthRequestSchema>;
+
+/** Panel → shard: the authenticated user, the matched server, its grants. */
+export const sftpAuthResponseSchema = z.object({
+  /** Panel user id (better-auth). */
+  user: z.string().min(1),
+  /** Server the username was scoped to — MUST belong to the calling node. */
+  server: z.string().uuid(),
+  /** `"*"` = full access (owner/admin), else the file.* permission list. */
+  permissions: z.array(z.union([sftpPermissionSchema, z.literal('*')])),
+});
+
+export type SftpAuthResponse = z.infer<typeof sftpAuthResponseSchema>;
+
 // ─── HTTP routes (reference) ──────────────────────────────────────────────────
 
 /**
@@ -596,4 +647,13 @@ export const AGENT_ROUTES = {
   stats: 'GET /stats',
   /** Browser-facing node health socket — auth by health JWT, NOT the panel token. */
   healthWs: 'GET /health/ws',
+} as const;
+
+/**
+ * Route the AGENT calls on the PANEL (the only agent → panel call): SFTP
+ * credential validation, authenticated with `Authorization: Bearer <agent
+ * token>` of the calling node. See sftpAuthRequestSchema/sftpAuthResponseSchema.
+ */
+export const PANEL_ROUTES = {
+  sftpAuth: 'POST /api/sftp/auth',
 } as const;

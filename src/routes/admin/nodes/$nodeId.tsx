@@ -72,6 +72,7 @@ function AdminNodeEditPage() {
     name: node.name,
     fqdn: node.fqdn,
     agentPort: node.agentPort,
+    sftpPort: node.sftpPort,
     panelUrl: node.panelUrl,
   };
   // The fresh token lives in the mutation result — shown ONCE (like at node
@@ -135,7 +136,7 @@ function AdminNodeEditPage() {
               defaultValues at mount, so it must NOT live in the loading
               skeleton (empty fields would freeze in the form). */}
           <NodeSettingsCard
-            node={{ id: node.id, name: node.name, fqdn: node.fqdn, agentPort: node.agentPort }}
+            node={{ id: node.id, name: node.name, fqdn: node.fqdn, agentPort: node.agentPort, sftpPort: node.sftpPort }}
           />
         </TabsContent>
 
@@ -219,7 +220,7 @@ function InfoEntry({ label, value, muted }: { label: string; value: string; mute
 function NodeSettingsCard({
   node,
 }: {
-  node: { id: string; name: string; fqdn: string; agentPort: number };
+  node: { id: string; name: string; fqdn: string; agentPort: number; sftpPort: number };
 }) {
   const queryClient = useQueryClient();
   const updateNode = useServerFn(updateNodeFn);
@@ -242,6 +243,7 @@ function NodeSettingsCard({
       name: node.name,
       fqdn: node.fqdn,
       agentPort: node.agentPort,
+      sftpPort: node.sftpPort,
     },
     onSubmit: ({ value }) => update.mutate(value),
   });
@@ -310,6 +312,30 @@ function NodeSettingsCard({
                   onChange={(e) => field.handleChange(Number(e.target.value))}
                   onBlur={field.handleBlur}
                 />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
+
+          <form.Field name="sftpPort">
+            {(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="node-edit-sftp-port">Port SFTP</Label>
+                <Input
+                  id="node-edit-sftp-port"
+                  type="number"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(Number(e.target.value))}
+                  onBlur={field.handleBlur}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Port d’écoute SFTP de l’agent (shard.yml <code>sftp.port</code>)
+                  — après modification, régénère la configuration.
+                </p>
                 {field.state.meta.errors.length > 0 && (
                   <p className="text-sm text-destructive">
                     {field.state.meta.errors[0]?.message}
@@ -548,6 +574,7 @@ function NodeAllocationsCard({ nodeId }: { nodeId: string }) {
                             <Select
                               value=""
                               onValueChange={(serverId) =>
+                                serverId !== null &&
                                 assign.mutate({ allocationId: allocation.id, serverId })
                               }
                             >

@@ -28,6 +28,7 @@ import { Route as AdminNodesIndexRouteImport } from './routes/admin/nodes/index'
 import { Route as AdminNodesNodeIdRouteImport } from './routes/admin/nodes/$nodeId'
 import { Route as AdminRecipesIndexRouteImport } from './routes/admin/recipes/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiSftpAuthRouteImport } from './routes/api/sftp/auth'
 import { Route as ServersServerIdIndexRouteImport } from './routes/servers/$serverId/index'
 import { Route as ServersServerIdActivityRouteImport } from './routes/servers/$serverId/activity'
 import { Route as ServersServerIdBackupsRouteImport } from './routes/servers/$serverId/backups'
@@ -135,6 +136,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSftpAuthRoute = ApiSftpAuthRouteImport.update({
+  id: '/api/sftp/auth',
+  path: '/api/sftp/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ServersServerIdIndexRoute = ServersServerIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -215,6 +221,7 @@ export interface FileRoutesByFullPath {
   '/servers/new': typeof AppServersNewRoute
   '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sftp/auth': typeof ApiSftpAuthRoute
   '/servers/$serverId/activity': typeof ServersServerIdActivityRoute
   '/servers/$serverId/backups': typeof ServersServerIdBackupsRoute
   '/servers/$serverId/console': typeof ServersServerIdConsoleRoute
@@ -245,6 +252,7 @@ export interface FileRoutesByTo {
   '/servers/new': typeof AppServersNewRoute
   '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sftp/auth': typeof ApiSftpAuthRoute
   '/servers/$serverId/activity': typeof ServersServerIdActivityRoute
   '/servers/$serverId/backups': typeof ServersServerIdBackupsRoute
   '/servers/$serverId/console': typeof ServersServerIdConsoleRoute
@@ -279,6 +287,7 @@ export interface FileRoutesById {
   '/_app/servers/new': typeof AppServersNewRoute
   '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sftp/auth': typeof ApiSftpAuthRoute
   '/servers/$serverId/activity': typeof ServersServerIdActivityRoute
   '/servers/$serverId/backups': typeof ServersServerIdBackupsRoute
   '/servers/$serverId/console': typeof ServersServerIdConsoleRoute
@@ -313,6 +322,7 @@ export interface FileRouteTypes {
     | '/servers/new'
     | '/admin/nodes/$nodeId'
     | '/api/auth/$'
+    | '/api/sftp/auth'
     | '/servers/$serverId/activity'
     | '/servers/$serverId/backups'
     | '/servers/$serverId/console'
@@ -343,6 +353,7 @@ export interface FileRouteTypes {
     | '/servers/new'
     | '/admin/nodes/$nodeId'
     | '/api/auth/$'
+    | '/api/sftp/auth'
     | '/servers/$serverId/activity'
     | '/servers/$serverId/backups'
     | '/servers/$serverId/console'
@@ -376,6 +387,7 @@ export interface FileRouteTypes {
     | '/_app/servers/new'
     | '/admin/nodes/$nodeId'
     | '/api/auth/$'
+    | '/api/sftp/auth'
     | '/servers/$serverId/activity'
     | '/servers/$serverId/backups'
     | '/servers/$serverId/console'
@@ -401,6 +413,7 @@ export interface RootRouteChildren {
   AuthLoginRoute: typeof AuthLoginRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiSftpAuthRoute: typeof ApiSftpAuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -536,6 +549,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sftp/auth': {
+      id: '/api/sftp/auth'
+      path: '/api/sftp/auth'
+      fullPath: '/api/sftp/auth'
+      preLoaderRoute: typeof ApiSftpAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/servers/$serverId/': {
@@ -708,6 +728,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthLoginRoute: AuthLoginRoute,
   AuthRegisterRoute: AuthRegisterRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiSftpAuthRoute: ApiSftpAuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

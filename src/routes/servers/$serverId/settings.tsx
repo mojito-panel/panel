@@ -7,6 +7,7 @@ import {
   reinstallServerFn,
   deleteServerFn,
 } from '~/server/functions/servers';
+import { serverCan } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
 import {
@@ -17,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
-import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/settings')({
   component: ServerSettingsPage,

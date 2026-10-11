@@ -4,7 +4,7 @@ import {
   role as makeRole,
   type Role,
 } from 'better-auth/plugins/access';
-import type { Permission } from '~/contract';
+import type { Permission, SftpPermission } from '~/contract';
 
 /**
  * Panel access control — Pelican-style permissions built on better-auth's
@@ -309,6 +309,30 @@ export const subuserPermissionsSchema = permissionsSchemaOf(serverResourceEntrie
  * a role never carries per-server permissions, those are sub-user grants.
  */
 export const rolePermissionsSchema = permissionsSchemaOf(panelResourceEntries);
+
+// ─── SFTP permission mapping (panel grants → agent file.* permissions) ─────
+
+/** Panel server permission → agent-side SFTP permissions (wings file.* list). */
+const SFTP_PERMISSION_MAP: Record<string, SftpPermission[]> = {
+  'server.files.read': ['file.read', 'file.read-content'],
+  'server.files.write': ['file.update'],
+  'server.files.create': ['file.create'],
+  'server.files.delete': ['file.delete'],
+};
+
+/**
+ * Maps the viewer's flat server permissions onto the SFTP permission list
+ * enforced by the agent per operation. Owners/admins bypass this — the
+ * panel answers `"*"` for them instead (Pelican GetUserPermissionsService).
+ * An empty result means: no SFTP access at all.
+ */
+export function toSftpPermissions(permissions: string[]): SftpPermission[] {
+  const out = new Set<SftpPermission>();
+  for (const permission of permissions) {
+    for (const mapped of SFTP_PERMISSION_MAP[permission] ?? []) out.add(mapped);
+  }
+  return [...out];
+}
 
 // ─── Console JWT mapping (panel permissions → contract agent permissions) ───
 

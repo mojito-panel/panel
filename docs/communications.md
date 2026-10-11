@@ -304,14 +304,52 @@ stateDiagram-v2
 
 ---
 
-## 8. Route reference
+## 8. SFTP (agent hosts the server, panel validates the credentials)
+
+The SFTP subsystem is the ONE flow where the agent calls the panel (wings
+model): shard hosts the SFTP server (`crypto/ssh` + `pkg/sftp`, default
+port 2022, opt-in via `sftp.enabled` in shard.yml — the panel generates the
+section), but never stores a credential itself. The SFTP username is
+`{email}.{serverId}` and the password is the user's PANEL account password
+(Pelican reuses the account password the same way).
+
+```mermaid
+sequenceDiagram
+    participant C as SFTP client (FileZilla…)
+    participant A as shard :2022
+    participant P as Panel
+    C->>A: SSH handshake, user `{email}.{serverId}` + panel password
+    A->>A: username format gate (regex, anti bot flood)
+    A->>P: POST /api/sftp/auth (Bearer = agent token)
+    P->>P: node by token (constant-time compare of the decrypted tokens)
+    P->>P: user by email, verifyPassword vs account row (better-auth)
+    P->>P: server belongs to the node? per-server grants?
+    P-->>A: { user, server, permissions } — "*" for owner/admin
+    A-->>C: SSH auth OK → pkg/sftp session rooted at the server installDir
+```
+
+- Permissions: the panel maps `server.files.*` grants onto the agent's
+  closed list (`file.read`, `file.read-content`, `file.create`,
+  `file.update`, `file.delete`); owners/admins get `*`. The agent gates
+  EVERY operation on them (`internal/sftp/handler.go`).
+- All failures answer the same 403 — the panel never distinguishes
+  unknown node/user, bad password or missing grant (no user enumeration).
+- Filesystem sandboxing is the SAME gate as the file API
+  (`files.ResolveServerPath`): traversal, drive letters and
+  Windows-forbidden characters are refused.
+- The Files page shows the connection details (host `fqdn:sftpPort`,
+  username, "password = panel password") to users holding any
+  `server.files.*` grant.
+
+---
+
+## 9. Route reference
 
 ### Panel ↔ Agent (node Bearer token — `AGENT_ROUTES`)
 
 | Route | Usage |
 |---|---|
-| `GET /health` | Public — healthcheck (version, uptime) |
-| `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
+| `GET /health` | Public — healthcheck (version, uptime) || `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
 | `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
 | `GET /servers/:serverId/install` | Installation status + logs (end-of-install sync + polling fallback) |
 | `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
@@ -323,6 +361,12 @@ stateDiagram-v2
 | `POST /servers/:serverId/command` | stdin command |
 | `DELETE /servers/:serverId` | Deletion (refused if an install or a process is active) |
 | `GET /servers/:serverId/ws` | Browser console — console JWT (see §3) |
+
+### Agent → Panel (node Bearer token — `PANEL_ROUTES`)
+
+| Route | Usage |
+|---|---|
+| `POST /api/sftp/auth` | SFTP credential validation (see §8) — the only agent → panel call |
 
 ### Browser ↔ Agent (WS console, JWT)
 

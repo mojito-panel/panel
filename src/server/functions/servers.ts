@@ -361,7 +361,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
       ownerId: server.ownerId,
       variables: canReadVariables ? server.variables : {},
       createdAt: server.createdAt,
-      node: { id: node.id, name: node.name, fqdn: node.fqdn },
+      node: { id: node.id, name: node.name, fqdn: node.fqdn, sftpPort: node.sftpPort },
       recipe: {
         id: recipe.id,
         name: recipe.name,

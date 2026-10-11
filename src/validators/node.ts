@@ -4,6 +4,8 @@ export const createNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   fqdn: z.string().min(3, 'FQDN invalide').max(255),
   agentPort: z.number().int().min(1).max(65535),
+  /** SFTP port of the agent (optional — DEFAULT_SFTP_PORT when omitted). */
+  sftpPort: z.number().int().min(1).max(65535).optional(),
 });
 
 export type CreateNodeDto = z.infer<typeof createNodeSchema>;
@@ -24,6 +26,8 @@ export const updateNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   fqdn: z.string().min(3, 'FQDN invalide').max(255),
   agentPort: z.number().int().min(1).max(65535),
+  /** SFTP port of the agent — the node edit form always submits it. */
+  sftpPort: z.number().int().min(1).max(65535),
 });
 
 export type UpdateNodeDto = z.infer<typeof updateNodeSchema>;

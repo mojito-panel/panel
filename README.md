@@ -115,6 +115,18 @@ Browser ◀──auth-ok + log stream─── Agent (permissions re-validated o
 - Fallback: if the WS fails to open, the console falls back to log polling (`GET /logs?after=N`).
 - The agent token is NEVER logged.
 
+### SFTP
+
+Wings parity: the AGENT hosts the SFTP server (default port 2022, opt-in via
+`sftp.enabled` in the generated shard.yml), the PANEL validates the
+credentials. shard's password callback calls `POST /api/sftp/auth` with the
+node Bearer token; the username is `{email}.{serverId}` and the password is
+the user's panel account password. The panel answers with the user's
+`server.files.*` grants mapped to the agent's `file.*` permission list
+(`*` for owners/admins) — the agent gates every SFTP operation on them and
+sandboxes the session to the server's installDir. Users see the connection
+details on the server Files page. Full flow: [docs/communications.md](docs/communications.md) §8.
+
 ### Database (Docker)
 
 `docker-compose.dev.yml` starts a Postgres 17 for dev:

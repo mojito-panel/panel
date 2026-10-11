@@ -38,6 +38,7 @@ import {
 } from '~/server/functions/files';
 import { getServerFn } from '~/server/functions/servers';
 import { serverCan } from '~/lib/permissions';
+import { SftpConnectionDialog } from '~/components/sftp-card';
 import {
   filesSearchSchema,
   createEntryFormSchema,
@@ -78,6 +79,21 @@ function FilesPage() {
   const canCreate = serverCan(permissions, { 'server.files': ['create'] });
   const canWrite = serverCan(permissions, { 'server.files': ['write'] });
   const canDelete = serverCan(permissions, { 'server.files': ['delete'] });
+  // SFTP access follows the file grants (ANY server.files.* permission —
+  // same rule as the /api/sftp/auth permission mapping)
+  const sftp =
+    serverQuery.data &&
+    serverCan(
+      serverQuery.data.viewer.permissions,
+      { 'server.files': ['read', 'write', 'create', 'delete'] },
+      'OR',
+    )
+      ? {
+          fqdn: serverQuery.data.node.fqdn,
+          sftpPort: serverQuery.data.node.sftpPort,
+          serverId: serverQuery.data.id,
+        }
+      : null;
 
   const invalidateFiles = () =>
     queryClient.invalidateQueries({ queryKey: ['files', serverId] });
@@ -125,6 +141,7 @@ function FilesPage() {
         canCreate={canCreate}
         canWrite={canWrite}
         canDelete={canDelete}
+        sftp={sftp}
       />
     </div>
   );
@@ -140,6 +157,7 @@ function FileBrowser({
   canCreate,
   canWrite,
   canDelete,
+  sftp,
 }: {
   serverId: string;
   dir: string;
@@ -149,6 +167,8 @@ function FileBrowser({
   canCreate: boolean;
   canWrite: boolean;
   canDelete: boolean;
+  /** SFTP connection details — null hides the toolbar button (no file grant). */
+  sftp: { fqdn: string; sftpPort: number; serverId: string } | null;
 }) {
   const listFiles = useServerFn(listFilesFn);
   const createEntry = useServerFn(createEntryFn);
@@ -266,6 +286,13 @@ function FileBrowser({
           ))}
         </nav>
         <div className="ml-auto flex flex-wrap gap-2">
+          {sftp && (
+            <SftpConnectionDialog
+              fqdn={sftp.fqdn}
+              sftpPort={sftp.sftpPort}
+              serverId={sftp.serverId}
+            />
+          )}
           {canCreate && (
             <>
               <input
