@@ -2,18 +2,17 @@
  * Status display components — one place to restyle every status in the
  * panel (admin dashboard, server header, server sidebar, server list).
  *
- * The ball is a glossy "3D LED" look: colored sphere, white shine on top,
- * soft drop shadow for depth.
+ * The ball is a flat pulsing dot.
  */
 
 /** Ball color per status (LED tint) — defaults to neutral gray. */
 const BALL_COLORS: Record<string, string> = {
   running: 'bg-lime-400',
   online: 'bg-lime-400',
-  installing: 'bg-blue-500 animate-pulse',
+  installing: 'bg-blue-500',
   crashed: 'bg-red-500',
   install_failed: 'bg-red-500',
-  offline: 'bg-red-500',
+  offline: 'bg-destructive',
 };
 
 /** Pill tint per status — semi-transparent bg, text/border matching the ball. */
@@ -23,7 +22,7 @@ const PILL_COLORS: Record<string, string> = {
   installing: 'border border-blue-500/50 bg-blue-500/15 text-blue-500',
   crashed: 'border border-red-500/50 bg-red-500/15 text-red-500',
   install_failed: 'border border-red-500/50 bg-red-500/15 text-red-500',
-  offline: 'border border-red-500/50 bg-red-500/15 text-red-500',
+  offline: 'border border-destructive/50 bg-destructive/15 text-destructive',
 };
 
 /** French label per status — defaults to the raw status. */
@@ -42,21 +41,18 @@ export function statusLabel(status: string): string {
   return LABELS[status] ?? status;
 }
 
-/** Glossy "3D" indicator ball (LED look). */
+/** Pulsing status dot. */
 export function StatusBall({ status }: { status: string }) {
   return (
     <span
-      className={`relative inline-block size-2.5 shrink-0 rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.35)] ${
+      className={`inline-block size-2.5 shrink-0 animate-pulse rounded-full ${
         BALL_COLORS[status] ?? 'bg-muted-foreground'
       }`}
-    >
-      {/* White shine on top — the 3D effect */}
-      <span className="absolute left-[15%] right-[15%] top-[8%] h-[45%] rounded-[50%] bg-gradient-to-b from-white/80 to-white/5" />
-    </span>
+    />
   );
 }
 
-/** Pill badge: 3D ball + label. */
+/** Pill badge: pulsing dot + label. */
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
