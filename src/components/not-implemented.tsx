@@ -26,7 +26,7 @@ export function NotImplemented({
     <Card className="mx-auto max-w-2xl border-dashed">
       <CardHeader>
         <div className="flex items-center gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
             <Construction className="size-5" />
           </span>
           <div>

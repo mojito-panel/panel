@@ -121,7 +121,7 @@ export function RecipeEditor({
           const unknown = findUnknownVariablesInEditorValue(values);
           if (unknown.length === 0) return null;
           return (
-            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <p>
                 Variables utilisées dans les templates mais non déclarées :{' '}
