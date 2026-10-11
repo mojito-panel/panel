@@ -346,7 +346,7 @@ export function XtermConsole({
       </p>
       <div
         ref={containerRef}
-        className="h-[400px] overflow-hidden rounded-md border bg-[#0d1117] p-2"
+        className="h-[400px] overflow-hidden border bg-[#0d1117] p-2"
       />
     </div>
   );
