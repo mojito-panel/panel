@@ -196,7 +196,7 @@ function ServerNetworkPage() {
                 <div className="flex-1 space-y-2">
                   <Select
                     value={field.state.value}
-                    onValueChange={(v) => field.handleChange(v)}
+                    onValueChange={(v) => v !== null && field.handleChange(v)}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="— Port disponible —" />

@@ -44,19 +44,17 @@ function ServersPage() {
         <div className="flex gap-2">
           {user?.role === 'admin' && (
             <>
-              <Button variant="outline" asChild>
-                <Link to="/admin/nodes">Nodes</Link>
+              <Button variant="outline" render={<Link to="/admin/nodes" />}>
+                Nodes
               </Button>
-              <Button variant="outline" asChild>
-                <Link to="/admin/recipes">Recettes</Link>
+              <Button variant="outline" render={<Link to="/admin/recipes" />}>
+                Recettes
               </Button>
             </>
           )}
-          <Button asChild>
-            <Link to="/servers/new">
-              <Plus />
-              Nouveau serveur
-            </Link>
+          <Button render={<Link to="/servers/new" />}>
+            <Plus />
+            Nouveau serveur
           </Button>
         </div>
       </div>
@@ -69,11 +67,9 @@ function ServersPage() {
       {query.data && servers.length === 0 && (
         <div className="mt-8 rounded-lg border p-8 text-center">
           <p className="text-muted-foreground">Aucun serveur pour l'instant.</p>
-          <Button className="mt-4" asChild>
-            <Link to="/servers/new">
-              <Plus />
-              Créer mon premier serveur
-            </Link>
+          <Button className="mt-4" render={<Link to="/servers/new" />}>
+            <Plus />
+            Créer mon premier serveur
           </Button>
         </div>
       )}
@@ -121,8 +117,8 @@ function ServersPage() {
       )}
 
       <p className="mt-8">
-        <Button variant="ghost" asChild>
-          <Link to="/">← Retour à l'accueil</Link>
+        <Button variant="ghost" render={<Link to="/" />}>
+          ← Retour à l'accueil
         </Button>
       </p>
     </div>

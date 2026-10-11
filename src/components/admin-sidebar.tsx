@@ -64,16 +64,14 @@ export function AdminSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/admin">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Shield className="size-4" />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">Administration</span>
-                  <span className="text-xs text-muted-foreground">Infrastructure</span>
-                </div>
-              </Link>
+            <SidebarMenuButton size="lg" render={<Link to="/admin" />}>
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <Shield className="size-4" />
+              </div>
+              <div className="flex flex-col gap-0.5 leading-none">
+                <span className="font-semibold">Administration</span>
+                <span className="text-xs text-muted-foreground">Infrastructure</span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -86,17 +84,15 @@ export function AdminSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <Link to={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                      {item.soon && (
-                        <span
-                          title="À venir"
-                          className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400 group-data-[collapsible=icon]:hidden"
-                        />
-                      )}
-                    </Link>
+                  <SidebarMenuButton tooltip={item.title} render={<Link to={item.url} />}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                    {item.soon && (
+                      <span
+                        title="À venir"
+                        className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400 group-data-[collapsible=icon]:hidden"
+                      />
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -108,11 +104,9 @@ export function AdminSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Mes serveurs">
-              <Link to="/servers">
-                <LayoutDashboard />
-                <span>Mes serveurs</span>
-              </Link>
+            <SidebarMenuButton tooltip="Mes serveurs" render={<Link to="/servers" />}>
+              <LayoutDashboard />
+              <span>Mes serveurs</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

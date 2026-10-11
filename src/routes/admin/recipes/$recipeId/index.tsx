@@ -58,8 +58,8 @@ function EditRecipePage() {
     return (
       <div className="space-y-4">
         <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-        <Button variant="ghost" asChild>
-          <Link to="/admin/recipes">← Recettes</Link>
+        <Button variant="ghost" render={<Link to="/admin/recipes" />}>
+          ← Recettes
         </Button>
       </div>
     );

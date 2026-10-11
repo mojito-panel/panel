@@ -228,11 +228,14 @@ function AdminNodesPage() {
                   >
                     Copier la configuration
                   </Button>
-                  <Button type="button" variant="outline" size="sm" asChild>
-                    <Link to="/admin/nodes/$nodeId" params={{ nodeId: create.data.id }}>
-                      <ExternalLink />
-                      Ouvrir la page du node
-                    </Link>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    render={<Link to="/admin/nodes/$nodeId" params={{ nodeId: create.data.id }} />}
+                  >
+                    <ExternalLink />
+                    Ouvrir la page du node
                   </Button>
                 </div>
               </div>

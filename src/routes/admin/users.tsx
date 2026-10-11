@@ -222,6 +222,7 @@ function AdminUsersPage() {
                             <Select
                               value={target.role}
                               onValueChange={(role) =>
+                                role !== null &&
                                 changeRole.mutate({ userId: target.id, role })
                               }
                             >
@@ -418,7 +419,7 @@ function CreateUserCard({
               <div className="space-y-2">
                 <Select
                   value={field.state.value}
-                  onValueChange={(v) => field.handleChange(v)}
+                  onValueChange={(v) => v !== null && field.handleChange(v)}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Rôle" />

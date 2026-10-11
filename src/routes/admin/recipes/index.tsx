@@ -99,11 +99,9 @@ function AdminRecipesPage() {
             <Upload />
             {showImport ? 'Fermer' : 'Importer'}
           </Button>
-          <Button asChild>
-            <Link to="/admin/recipes/new">
-              <Plus />
-              Créer une recette
-            </Link>
+          <Button render={<Link to="/admin/recipes/new" />}>
+            <Plus />
+            Créer une recette
           </Button>
         </div>
       </div>
@@ -247,14 +245,18 @@ function AdminRecipesPage() {
                               Mettre à jour
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link
-                              to="/admin/recipes/$recipeId"
-                              params={{ recipeId: recipe.id }}
-                            >
-                              <Pencil />
-                              Éditer
-                            </Link>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            render={
+                              <Link
+                                to="/admin/recipes/$recipeId"
+                                params={{ recipeId: recipe.id }}
+                              />
+                            }
+                          >
+                            <Pencil />
+                            Éditer
                           </Button>
                           <Button
                             variant="ghost"

@@ -32,18 +32,16 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/servers">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Server className="size-4" />
-                </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">Mojito Panel</span>
-                  <span className="text-xs text-muted-foreground">
-                    Serveurs de jeux
-                  </span>
-                </div>
-              </Link>
+            <SidebarMenuButton size="lg" render={<Link to="/servers" />}>
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <Server className="size-4" />
+              </div>
+              <div className="flex flex-col gap-0.5 leading-none">
+                <span className="font-semibold">Mojito Panel</span>
+                <span className="text-xs text-muted-foreground">
+                  Serveurs de jeux
+                </span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -54,11 +52,9 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Mes serveurs">
-                  <Link to="/servers">
-                    <Server />
-                    <span>Mes serveurs</span>
-                  </Link>
+                <SidebarMenuButton tooltip="Mes serveurs" render={<Link to="/servers" />}>
+                  <Server />
+                  <span>Mes serveurs</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -71,11 +67,9 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Administration">
-                    <Link to="/admin">
-                      <Shield />
-                      <span>Administration</span>
-                    </Link>
+                  <SidebarMenuButton tooltip="Administration" render={<Link to="/admin" />}>
+                    <Shield />
+                    <span>Administration</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

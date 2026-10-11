@@ -77,19 +77,20 @@ export function ServerSidebar({ name, status, permissions = [] }: ServerSidebarP
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/servers/$serverId/console" params={params}>
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Server className="size-4" />
-                </div>
-                <div className="flex min-w-0 flex-col gap-0.5 leading-none">
-                  <span className="truncate font-semibold">{name ?? '…'}</span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <StatusBall status={status ?? 'unknown'} />
-                    {status ? statusLabel(status) : '…'}
-                  </span>
-                </div>
-              </Link>
+            <SidebarMenuButton
+              size="lg"
+              render={<Link to="/servers/$serverId/console" params={params} />}
+            >
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <Server className="size-4" />
+              </div>
+              <div className="flex min-w-0 flex-col gap-0.5 leading-none">
+                <span className="truncate font-semibold">{name ?? '…'}</span>
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <StatusBall status={status ?? 'unknown'} />
+                  {status ? statusLabel(status) : '…'}
+                </span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -101,17 +102,18 @@ export function ServerSidebar({ name, status, permissions = [] }: ServerSidebarP
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <Link to={item.url} params={params}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                      {item.soon && (
-                        <span
-                          title="À venir"
-                          className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400 group-data-[collapsible=icon]:hidden"
-                        />
-                      )}
-                    </Link>
+                  <SidebarMenuButton
+                    tooltip={item.title}
+                    render={<Link to={item.url} params={params} />}
+                  >
+                    <item.icon />
+                    <span>{item.title}</span>
+                    {item.soon && (
+                      <span
+                        title="À venir"
+                        className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400 group-data-[collapsible=icon]:hidden"
+                      />
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -123,10 +125,8 @@ export function ServerSidebar({ name, status, permissions = [] }: ServerSidebarP
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Mes serveurs">
-              <Link to="/servers">
-                <span>← Mes serveurs</span>
-              </Link>
+            <SidebarMenuButton tooltip="Mes serveurs" render={<Link to="/servers" />}>
+              <span>← Mes serveurs</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

@@ -53,7 +53,11 @@ export function VariableField({
           </SelectContent>
         </Select>
       ) : variable.options ? (
-        <Select value={String(value)} onValueChange={(v) => onChange(v)} disabled={disabled}>
+        <Select
+          value={String(value)}
+          onValueChange={(v) => v !== null && onChange(v)}
+          disabled={disabled}
+        >
           <SelectTrigger id={variable.env} className="w-full" onBlur={onBlur}>
             <SelectValue />
           </SelectTrigger>

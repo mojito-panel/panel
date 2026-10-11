@@ -151,7 +151,7 @@ function NewServerPage() {
                   <Label htmlFor="nodeId">Node</Label>
                   <Select
                     value={field.state.value}
-                    onValueChange={(v) => selectNode(v)}
+                    onValueChange={(v) => v !== null && selectNode(v)}
                   >
                     <SelectTrigger id="nodeId" className="w-full" onBlur={field.handleBlur}>
                       <SelectValue placeholder="— Choisir un node —" />
@@ -179,7 +179,7 @@ function NewServerPage() {
                   <Label htmlFor="recipeId">Recette</Label>
                   <Select
                     value={field.state.value}
-                    onValueChange={(v) => selectRecipe(v)}
+                    onValueChange={(v) => v !== null && selectRecipe(v)}
                   >
                     <SelectTrigger id="recipeId" className="w-full" onBlur={field.handleBlur}>
                       <SelectValue placeholder="— Choisir une recette —" />
@@ -209,7 +209,7 @@ function NewServerPage() {
                   <Label htmlFor="allocationId">Allocation (IP:port)</Label>
                   <Select
                     value={field.state.value}
-                    onValueChange={(v) => field.handleChange(v)}
+                    onValueChange={(v) => v !== null && field.handleChange(v)}
                     disabled={!selectedNodeId}
                   >
                     <SelectTrigger id="allocationId" className="w-full" onBlur={field.handleBlur}>
@@ -293,8 +293,8 @@ function NewServerPage() {
       </Card>
 
       <p className="mt-6">
-        <Button variant="ghost" asChild>
-          <Link to="/servers">← Mes serveurs</Link>
+        <Button variant="ghost" render={<Link to="/servers" />}>
+          ← Mes serveurs
         </Button>
       </p>
     </div>
