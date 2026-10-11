@@ -20,7 +20,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
@@ -186,17 +185,18 @@ function ServerBackupsPage() {
                 : 'Aucun contenu déclaré par la recette : tout le serveur est sauvegardé (sauf le dossier .bin de l’agent).'}
             </CardDescription>
           </CardHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-          >
-            <CardContent>
+          <CardContent>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                form.handleSubmit();
+              }}
+              className="max-w-sm space-y-4"
+            >
               <form.Field name="name">
                 {(field) => (
-                  <div className="max-w-sm space-y-2">
+                  <div className="space-y-2">
                     <Input
                       placeholder="Nom (optionnel)"
                       value={field.state.value}
@@ -211,8 +211,6 @@ function ServerBackupsPage() {
                   </div>
                 )}
               </form.Field>
-            </CardContent>
-            <CardFooter>
               <form.Subscribe selector={(s) => [s.isSubmitting, create.isPending]}>
                 {([isSubmitting, pending]) => (
                   <Button type="submit" disabled={isSubmitting || pending}>
@@ -221,8 +219,8 @@ function ServerBackupsPage() {
                   </Button>
                 )}
               </form.Subscribe>
-            </CardFooter>
-          </form>
+            </form>
+          </CardContent>
         </Card>
       )}
 
