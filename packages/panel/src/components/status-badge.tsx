@@ -16,14 +16,14 @@ const BALL_COLORS: Record<string, string> = {
   offline: 'bg-red-500',
 };
 
-/** Pill tint per status — defaults to neutral gray. */
+/** Pill tint per status — semi-transparent bg, text/border matching the ball. */
 const PILL_COLORS: Record<string, string> = {
   running: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   online: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   installing: 'border border-blue-500/50 bg-blue-500/15 text-blue-500',
-  crashed: 'bg-red-100 text-red-700',
-  install_failed: 'bg-red-100 text-red-700',
-  offline: 'bg-red-100 text-red-700',
+  crashed: 'border border-red-500/50 bg-red-500/15 text-red-500',
+  install_failed: 'border border-red-500/50 bg-red-500/15 text-red-500',
+  offline: 'border border-red-500/50 bg-red-500/15 text-red-500',
 };
 
 /** French label per status — defaults to the raw status. */
@@ -61,7 +61,8 @@ export function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        PILL_COLORS[status] ?? 'bg-muted text-muted-foreground'
+        PILL_COLORS[status] ??
+          'border border-muted-foreground/50 bg-muted-foreground/15 text-muted-foreground'
       }`}
     >
       <StatusBall status={status} />
