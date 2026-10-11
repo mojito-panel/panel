@@ -8,6 +8,8 @@ import type {
   Recipe,
   Server,
   Allocation,
+  ServerUser,
+  PanelRole,
 } from './entities';
 
 // ─── Types inferred from MikroORM entities ───────────────────────────────────────
@@ -20,6 +22,8 @@ export interface INode extends InferEntity<typeof Node> {}
 export interface IRecipe extends InferEntity<typeof Recipe> {}
 export interface IServer extends InferEntity<typeof Server> {}
 export interface IAllocation extends InferEntity<typeof Allocation> {}
+export interface IServerUser extends InferEntity<typeof ServerUser> {}
+export interface IPanelRole extends InferEntity<typeof PanelRole> {}
 
 export type NodeStatus = INode['status'];
 export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';
@@ -37,6 +41,8 @@ export interface SessionUser {
   name: string | null;
   email: string;
   role: string;
+  /** Effective flat panel permissions of the role (built-in or custom). */
+  permissions: string[];
 }
 
 export interface SessionInfo {

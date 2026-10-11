@@ -39,7 +39,11 @@ function ServerLayout() {
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <ServerSidebar name={server?.name} status={status} />
+        <ServerSidebar
+          name={server?.name}
+          status={status}
+          permissions={server?.viewer?.permissions}
+        />
         <AppShell
           header={
             <>

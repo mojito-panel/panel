@@ -17,7 +17,8 @@ import {
 interface InstallBannerProps {
   /** Live install status pushed by the agent over the console WS (null = pending). */
   status: ConsoleInstallStatus | null;
-  onRetry: () => void;
+  /** Retry callback — undefined hides the button (no server.settings.update). */
+  onRetry?: () => void;
   retryPending: boolean;
   retryError: string | null;
 }
@@ -61,10 +62,12 @@ export function InstallBanner({ status, onRetry, retryPending, retryError }: Ins
       </CardContent>
       {failed && (
         <CardFooter>
-          <Button onClick={onRetry} disabled={retryPending}>
-            <RefreshCw className={retryPending ? 'animate-spin' : undefined} />
-            {retryPending ? 'Relance…' : 'Réessayer l’installation'}
-          </Button>
+          {onRetry && (
+            <Button onClick={onRetry} disabled={retryPending}>
+              <RefreshCw className={retryPending ? 'animate-spin' : undefined} />
+              {retryPending ? 'Relance…' : 'Réessayer l’installation'}
+            </Button>
+          )}
           {retryError && <span className="ml-2 text-sm text-destructive">{retryError}</span>}
         </CardFooter>
       )}

@@ -210,8 +210,9 @@ export const permissionSchema = z.enum([
 export type Permission = z.infer<typeof permissionSchema>;
 
 /**
- * V1: no invitations/sub-users — owners and admins get every permission.
- * The closed list above already exists so V2 can narrow it down.
+ * Full permission set — owners and admins get every permission; sub-users
+ * get the subset granted on the panel (the token carries only their grants,
+ * the agent enforces them on every message).
  */
 export const ALL_PERMISSIONS: readonly Permission[] = permissionSchema.options;
 

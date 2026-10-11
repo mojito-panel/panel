@@ -3,9 +3,8 @@ import { initOrm } from '~/db';
 
 /**
  * Custom server entrypoint — TanStack Start detects src/server.ts automatically.
- * At startup: Postgres connection + MikroORM migrations (business entities).
- * The better-auth tables (user/session/account/verification) are managed
- * separately by `npm run auth:migrate` (better-auth CLI).
+ * At startup: Postgres connection + MikroORM migrations (ALL tables,
+ * including the better-auth ones — the better-auth CLI never runs here).
  */
 const orm = await initOrm();
 await orm.migrator.up();

@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/settings')({
   component: ServerSettingsPage,
@@ -63,6 +64,12 @@ function ServerSettingsPage() {
   });
 
   const server = query.data;
+
+  // Per-server grants: reinstall needs server.settings.update, deletion is
+  // owner/admin only (non-delegable)
+  const viewer = server?.viewer;
+  const canReinstall = !!viewer && serverCan(viewer.permissions, { 'server.settings': ['update'] });
+  const canDelete = !!viewer && (viewer.isOwner || viewer.isAdmin);
 
   const confirmReinstall = () => {
     // Pelican wording: some files may be deleted/modified — explicit confirm
@@ -116,68 +123,72 @@ function ServerSettingsPage() {
       </Card>
 
       {/* ─── Reinstall (Pelican: "Reinstall Server") ─── */}
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle>Réinstaller le serveur</CardTitle>
-          <CardDescription>
-            Réinstaller ce serveur l’arrêtera, puis relancera le script
-            d’installation qui l’a configuré initialement.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Certains fichiers peuvent être supprimés ou modifiés pendant
-          l’opération — pense à sauvegarder tes données avant de continuer.
-        </CardContent>
-        <CardFooter className="gap-2">
-          <Button
-            variant="destructive"
-            onClick={confirmReinstall}
-            disabled={reinstallMutation.isPending}
-          >
-            <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
-            {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
-          </Button>
-          {reinstallMutation.isError && (
-            <span className="text-sm text-destructive">
-              {reinstallMutation.error.message}
-            </span>
-          )}
-        </CardFooter>
-      </Card>
+      {canReinstall && (
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle>Réinstaller le serveur</CardTitle>
+            <CardDescription>
+              Réinstaller ce serveur l’arrêtera, puis relancera le script
+              d’installation qui l’a configuré initialement.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Certains fichiers peuvent être supprimés ou modifiés pendant
+            l’opération — pense à sauvegarder tes données avant de continuer.
+          </CardContent>
+          <CardFooter className="gap-2">
+            <Button
+              variant="destructive"
+              onClick={confirmReinstall}
+              disabled={reinstallMutation.isPending}
+            >
+              <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
+              {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
+            </Button>
+            {reinstallMutation.isError && (
+              <span className="text-sm text-destructive">
+                {reinstallMutation.error.message}
+              </span>
+            )}
+          </CardFooter>
+        </Card>
+      )}
 
       <Separator />
 
       {/* ─── Danger zone (deletion — already existing feature) ─── */}
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle>Supprimer le serveur</CardTitle>
-          <CardDescription>
-            Supprime définitivement le serveur et son dossier sur le node.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (confirm(`Supprimer « ${server?.name} » ? Le dossier sera effacé.`)) {
-                remove.mutate();
-              }
-            }}
-            disabled={remove.isPending}
-          >
-            <Trash2 />
-            Supprimer
-          </Button>
-          {remove.isSuccess && (
-            <span className="ml-2 text-sm text-muted-foreground">
-              Supprimé — retour à la liste…
-            </span>
-          )}
-          {remove.isError && (
-            <span className="ml-2 text-sm text-destructive">{remove.error.message}</span>
-          )}
-        </CardFooter>
-      </Card>
+      {canDelete && (
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle>Supprimer le serveur</CardTitle>
+            <CardDescription>
+              Supprime définitivement le serveur et son dossier sur le node.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirm(`Supprimer « ${server?.name} » ? Le dossier sera effacé.`)) {
+                  remove.mutate();
+                }
+              }}
+              disabled={remove.isPending}
+            >
+              <Trash2 />
+              Supprimer
+            </Button>
+            {remove.isSuccess && (
+              <span className="ml-2 text-sm text-muted-foreground">
+                Supprimé — retour à la liste…
+              </span>
+            )}
+            {remove.isError && (
+              <span className="ml-2 text-sm text-destructive">{remove.error.message}</span>
+            )}
+          </CardFooter>
+        </Card>
+      )}
     </div>
   );
 }

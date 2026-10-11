@@ -1,6 +1,6 @@
 import { defineEntity, p } from '@mikro-orm/core';
 
-// ─── better-auth (migrations managed by @better-auth/cli) ─────────────────────
+// ─── better-auth (migrations managed by MikroORM like everything else) ──────
 
 export const User = defineEntity({
   name: 'user',
@@ -11,6 +11,11 @@ export const User = defineEntity({
     emailVerified: p.boolean().fieldName('email_verified').default(false),
     image: p.text().nullable(),
     role: p.string().default('user'),
+    // Admin plugin suspension (checked by better-auth at session creation).
+    // p.string() = varchar(255): matches better-auth's own "string" fields.
+    banned: p.boolean().default(false),
+    banReason: p.string().length(255).fieldName('ban_reason').nullable(),
+    banExpires: p.datetime().fieldName('ban_expires').nullable(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },
@@ -27,6 +32,8 @@ export const Session = defineEntity({
     ipAddress: p.string().fieldName('ip_address').nullable(),
     userAgent: p.string().fieldName('user_agent').nullable(),
     userId: p.text().fieldName('user_id'),
+    // Admin plugin impersonation (who created this session, when impersonating)
+    impersonatedBy: p.string().length(255).fieldName('impersonated_by').nullable(),
   },
 });
 
@@ -124,5 +131,45 @@ export const Allocation = defineEntity({
     /** Primary allocation of the server — source of SERVER_PORT / SERVER_IP. */
     primary: p.boolean().fieldName('is_primary').default(false),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+  },
+});
+
+export const ServerUser = defineEntity({
+  name: 'server_user',
+  properties: {
+    id: p.string().primary(),
+    serverId: p.string().fieldName('server_id'),
+    userId: p.string().fieldName('user_id'),
+    /**
+     * Per-server permission grant of a sub-user, in the better-auth
+     * statements shape ({ "server.files": ["read", "write"] }) — validated
+     * against the catalog in `~/lib/permissions`.
+     */
+    permissions: p.json<Record<string, string[]>>(),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+  },
+  uniques: [{ properties: ['serverId', 'userId'], name: 'server_user_server_user_unique' }],
+});
+
+export const PanelRole = defineEntity({
+  name: 'role',
+  properties: {
+    /**
+     * Slug-like id — it is the value stored in `user.role` (built-in names
+     * 'admin'/'moderator'/'user' are reserved, custom roles get their id
+     * from the display name).
+     */
+    id: p.string().primary(),
+    name: p.string().length(128).unique(),
+    description: p.text().nullable(),
+    /**
+     * Panel-level permission set of the custom role, in the better-auth
+     * statements shape — validated against the catalog in
+     * `~/lib/permissions` (never `server.*`: those are sub-user grants).
+     */
+    permissions: p.json<Record<string, string[]>>(),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },
 });

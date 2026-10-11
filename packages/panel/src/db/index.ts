@@ -10,6 +10,8 @@ import {
   Recipe,
   Server,
   Allocation,
+  ServerUser,
+  PanelRole,
 } from './entities';
 
 const databaseUrl =
@@ -36,7 +38,18 @@ for (const path in modules) {
 export const ormConfig = {
   dbName: 'mojito',
   clientUrl: databaseUrl,
-  entities: [User, Session, Account, Verification, Node, Recipe, Server, Allocation],
+  entities: [
+    User,
+    Session,
+    Account,
+    Verification,
+    Node,
+    Recipe,
+    Server,
+    Allocation,
+    ServerUser,
+    PanelRole,
+  ],
   extensions: [Migrator],
   debug: process.env.NODE_ENV !== 'production',
   migrations: {

@@ -21,6 +21,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
 import { InstallBanner, InstallPanel } from '~/components/console/install-panel';
+import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
   component: ServerConsolePage,
@@ -119,6 +120,16 @@ function ServerConsolePage() {
   const server = query.data;
   const isRunning = server?.status === 'running';
 
+  // Per-server grants (sub-users) — hide what the viewer may not do. The
+  // console JWT carries the same permissions: the agent refuses anyway.
+  const permissions = server?.viewer?.permissions ?? [];
+  const canStart = serverCan(permissions, { 'server.power': ['start'] });
+  const canStop = serverCan(permissions, { 'server.power': ['stop'] });
+  const canRestart = serverCan(permissions, { 'server.power': ['restart'] });
+  const canKill = serverCan(permissions, { 'server.power': ['kill'] });
+  const canCommand = serverCan(permissions, { 'server.console': ['command'] });
+  const canRetryInstall = serverCan(permissions, { 'server.settings': ['update'] });
+
   // Install active: WS status first, DB status while the WS has not pushed yet
   const installActive = installStatus
     ? installStatus.status !== 'installed'
@@ -155,7 +166,7 @@ function ServerConsolePage() {
       {installActive && (
         <InstallBanner
           status={installStatus}
-          onRetry={() => retry.mutate()}
+          onRetry={canRetryInstall ? () => retry.mutate() : undefined}
           retryPending={retry.isPending}
           retryError={retry.isError ? retry.error.message : null}
         />
@@ -164,39 +175,47 @@ function ServerConsolePage() {
       {/* Power actions — meaningless during an install */}
       {!installActive && (
         <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => runAction('start')}
-            disabled={action.isPending || isRunning}
-          >
-            <Play />
-            Démarrer
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => runAction('stop')}
-            disabled={action.isPending || !isRunning}
-          >
-            <Square />
-            Arrêter
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => runAction('restart')}
-            disabled={action.isPending || !isRunning}
-          >
-            <RotateCw />
-            Redémarrer
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (confirm('Forcer l’arrêt du process ?')) runAction('kill');
-            }}
-            disabled={action.isPending || !isRunning}
-          >
-            <Skull />
-            Kill
-          </Button>
+          {canStart && (
+            <Button
+              onClick={() => runAction('start')}
+              disabled={action.isPending || isRunning}
+            >
+              <Play />
+              Démarrer
+            </Button>
+          )}
+          {canStop && (
+            <Button
+              variant="secondary"
+              onClick={() => runAction('stop')}
+              disabled={action.isPending || !isRunning}
+            >
+              <Square />
+              Arrêter
+            </Button>
+          )}
+          {canRestart && (
+            <Button
+              variant="outline"
+              onClick={() => runAction('restart')}
+              disabled={action.isPending || !isRunning}
+            >
+              <RotateCw />
+              Redémarrer
+            </Button>
+          )}
+          {canKill && (
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirm('Forcer l’arrêt du process ?')) runAction('kill');
+              }}
+              disabled={action.isPending || !isRunning}
+            >
+              <Skull />
+              Kill
+            </Button>
+          )}
         </div>
       )}
       {action.isError && (
@@ -216,7 +235,7 @@ function ServerConsolePage() {
         />
 
         {/* Send commands (process stdin) — hidden during an install */}
-        {!installActive && (
+        {!installActive && canCommand && (
           <form onSubmit={handleCommand} className="mt-3 flex gap-2">
             <Input
               placeholder={isRunning ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}

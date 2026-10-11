@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { validateVariableValue, type RecipeVariable } from '@mojito/contract';
+import { subuserPermissionsSchema } from '~/lib/permissions';
 
 export const createServerSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
@@ -95,3 +96,38 @@ export const updateServerVariablesSchema = z.object({
 });
 
 export type UpdateServerVariablesDto = z.infer<typeof updateServerVariablesSchema>;
+
+// ─── Sub-users (per-server permission grants, Pelican "Users" tab) ──────────
+
+/** Reads the sub-user list of a server. */
+export const listServerUsersSchema = z.object({
+  serverId: z.string().min(1),
+});
+
+export type ListServerUsersDto = z.infer<typeof listServerUsersSchema>;
+
+/** Adds a sub-user by email with a permission grant. */
+export const addServerUserSchema = z.object({
+  serverId: z.string().min(1),
+  email: z.string().email('Email invalide'),
+  permissions: subuserPermissionsSchema,
+});
+
+export type AddServerUserDto = z.infer<typeof addServerUserSchema>;
+
+/** Updates a sub-user's permission grant. */
+export const updateServerUserSchema = z.object({
+  serverId: z.string().min(1),
+  userId: z.string().min(1),
+  permissions: subuserPermissionsSchema,
+});
+
+export type UpdateServerUserDto = z.infer<typeof updateServerUserSchema>;
+
+/** Removes a sub-user from a server. */
+export const removeServerUserSchema = z.object({
+  serverId: z.string().min(1),
+  userId: z.string().min(1),
+});
+
+export type RemoveServerUserDto = z.infer<typeof removeServerUserSchema>;

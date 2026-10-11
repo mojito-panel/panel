@@ -2,12 +2,19 @@ import { createServerFn } from '@tanstack/react-start';
 import { randomUUID } from 'node:crypto';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
-import { Node, Recipe, Server, Allocation } from '~/db/entities';
+import { Node, Recipe, Server, Allocation, ServerUser } from '~/db/entities';
 import type { IServer } from '~/db/types';
 import type { Recipe as RecipeContract } from '@mojito/contract';
-import { requireUser, HttpError, loadOwnedServer } from '../session';
+import {
+  requireUser,
+  HttpError,
+  loadServerForViewer,
+  loadServerWithPermission,
+  requireServerOwner,
+} from '../session';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
+import { toConsolePermissions } from '~/lib/permissions';
 import {
   agentInstallServer,
   agentGetServer,
@@ -80,10 +87,21 @@ export const listServersFn = createServerFn({ method: 'GET' }).handler(async () 
   const orm = await initOrm();
   const em = orm.em.fork();
 
-  const servers = await em.find(
-    Server,
-    user.role === 'admin' ? {} : { ownerId: user.id },
-  );
+  // Admin sees everything; a user sees their servers PLUS the ones shared
+  // with them (Pelican sub-user semantics)
+  const servers =
+    user.role === 'admin'
+      ? await em.find(Server, {})
+      : await (async () => {
+          const grants = await em.find(ServerUser, { userId: user.id });
+          return em.find(Server, {
+            $or: [
+              { ownerId: user.id },
+              { id: { $in: grants.map((grant) => grant.serverId) } },
+            ],
+          });
+        })();
+
   const nodes = await em.find(Node, {});
   const recipes = await em.find(Recipe, {});
 
@@ -193,10 +211,10 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.console': ['read'] },
     );
     const node = await em.findOne(Node, { id: server.nodeId });
     if (!node) throw new HttpError(500, 'Node introuvable');
@@ -248,10 +266,10 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.settings': ['update'] },
     );
 
     const node = await em.findOne(Node, { id: server.nodeId });
@@ -295,11 +313,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadOwnedServer(
-      data.serverId,
-      user.id,
-      user.role === 'admin',
-    );
+    const { server, viewer } = await loadServerForViewer(data.serverId, user);
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -335,13 +349,17 @@ export const getServerFn = createServerFn({ method: 'GET' })
 
     const recipeJson = recipe.json as RecipeContract;
 
+    // Sub-users only see the variables/startup command with the matching
+    // grant — owners/admins always pass (their list is the full set)
+    const canReadVariables = viewer.permissions.includes('server.variables.read');
+
     return {
       id: server.id,
       name: server.name,
       status: runtimeStatus,
       runtimeState,
       ownerId: server.ownerId,
-      variables: server.variables,
+      variables: canReadVariables ? server.variables : {},
       createdAt: server.createdAt,
       node: { id: node.id, name: node.name, fqdn: node.fqdn },
       recipe: {
@@ -349,8 +367,8 @@ export const getServerFn = createServerFn({ method: 'GET' })
         name: recipe.name,
         slug: recipe.slug,
         // Variable definitions for the UI (forms)
-        variables: recipeJson.variables ?? [],
-        start: recipeJson.start,
+        variables: canReadVariables ? (recipeJson.variables ?? []) : [],
+        start: canReadVariables ? recipeJson.start : null,
       },
       allocation: primaryAllocation
         ? {
@@ -360,6 +378,13 @@ export const getServerFn = createServerFn({ method: 'GET' })
           }
         : null,
       logs,
+      // What the current user can do on this server (sidebar + page gating)
+      viewer: {
+        isOwner: viewer.isOwner,
+        isAdmin: viewer.isAdmin,
+        isSubuser: viewer.isSubuser,
+        permissions: viewer.permissions,
+      },
     };
   });
 
@@ -369,10 +394,10 @@ export const serverActionFn = createServerFn({ method: 'POST' })
   .validator(serverActionInputSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.power': [data.action] },
     );
 
     const node = await em.findOne(Node, { id: server.nodeId });
@@ -398,10 +423,10 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.settings': ['update'] },
     );
 
     const node = await em.findOne(Node, { id: server.nodeId });
@@ -471,10 +496,10 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
   .validator(updateServerVariablesSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.variables': ['update'] },
     );
 
     const recipe = await em.findOne(Recipe, { id: server.recipeId });
@@ -536,10 +561,10 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
   .validator(sendCommandSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadOwnedServer(
+    const { server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.console': ['command'] },
     );
     const orm = await initOrm();
     const em = orm.em.fork();
@@ -563,10 +588,10 @@ export const getServerLogsFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadOwnedServer(
+    const { server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.console': ['read'] },
     );
     const orm = await initOrm();
     const em = orm.em.fork();
@@ -590,11 +615,7 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadOwnedServer(
-      data.serverId,
-      user.id,
-      user.role === 'admin',
-    );
+    const { server, viewer } = await loadServerForViewer(data.serverId, user);
     const orm = await initOrm();
     const em = orm.em.fork();
     const node = await em.findOne(Node, { id: server.nodeId });
@@ -603,9 +624,15 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
     // Short-lived JWT — the agent validates signature/aud/scope/exp/serverId
     // and gates every console action on the permissions carried in the payload.
     // Pelican-style: signed with the node's OWN agent token (single per-node
-    // secret). V1: no invitations — owner/admin gets every permission.
+    // secret). The permissions come from the viewer's per-server grants —
+    // owners/admins get the full set, sub-users only what they were granted
+    // (the agent enforces them on every WS message).
     const { token } = signConsoleToken(
-      { userId: user.id, serverId: server.id },
+      {
+        userId: user.id,
+        serverId: server.id,
+        permissions: toConsolePermissions(viewer.permissions),
+      },
       decryptSecret(node.agentToken),
     );
 
@@ -621,11 +648,7 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
-      data.serverId,
-      user.id,
-      user.role === 'admin',
-    );
+    const { em, server } = await requireServerOwner(data.serverId, user);
 
     const node = await em.findOne(Node, { id: server.nodeId });
 
@@ -647,6 +670,9 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
       allocation.serverId = null;
       allocation.primary = false;
     }
+    // The sub-user grants die with the server
+    const grants = await em.find(ServerUser, { serverId: server.id });
+    em.remove(grants);
     em.remove(server);
     await em.flush();
 
@@ -680,10 +706,10 @@ export const getServerNetworkFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadOwnedServer(
+    const { server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.network': ['read'] },
     );
     const orm = await initOrm();
     const em = orm.em.fork();
@@ -703,10 +729,10 @@ export const addServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationActionSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.network': ['update'] },
     );
 
     const allocation = await em.findOne(Allocation, { id: data.allocationId });
@@ -739,10 +765,10 @@ export const removeServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationActionSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.network': ['update'] },
     );
 
     const allocation = await em.findOne(Allocation, { id: data.allocationId });
@@ -768,10 +794,10 @@ export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationActionSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadOwnedServer(
+    const { em, server } = await loadServerWithPermission(
       data.serverId,
-      user.id,
-      user.role === 'admin',
+      user,
+      { 'server.network': ['update'] },
     );
 
     const allocation = await em.findOne(Allocation, { id: data.allocationId });

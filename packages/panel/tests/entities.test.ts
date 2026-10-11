@@ -9,6 +9,8 @@ import {
   Recipe,
   Server,
   Allocation,
+  ServerUser,
+  PanelRole,
 } from '~/db/entities';
 
 /**
@@ -21,7 +23,18 @@ describe('MikroORM entities (SQLite in-memory)', () => {
   beforeAll(async () => {
     orm = await MikroORM.init({
       dbName: ':memory:',
-      entities: [User, Session, Account, Verification, Node, Recipe, Server, Allocation],
+      entities: [
+        User,
+        Session,
+        Account,
+        Verification,
+        Node,
+        Recipe,
+        Server,
+        Allocation,
+        ServerUser,
+        PanelRole,
+      ],
     });
     await orm.schema.create();
   });
@@ -43,6 +56,8 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(tableNames).toContain('recipe');
     expect(tableNames).toContain('server');
     expect(tableNames).toContain('allocation');
+    expect(tableNames).toContain('server_user');
+    expect(tableNames).toContain('role');
   });
 
   it('creates a User with the default role', async () => {
@@ -152,6 +167,79 @@ describe('MikroORM entities (SQLite in-memory)', () => {
 
     const assigned = await em.findOne(Allocation, { serverId: 'server-1' });
     expect(assigned?.primary).toBe(true);
+  });
+
+  it('creates a ServerUser grant with a JSON permission map', async () => {
+    const em = orm.em.fork();
+    const grant = em.create(ServerUser, {
+      id: 'server-user-1',
+      serverId: 'server-1',
+      userId: 'user-1',
+      permissions: { 'server.console': ['read', 'command'], 'server.files': ['read'] },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(grant);
+    await em.flush();
+
+    const found = await em.findOne(ServerUser, { serverId: 'server-1', userId: 'user-1' });
+    expect(found?.permissions).toMatchObject({
+      'server.console': ['read', 'command'],
+      'server.files': ['read'],
+    });
+  });
+
+  it('creates a custom PanelRole with a JSON permission map', async () => {
+    const em = orm.em.fork();
+    const role = em.create(PanelRole, {
+      id: 'support',
+      name: 'Support',
+      description: 'Équipe support — lecture seule',
+      permissions: { 'panel.overview': ['read'], user: ['list'] },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(role);
+    await em.flush();
+
+    const found = await em.findOne(PanelRole, { id: 'support' });
+    expect(found?.name).toBe('Support');
+    expect(found?.permissions).toMatchObject({ user: ['list'] });
+
+    // The unique name constraint holds
+    const clash = em.create(PanelRole, {
+      id: 'support-2',
+      name: 'Support',
+      permissions: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(clash);
+    await expect(em.flush()).rejects.toThrow();
+  });
+
+  it('creates a suspended User (admin plugin columns)', async () => {    const em = orm.em.fork();
+    const user = em.create(User, {
+      id: 'user-2',
+      name: 'Suspended',
+      email: 'suspended@example.com',
+      emailVerified: false,
+      role: 'user',
+      banned: true,
+      banReason: 'Test suspension',
+      banExpires: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(user);
+    await em.flush();
+
+    const found = await em.findOne(User, { email: 'suspended@example.com' });
+    expect(found?.banned).toBe(true);
+    expect(found?.banReason).toBe('Test suspension');
+    // Default: an account is NOT banned
+    const admin = await em.findOne(User, { email: 'admin@example.com' });
+    expect(admin?.banned).toBe(false);
   });
 
   it('creates a Session linked to a User', async () => {

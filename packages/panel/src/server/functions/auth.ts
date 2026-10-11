@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequestHeaders } from '@tanstack/react-start/server';
 import { auth } from '~/lib/auth';
 import type { AuthSession } from '~/db/types';
+import { resolvePanelPermissions } from '../session';
 
 /**
  * Fetches the current session server-side (SSR).
@@ -17,12 +18,15 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
 
     // Explicit mapping to the serializable DTO — no raw entity type
     // (IUser/ISession carry non-serializable MikroORM IndexHints).
+    // The effective permissions resolve the role (built-in or custom).
+    const role = session.user.role ?? 'user';
     return {
       user: {
         id: session.user.id,
         name: session.user.name ?? null,
         email: session.user.email,
-        role: session.user.role ?? 'user',
+        role,
+        permissions: await resolvePanelPermissions(role),
       },
       session: {
         id: session.session.id,

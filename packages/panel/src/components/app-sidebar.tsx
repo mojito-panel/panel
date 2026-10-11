@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
 } from '~/components/ui/sidebar';
 import { useAuth } from '~/contexts/use-auth';
+import { hasAdminAreaAccess } from '~/lib/permissions';
 
 /** Main menu. */
 const mainItems = [
@@ -64,7 +65,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {user?.role === 'admin' && (
+        {user && hasAdminAreaAccess(user.permissions) && (
           <SidebarGroup>
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>

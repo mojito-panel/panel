@@ -5,12 +5,14 @@ import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import { Star, Trash2 } from 'lucide-react';
 import {
+  getServerFn,
   getServerNetworkFn,
   addServerAllocationFn,
   removeServerAllocationFn,
   setPrimaryServerAllocationFn,
 } from '~/server/functions/servers';
 import { serverAllocationActionSchema } from '~/validators/server';
+import { serverCan } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import {
   Card,
@@ -45,6 +47,7 @@ function ServerNetworkPage() {
   const queryClient = useQueryClient();
 
   const getNetwork = useServerFn(getServerNetworkFn);
+  const getServer = useServerFn(getServerFn);
   const addAllocation = useServerFn(addServerAllocationFn);
   const removeAllocation = useServerFn(removeServerAllocationFn);
   const setPrimary = useServerFn(setPrimaryServerAllocationFn);
@@ -52,6 +55,16 @@ function ServerNetworkPage() {
   const query = useQuery({
     queryKey: ['server-network', serverId],
     queryFn: () => getNetwork({ data: { serverId, after: 0 } }),
+  });
+
+  // Shared server query (cached) — the viewer's per-server grants gate the
+  // mutation buttons (sub-users without server.network.update see read-only)
+  const serverQuery = useQuery({
+    queryKey: ['server', serverId],
+    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+  });
+  const canEdit = serverCan(serverQuery.data?.viewer?.permissions ?? [], {
+    'server.network': ['update'],
   });
 
   const invalidate = async () => {
@@ -137,6 +150,7 @@ function ServerNetworkPage() {
                   <AllocationRow
                     key={allocation.id}
                     allocation={allocation}
+                    canEdit={canEdit}
                     onSetPrimary={() => primary.mutate(allocation.id)}
                     onRemove={() => {
                       if (
@@ -167,7 +181,8 @@ function ServerNetworkPage() {
             allocation »).
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        {canEdit ? (
+          <CardContent>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -213,7 +228,14 @@ function ServerNetworkPage() {
               créer dans la page du node.
             </p>
           )}
-        </CardContent>
+          </CardContent>
+        ) : (
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Tu n’as pas la permission de modifier le réseau de ce serveur.
+            </p>
+          </CardContent>
+        )}
       </Card>
     </div>
   );
@@ -222,11 +244,13 @@ function ServerNetworkPage() {
 /** One allocation row of the Network page table. */
 function AllocationRow({
   allocation,
+  canEdit,
   onSetPrimary,
   onRemove,
   busy,
 }: {
   allocation: NetworkAllocation;
+  canEdit: boolean;
   onSetPrimary: () => void;
   onRemove: () => void;
   busy: boolean;
@@ -242,7 +266,7 @@ function AllocationRow({
           <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
             Principale
           </span>
-        ) : (
+        ) : canEdit ? (
           <Button
             type="button"
             variant="ghost"
@@ -253,24 +277,30 @@ function AllocationRow({
             <Star />
             Définir principale
           </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
       <td className="py-2 text-right">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={allocation.primary || busy}
-          title={
-            allocation.primary
-              ? 'Définis une autre allocation principale avant de retirer celle-ci'
-              : undefined
-          }
-          onClick={onRemove}
-        >
-          <Trash2 />
-          Retirer
-        </Button>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={allocation.primary || busy}
+            title={
+              allocation.primary
+                ? 'Définis une autre allocation principale avant de retirer celle-ci'
+                : undefined
+            }
+            onClick={onRemove}
+          >
+            <Trash2 />
+            Retirer
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </td>
     </tr>
   );

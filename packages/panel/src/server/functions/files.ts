@@ -1,7 +1,13 @@
 import { createServerFn } from '@tanstack/react-start';
 import { initOrm } from '~/db';
 import { Node } from '~/db/entities';
-import { requireUser, HttpError, loadOwnedServer } from '../session';
+import type { IUser } from '~/db/types';
+import {
+  requireUser,
+  HttpError,
+  loadServerWithPermission,
+} from '../session';
+import type { PermissionRequest } from '~/lib/permissions';
 import { AgentError } from '../agent/client';
 import {
   agentListFiles,
@@ -29,9 +35,12 @@ import {
  * re-validated by the agent (traversal gate).
  */
 
-/** Loads the node of an owned server. */
-async function loadNodeOf(serverId: string, userId: string, isAdmin: boolean) {
-  const { server } = await loadOwnedServer(serverId, userId, isAdmin);
+/**
+ * Loads the node of a server the user can access, requiring one of the
+ * `server.files` permissions (Pelican sub-user gate).
+ */
+async function loadNodeOf(serverId: string, user: IUser, request: PermissionRequest) {
+  const { server } = await loadServerWithPermission(serverId, user, request);
   const orm = await initOrm();
   const em = orm.em.fork();
   const node = await em.findOne(Node, { id: server.nodeId });
@@ -53,7 +62,7 @@ export const listFilesFn = createServerFn({ method: 'GET' })
   .validator(filesQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['read'] });
     try {
       return await agentListFiles(node, data.serverId, data.path);
     } catch (err) {
@@ -67,7 +76,7 @@ export const readFileFn = createServerFn({ method: 'GET' })
   .validator(filePathQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['read'] });
     try {
       return await agentReadFile(node, data.serverId, data.path);
     } catch (err) {
@@ -81,7 +90,7 @@ export const saveFileFn = createServerFn({ method: 'POST' })
   .validator(saveFileSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['write'] });
     try {
       await agentWriteFile(node, data.serverId, data.path, data.content);
       return { saved: true };
@@ -96,7 +105,7 @@ export const createEntryFn = createServerFn({ method: 'POST' })
   .validator(createEntrySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['create'] });
     const path = data.directory ? `${data.directory}/${data.name}` : data.name;
     try {
       await agentCreateEntry(node, data.serverId, path, data.type);
@@ -112,7 +121,7 @@ export const renameEntryFn = createServerFn({ method: 'POST' })
   .validator(renameEntrySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['write'] });
     // Same parent directory, new name — the path itself is agent-validated
     const parent = data.path.split('/').slice(0, -1).join('/');
     const newPath = parent ? `${parent}/${data.newName}` : data.newName;
@@ -130,7 +139,7 @@ export const deleteEntriesFn = createServerFn({ method: 'POST' })
   .validator(deleteEntriesSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['delete'] });
     try {
       await agentDeleteEntries(node, data.serverId, data.paths);
       return { deleted: true };
@@ -145,7 +154,7 @@ export const uploadFileFn = createServerFn({ method: 'POST' })
   .validator(uploadFileSchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const node = await loadNodeOf(data.serverId, user.id, user.role === 'admin');
+    const node = await loadNodeOf(data.serverId, user, { 'server.files': ['create'] });
     const path = data.directory ? `${data.directory}/${data.filename}` : data.filename;
     try {
       await agentUploadFile(node, data.serverId, path, data.contentBase64);

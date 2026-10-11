@@ -5,7 +5,7 @@ import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
 import { parseRecipe, type Recipe as RecipeDefinition } from '@mojito/contract';
-import { requireUser, requireAdmin, HttpError } from '../session';
+import { requireUser, requirePanelPermission, HttpError } from '../session';
 import { encryptSecret, decryptSecret } from '../crypto';
 import { agentHealth, agentGetStats, agentUpdateAllocation, AgentError } from '../agent/client';
 import { signHealthToken } from '../jwt';
@@ -52,7 +52,7 @@ export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () =>
 export const createNodeFn = createServerFn({ method: 'POST' })
   .validator(createNodeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['create']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -89,7 +89,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
 export const deleteNodeFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['delete']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -116,7 +116,7 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
 export const getNodeFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['read']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -155,7 +155,7 @@ export const getNodeFn = createServerFn({ method: 'GET' })
 export const updateNodeFn = createServerFn({ method: 'POST' })
   .validator(updateNodeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['update']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -178,7 +178,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
 export const resetNodeTokenFn = createServerFn({ method: 'POST' })
   .validator(nodeIdSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['update']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -225,7 +225,7 @@ export const listFreeNodeAllocationsFn = createServerFn({ method: 'GET' })
 export const listNodeAllocationsFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['read']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -256,7 +256,7 @@ export const listNodeAllocationsFn = createServerFn({ method: 'GET' })
 export const createNodeAllocationsFn = createServerFn({ method: 'POST' })
   .validator(createAllocationsSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['create']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -300,7 +300,7 @@ export const createNodeAllocationsFn = createServerFn({ method: 'POST' })
 export const deleteAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['delete']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -323,7 +323,7 @@ export const deleteAllocationFn = createServerFn({ method: 'POST' })
 export const assignAllocationFn = createServerFn({ method: 'POST' })
   .validator(assignAllocationSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['update']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -379,7 +379,7 @@ export const assignAllocationFn = createServerFn({ method: 'POST' })
 export const revokeAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.nodes':['update']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -542,7 +542,7 @@ export const listRecipesFn = createServerFn({ method: 'GET' }).handler(async () 
 export const importRecipesFn = createServerFn({ method: 'POST' })
   .validator(importRecipesSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.recipes':['create']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -573,7 +573,7 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
 export const getRecipeFn = createServerFn({ method: 'POST' })
   .validator(getRecipeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.recipes':['read']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -598,7 +598,7 @@ export const getRecipeFn = createServerFn({ method: 'POST' })
 export const createRecipeFn = createServerFn({ method: 'POST' })
   .validator(createRecipeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.recipes':['create']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -637,7 +637,7 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
 export const updateRecipeFn = createServerFn({ method: 'POST' })
   .validator(updateRecipeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.recipes':['update']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -671,7 +671,7 @@ export const updateRecipeFn = createServerFn({ method: 'POST' })
 export const deleteRecipeFn = createServerFn({ method: 'POST' })
   .validator(deleteRecipeSchema)
   .handler(async ({ data }) => {
-    await requireAdmin();
+    await requirePanelPermission({'panel.recipes':['delete']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
@@ -699,7 +699,7 @@ const AGENT_PING_TIMEOUT_MS = 2500;
  * the 5 most recent servers.
  */
 export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAdmin();
+  await requirePanelPermission({'panel.overview':['read']});
   const orm = await initOrm();
   const em = orm.em.fork();
 
@@ -784,7 +784,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
  * stays out of the loop (Pelican PR #2558 semantics).
  */
 export const getHealthNodesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAdmin();
+  await requirePanelPermission({'panel.overview':['read']});
   const orm = await initOrm();
   const em = orm.em.fork();
   const nodes = await em.find(Node, {});
@@ -833,7 +833,7 @@ export const getHealthNodesFn = createServerFn({ method: 'GET' }).handler(async 
 export const createNodeHealthTokenFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema) // { nodeId } — same shape as the other node fns
   .handler(async ({ data }) => {
-    const user = await requireAdmin();
+    const user = await requirePanelPermission({'panel.overview':['read']});
     const orm = await initOrm();
     const em = orm.em.fork();
     const node = await em.findOne(Node, { id: data.nodeId });

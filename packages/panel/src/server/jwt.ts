@@ -27,7 +27,7 @@ function signPayload(payload: object, secret: string): string {
 export interface SignConsoleTokenInput {
   userId: string;
   serverId: string;
-  /** V1: defaults to every permission (no invitations). */
+  /** Defaults to every permission — the panel narrows it for sub-users. */
   permissions?: readonly Permission[];
   /** Injectable clock for tests. */
   now?: number;

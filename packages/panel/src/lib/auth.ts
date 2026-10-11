@@ -1,6 +1,8 @@
 import { betterAuth } from 'better-auth';
+import { admin } from 'better-auth/plugins/admin';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { Pool } from 'pg';
+import { ac, PANEL_ROLES } from '~/lib/permissions';
 
 const databaseUrl =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
@@ -9,8 +11,14 @@ const databaseUrl =
  * Server-side better-auth configuration.
  * - Email/password in V1
  * - Postgres (docker compose dev, via `pg`) — same database as MikroORM
- * - admin/user roles via an additional `role` field on User
+ * - Pelican-style roles/permissions via the admin plugin + custom access
+ *   control (see `~/lib/permissions`): panel permissions attach to the
+ *   user's `role`, per-server permissions live in the `server_user` table.
  * - TanStack Start cookies (header forwarding)
+ *
+ * The admin plugin tables (`banned`/`ban_*`, `impersonated_by`) are managed
+ * by MikroORM like every other table — better-auth NEVER generates the
+ * migration here.
  *
  * Like custodia: baseURL via BETTER_AUTH_URL, no trustedOrigins.
  */
@@ -22,14 +30,10 @@ export const auth = betterAuth({
     minPasswordLength: 8,
   },
   user: {
-    additionalFields: {
-      role: {
-        type: 'string',
-        defaultValue: 'user',
-        required: false,
-        input: false, // not editable by the client at sign-up
-      },
-    },
+    // NOTE: the `role`/`banned`/`banReason`/`banExpires` fields come from the
+    // admin plugin — their snake_case mapping lives in the plugin's own
+    // `schema` option below (the top-level `fields` map only applies to
+    // CORE fields like emailVerified).
     fields: {
       emailVerified: 'email_verified',
       createdAt: 'created_at',
@@ -69,7 +73,34 @@ export const auth = betterAuth({
       updatedAt: 'updated_at',
     },
   },
-  plugins: [tanstackStartCookies()],
+  plugins: [
+    tanstackStartCookies(),
+    admin({
+      // Custom Pelican-style statements/roles (~/lib/permissions) — the
+      // plugin checks its endpoints against these roles, so a moderator
+      // only gets what moderatorRole grants.
+      ac,
+      roles: { ...PANEL_ROLES },
+      adminRoles: ['admin'],
+      defaultBanReason: 'Compte suspendu par un administrateur',
+      // Snake_case mapping of the PLUGIN fields (mergeSchema applies these
+      // as `fieldName`) — the MikroORM migration + entities use the same
+      // names, so better-auth and MikroORM stay in sync.
+      schema: {
+        user: {
+          fields: {
+            banReason: 'ban_reason',
+            banExpires: 'ban_expires',
+          },
+        },
+        session: {
+          fields: {
+            impersonatedBy: 'impersonated_by',
+          },
+        },
+      },
+    }),
+  ],
   advanced: {
     cookiePrefix: 'mojito',
   },

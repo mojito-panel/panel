@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { RecipeVariable } from '@mojito/contract';
 import { getServerFn, updateServerVariablesFn } from '~/server/functions/servers';
 import { makeUpdateServerVariablesSchema } from '~/validators/server';
+import { serverCan } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { VariableField } from '~/components/variable-field';
 import {
@@ -82,7 +83,22 @@ function ServerVariablesPage() {
     return <p className="text-sm text-muted-foreground">Chargement…</p>;
   }
 
+  // Sub-user without the server.variables.read grant — the command and the
+  // variable values are not even sent by the server function
+  if (
+    !server.recipe.start ||
+    !serverCan(server.viewer.permissions, { 'server.variables': ['read'] })
+  ) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Tu n’as pas la permission de voir les variables de ce serveur.
+      </p>
+    );
+  }
+
   const definitions = [...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort);
+  // Narrowed above (recipe.start is null without server.variables.read)
+  const start = server.recipe.start;
   const editable = definitions.filter((v) => v.userViewable && v.userEditable);
   const readonly = definitions.filter((v) => v.userViewable && !v.userEditable);
   const defaults = new Map(definitions.map((v) => [v.env, v.defaultValue]));
@@ -139,7 +155,14 @@ function ServerVariablesPage() {
               </p>
             )}
 
-            <Button type="submit" disabled={editable.length === 0 || mutation.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                editable.length === 0 ||
+                mutation.isPending ||
+                !serverCan(server.viewer.permissions, { 'server.variables': ['update'] })
+              }
+            >
               <Save />
               {mutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
             </Button>
@@ -185,7 +208,7 @@ function ServerVariablesPage() {
           <form.Subscribe selector={(s) => s.values.variables}>
             {(variables) => (
               <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-sm">
-                {resolveCommand(server.recipe.start.command, variables, defaults)}
+                {resolveCommand(start.command, variables, defaults)}
               </pre>
             )}
           </form.Subscribe>

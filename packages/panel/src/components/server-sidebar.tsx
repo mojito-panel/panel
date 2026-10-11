@@ -27,28 +27,37 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '~/components/ui/sidebar';
+import { serverCan, type PermissionRequest } from '~/lib/permissions';
 
 /**
  * Server navigation — Pelican-style tabs. `soon` marks the pages that are
- * still placeholders (roadmap view).
+ * still placeholders (roadmap view). `permission` gates the tab: it is
+ * only shown when the viewer's per-server grant carries it (sub-users see
+ * a restricted set, owners/admins see everything).
  */
-const serverItems = [
-  { title: 'Console', url: '/servers/$serverId/console', icon: Terminal, soon: false },
-  { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen, soon: false },
+const serverItems: Array<{
+  title: string;
+  url: string;
+  icon: typeof Terminal;
+  soon: boolean;
+  permission?: PermissionRequest;
+}> = [
+  { title: 'Console', url: '/servers/$serverId/console', icon: Terminal, soon: false, permission: { 'server.console': ['read'] } },
+  { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen, soon: false, permission: { 'server.files': ['read'] } },
   { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, soon: true },
-  { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, soon: true },
+  { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, soon: false, permission: { 'server.users': ['read'] } },
   { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, soon: true },
-  { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false },
-  { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, soon: false },
-  { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, soon: false },
+  { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false, permission: { 'server.network': ['read'] } },
+  { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, soon: false, permission: { 'server.variables': ['read'] } },
+  { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, soon: false, permission: { 'server.settings': ['read'] } },
   { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: true },
-] as const;
-
-/** Status badge colors are centralized in status-badge.tsx. */
+];
 
 interface ServerSidebarProps {
   name?: string;
   status?: PanelServerStatus;
+  /** Viewer's per-server permissions (flat list) — sub-users see fewer tabs. */
+  permissions?: string[];
 }
 
 /**
@@ -56,8 +65,12 @@ interface ServerSidebarProps {
  * status at the top, navigation tabs below, back-to-dashboard link at the
  * bottom. Mirrors the Pelican server layout.
  */
-export function ServerSidebar({ name, status }: ServerSidebarProps) {
+export function ServerSidebar({ name, status, permissions = [] }: ServerSidebarProps) {
   const params = useParams({ from: '/servers/$serverId' });
+
+  const items = serverItems.filter(
+    (item) => !item.permission || serverCan(permissions, item.permission),
+  );
 
   return (
     <Sidebar collapsible="icon">
@@ -86,7 +99,7 @@ export function ServerSidebar({ name, status }: ServerSidebarProps) {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {serverItems.map((item) => (
+              {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <Link to={item.url} params={params}>

@@ -36,6 +36,8 @@ import {
   deleteEntriesFn,
   uploadFileFn,
 } from '~/server/functions/files';
+import { getServerFn } from '~/server/functions/servers';
+import { serverCan } from '~/lib/permissions';
 import {
   filesSearchSchema,
   createEntryFormSchema,
@@ -65,6 +67,18 @@ function FilesPage() {
 
   const readFile = useServerFn(readFileFn);
 
+  // Shared server query (cached) — the viewer's per-server grants gate the
+  // mutating controls (the server functions enforce them anyway)
+  const getServer = useServerFn(getServerFn);
+  const serverQuery = useQuery({
+    queryKey: ['server', serverId],
+    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+  });
+  const permissions = serverQuery.data?.viewer?.permissions ?? [];
+  const canCreate = serverCan(permissions, { 'server.files': ['create'] });
+  const canWrite = serverCan(permissions, { 'server.files': ['write'] });
+  const canDelete = serverCan(permissions, { 'server.files': ['delete'] });
+
   const invalidateFiles = () =>
     queryClient.invalidateQueries({ queryKey: ['files', serverId] });
 
@@ -89,7 +103,15 @@ function FilesPage() {
 
   // Editor open (?file=…) → dedicated view
   if (file) {
-    return <FileEditor serverId={serverId} dir={dir} path={file} onClose={() => go(dir)} />;
+    return (
+      <FileEditor
+        serverId={serverId}
+        dir={dir}
+        path={file}
+        onClose={() => go(dir)}
+        canSave={canWrite}
+      />
+    );
   }
 
   return (
@@ -100,6 +122,9 @@ function FilesPage() {
         onNavigate={go}
         onRefresh={invalidateFiles}
         onDownload={download}
+        canCreate={canCreate}
+        canWrite={canWrite}
+        canDelete={canDelete}
       />
     </div>
   );
@@ -112,12 +137,18 @@ function FileBrowser({
   onNavigate,
   onRefresh,
   onDownload,
+  canCreate,
+  canWrite,
+  canDelete,
 }: {
   serverId: string;
   dir: string;
   onNavigate: (dir: string, file?: string) => void;
   onRefresh: () => void;
   onDownload: (path: string) => void;
+  canCreate: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
 }) {
   const listFiles = useServerFn(listFilesFn);
   const createEntry = useServerFn(createEntryFn);
@@ -235,30 +266,34 @@ function FileBrowser({
           ))}
         </nav>
         <div className="ml-auto flex flex-wrap gap-2">
-          <input
-            id="mojito-file-upload"
-            type="file"
-            className="hidden"
-            onChange={handleUpload}
-            disabled={upload.isPending}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={upload.isPending}
-            onClick={() => document.getElementById('mojito-file-upload')?.click()}
-          >
-            <Upload />
-            {upload.isPending ? 'Envoi…' : 'Uploader'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCreating((v) => !v)}>
-            <FolderPlus />
-            Nouveau dossier
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCreating((v) => !v)}>
-            <FilePlus />
-            Nouveau fichier
-          </Button>
+          {canCreate && (
+            <>
+              <input
+                id="mojito-file-upload"
+                type="file"
+                className="hidden"
+                onChange={handleUpload}
+                disabled={upload.isPending}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={upload.isPending}
+                onClick={() => document.getElementById('mojito-file-upload')?.click()}
+              >
+                <Upload />
+                {upload.isPending ? 'Envoi…' : 'Uploader'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCreating((v) => !v)}>
+                <FolderPlus />
+                Nouveau dossier
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCreating((v) => !v)}>
+                <FilePlus />
+                Nouveau fichier
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -346,23 +381,27 @@ function FileBrowser({
                           <Download />
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Renommer"
-                        onClick={() => setRenaming(entry.path)}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Supprimer"
-                        onClick={() => askDelete(entry)}
-                        disabled={remove.isPending}
-                      >
-                        <Trash2 />
-                      </Button>
+                      {canWrite && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Renommer"
+                          onClick={() => setRenaming(entry.path)}
+                        >
+                          <Pencil />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Supprimer"
+                          onClick={() => askDelete(entry)}
+                          disabled={remove.isPending}
+                        >
+                          <Trash2 />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -519,11 +558,13 @@ function FileEditor({
   dir,
   path,
   onClose,
+  canSave,
 }: {
   serverId: string;
   dir: string;
   path: string;
   onClose: () => void;
+  canSave: boolean;
 }) {
   const readFile = useServerFn(readFileFn);
   const saveFile = useServerFn(saveFileFn);
@@ -575,6 +616,7 @@ function FileEditor({
         key={path}
         initialContent={query.data.content}
         pending={save.isPending}
+        canSave={canSave}
         onSubmit={(content) => save.mutate(content)}
       />
       <p className="mt-2 text-xs text-muted-foreground">
@@ -588,10 +630,13 @@ function FileEditor({
 function SaveFileForm({
   initialContent,
   pending,
+  canSave,
   onSubmit,
 }: {
   initialContent: string;
   pending: boolean;
+  /** false → read-only view (sub-user without server.files.write). */
+  canSave: boolean;
   onSubmit: (content: string) => void;
 }) {
   const form = useForm({
@@ -621,10 +666,16 @@ function SaveFileForm({
         )}
       </form.Field>
       <div className="mt-3">
-        <Button type="submit" disabled={pending}>
-          <Save />
-          {pending ? 'Enregistrement…' : 'Enregistrer'}
-        </Button>
+        {canSave ? (
+          <Button type="submit" disabled={pending}>
+            <Save />
+            {pending ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Lecture seule — tu n’as pas la permission de modifier ce fichier.
+          </p>
+        )}
       </div>
     </form>
   );
