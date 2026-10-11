@@ -1,26 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { parsePlugin, safeParsePlugin } from '@mojito/contract';
+import { parseRecipe, safeParseRecipe } from '@mojito/contract';
 import {
-  emptyPluginEditorValue,
+  emptyRecipeEditorValue,
   newActionValue,
   newVariableValue,
-  pluginEditorValueToPlugin,
-  pluginToEditorValue,
+  recipeEditorValueToRecipe,
+  recipeToEditorValue,
   findUnknownVariablesInEditorValue,
-  pluginEditorSchema,
-  type PluginEditorValue,
-} from '~/validators/plugin-editor';
+  recipeEditorSchema,
+  type RecipeEditorValue,
+} from '~/validators/recipe-editor';
 
-/** A complete, valid editor value (Java Minecraft-like plugin). */
-function fullEditorValue(): PluginEditorValue {
+/** A complete, valid editor value (Java Minecraft-like recipe). */
+function fullEditorValue(): RecipeEditorValue {
   return {
-    id: 'mon-plugin',
-    name: 'Mon plugin',
+    id: 'my-recipe',
+    name: 'My recipe',
     author: 'steader@example.com',
-    description: 'Un plugin de test',
+    description: 'A test recipe',
     tags: ['minecraft'],
     features: ['eula'],
-    updateUrl: 'https://example.com/plugin.json',
+    updateUrl: 'https://example.com/recipe.json',
     requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: ['java'] },
     runtime: [{ key: 'java', value: '>=21' }],
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],
@@ -36,7 +36,7 @@ function fullEditorValue(): PluginEditorValue {
       },
       {
         ...newVariableValue(1),
-        name: 'Mémoire',
+        name: 'Memory',
         env: 'SERVER_MEMORY_OVERRIDE',
         type: 'number',
         defaultValue: 2048,
@@ -84,24 +84,24 @@ function newActionActionValue() {
   };
 }
 
-describe('plugin editor schema', () => {
+describe('recipe editor schema', () => {
   it('accepts a complete editor value', () => {
-    const result = pluginEditorSchema.safeParse(fullEditorValue());
+    const result = recipeEditorSchema.safeParse(fullEditorValue());
     expect(result.success).toBe(true);
   });
 
   it('rejects an empty editor value (required fields)', () => {
-    const result = pluginEditorSchema.safeParse(emptyPluginEditorValue());
+    const result = recipeEditorSchema.safeParse(emptyRecipeEditorValue());
     expect(result.success).toBe(false);
   });
 
   it('rejects a reserved or lowercase variable env name', () => {
     const value = fullEditorValue();
     value.variables = [{ ...value.variables[0], env: 'server_port' }];
-    expect(pluginEditorSchema.safeParse(value).success).toBe(false);
+    expect(recipeEditorSchema.safeParse(value).success).toBe(false);
 
     value.variables = [{ ...value.variables[0], env: 'SERVER_UUID' }];
-    expect(pluginEditorSchema.safeParse(value).success).toBe(false);
+    expect(recipeEditorSchema.safeParse(value).success).toBe(false);
   });
 
   it('rejects duplicate variable envs with an error on each duplicate', () => {
@@ -110,7 +110,7 @@ describe('plugin editor schema', () => {
       { ...value.variables[0], env: 'MINECRAFT_VERSION' },
       { ...value.variables[1], env: 'MINECRAFT_VERSION' },
     ];
-    const result = pluginEditorSchema.safeParse(value);
+    const result = recipeEditorSchema.safeParse(value);
     expect(result.success).toBe(false);
     if (!result.success) {
       const paths = result.error.issues.map((i) => i.path.join('.'));
@@ -122,34 +122,34 @@ describe('plugin editor schema', () => {
   it('rejects an install action missing its type-specific required fields', () => {
     const value = fullEditorValue();
     value.install = [newActionValue('download')];
-    expect(pluginEditorSchema.safeParse(value).success).toBe(false);
+    expect(recipeEditorSchema.safeParse(value).success).toBe(false);
   });
 });
 
-describe('pluginEditorValueToPlugin', () => {
-  it('converts a valid editor value into a contract-valid plugin', () => {
-    const { plugin, issues } = pluginEditorValueToPlugin(fullEditorValue());
+describe('recipeEditorValueToRecipe', () => {
+  it('converts a valid editor value into a contract-valid recipe', () => {
+    const { recipe, issues } = recipeEditorValueToRecipe(fullEditorValue());
     expect(issues).toBeUndefined();
-    expect(plugin).toBeDefined();
-    // The produced plugin passes the CONTRACT schema (server-side check)
-    expect(safeParsePlugin(plugin).success).toBe(true);
-    expect(plugin?.variables).toHaveLength(2);
-    expect(plugin?.variables[0].options).toEqual(['1.20.4', '1.21']);
-    expect(plugin?.variables[1].min).toBe(512);
-    expect(plugin?.runtime).toEqual({ java: '>=21' });
-    expect(plugin?.env).toEqual({ SERVER_JARFILE: 'server.jar' });
-    expect(plugin?.install).toHaveLength(3);
-    expect(plugin?.install[0]).toMatchObject({
+    expect(recipe).toBeDefined();
+    // The produced recipe passes the CONTRACT schema (server-side check)
+    expect(safeParseRecipe(recipe).success).toBe(true);
+    expect(recipe?.variables).toHaveLength(2);
+    expect(recipe?.variables[0].options).toEqual(['1.20.4', '1.21']);
+    expect(recipe?.variables[1].min).toBe(512);
+    expect(recipe?.runtime).toEqual({ java: '>=21' });
+    expect(recipe?.env).toEqual({ SERVER_JARFILE: 'server.jar' });
+    expect(recipe?.install).toHaveLength(3);
+    expect(recipe?.install[0]).toMatchObject({
       action: 'download',
       headers: { 'X-Test': '1' },
     });
   });
 
-  it('reports issues instead of a plugin when the contract rejects the value', () => {
+  it('reports issues instead of a recipe when the contract rejects the value', () => {
     const value = fullEditorValue();
     value.id = 'UPPER CASE'; // invalid slug for the contract
-    const { plugin, issues } = pluginEditorValueToPlugin(value);
-    expect(plugin).toBeUndefined();
+    const { recipe, issues } = recipeEditorValueToRecipe(value);
+    expect(recipe).toBeUndefined();
     expect(issues?.length).toBeGreaterThan(0);
   });
 
@@ -159,31 +159,31 @@ describe('pluginEditorValueToPlugin', () => {
     value.updateUrl = '';
     value.start.stop = null;
     value.start.ready = null;
-    const { plugin } = pluginEditorValueToPlugin(value);
-    expect(plugin?.description).toBeUndefined();
-    expect(plugin?.updateUrl).toBeUndefined();
-    expect(plugin?.start.stop).toBeUndefined();
-    expect(plugin?.start.ready).toBeUndefined();
+    const { recipe } = recipeEditorValueToRecipe(value);
+    expect(recipe?.description).toBeUndefined();
+    expect(recipe?.updateUrl).toBeUndefined();
+    expect(recipe?.start.stop).toBeUndefined();
+    expect(recipe?.start.ready).toBeUndefined();
   });
 
-  it('round-trips through pluginToEditorValue without loss', () => {
+  it('round-trips through recipeToEditorValue without loss', () => {
     const value = fullEditorValue();
-    const { plugin } = pluginEditorValueToPlugin(value);
-    const parsed = parsePlugin(plugin!);
-    const back = pluginToEditorValue(parsed);
-    expect(pluginEditorValueToPlugin(back).plugin).toEqual(plugin);
+    const { recipe } = recipeEditorValueToRecipe(value);
+    const parsed = parseRecipe(recipe!);
+    const back = recipeToEditorValue(parsed);
+    expect(recipeEditorValueToRecipe(back).recipe).toEqual(recipe);
   });
 
-  it('signale la feature java sans variable JAVA_VERSION (validation agent)', () => {
+  it('reports the java feature without a JAVA_VERSION variable (agent validation)', () => {
     const value = fullEditorValue();
     value.features = ['java'];
-    const { plugin, issues } = pluginEditorValueToPlugin(value);
-    expect(plugin).toBeUndefined();
+    const { recipe, issues } = recipeEditorValueToRecipe(value);
+    expect(recipe).toBeUndefined();
     expect(issues?.length).toBe(1);
     expect(issues?.[0]).toContain('JAVA_VERSION');
   });
 
-  it('accepte la feature java avec la variable JAVA_VERSION déclarée', () => {
+  it('accepts the java feature when the JAVA_VERSION variable is declared', () => {
     const value = fullEditorValue();
     value.features = ['eula', 'java'];
     value.variables.push({
@@ -194,8 +194,8 @@ describe('pluginEditorValueToPlugin', () => {
       defaultValue: '21',
       options: ['17', '21'],
     });
-    const { plugin, issues } = pluginEditorValueToPlugin(value);
-    expect(plugin).toBeDefined();
+    const { recipe, issues } = recipeEditorValueToRecipe(value);
+    expect(recipe).toBeDefined();
     expect(issues).toBeUndefined();
   });
 });

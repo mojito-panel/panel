@@ -11,7 +11,7 @@ import type { AgentConfig } from '../src/config';
 import { ServerStore } from '../src/internal/server-store';
 import {
   ALL_PERMISSIONS,
-  parsePlugin,
+  parseRecipe,
   type Permission,
   type ConsoleServerMessage,
 } from '@mojito/contract';
@@ -71,11 +71,11 @@ beforeAll(async () => {
   // Saved BEFORE listen: the boot-restore hook reads and caches servers.json
   // when the app becomes ready (same order as production).
   store = new ServerStore(dataDir);
-  const plugin = parsePlugin({
+  const recipe = parseRecipe({
     schemaVersion: 2,
-    id: 'ws-test-plugin',
+    id: 'ws-test-recipe',
     name: 'WS Test',
-    author: 'moi',
+    author: 'me',
     variables: [],
     install: [],
     start: {
@@ -87,7 +87,7 @@ beforeAll(async () => {
   await store.save({
     serverId: SERVER_ID,
     name: 'ws-server',
-    plugin,
+    recipe,
     variables: {},
     installDir: dataDir,
     allocation: { port: 25565, memoryMb: 1024, ip: '0.0.0.0' },
@@ -167,7 +167,7 @@ function closeQuietly(ws: WebSocket): Promise<void> {
 }
 
 describe('Console WS — origin gate', () => {
-  it('refuse une upgrade sans Origin (403 avant même le handshake)', async () => {
+  it('refuses an upgrade without Origin (403 before the handshake even starts)', async () => {
     const { ws } = openConsole(SERVER_ID, null);
     const failure = await new Promise<string>((resolve) => {
       ws.on('error', (err) => resolve((err as Error).message));
@@ -176,7 +176,7 @@ describe('Console WS — origin gate', () => {
     expect(failure).toContain('403');
   }, 10000);
 
-  it('refuse une Origin inconnue', async () => {
+  it('refuses an unknown Origin', async () => {
     const { ws } = openConsole(SERVER_ID, 'https://evil.example.com');
     const failure = await new Promise<string>((resolve) => {
       ws.on('error', (err) => resolve((err as Error).message));
@@ -187,7 +187,7 @@ describe('Console WS — origin gate', () => {
 });
 
 describe('Console WS — handshake (auth message)', () => {
-  it('ferme 4001 avec un token invalide (error unauthorized)', async () => {
+  it('closes with 4001 on an invalid token (error unauthorized)', async () => {
     const { ws, messages } = openConsole(SERVER_ID);
     const closedPromise = closeCode(ws); // attach BEFORE the close can fire
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: 'garbage.token' })));
@@ -196,7 +196,7 @@ describe('Console WS — handshake (auth message)', () => {
     expect(await closedPromise).toBe(4001);
   }, 10000);
 
-  it('ferme 4001 si le serverId du token ne correspond pas à la route', async () => {
+  it('closes with 4001 when the token serverId does not match the route', async () => {
     const { ws, messages } = openConsole(SERVER_ID);
     const closedPromise = closeCode(ws);
     ws.on('open', () =>
@@ -206,7 +206,7 @@ describe('Console WS — handshake (auth message)', () => {
     expect(await closedPromise).toBe(4001);
   }, 10000);
 
-  it('ferme 4003 sans la permission console.read', async () => {
+  it('closes with 4003 without the console.read permission', async () => {
     const { ws, messages } = openConsole(SERVER_ID);
     const closedPromise = closeCode(ws);
     ws.on('open', () =>
@@ -217,7 +217,7 @@ describe('Console WS — handshake (auth message)', () => {
     expect(await closedPromise).toBe(4003);
   }, 10000);
 
-  it('accepte un token valide : auth-ok, batch initial, statut', async () => {
+  it('accepts a valid token: auth-ok, initial batch, status', async () => {
     const { ws, messages } = openConsole(SERVER_ID);
     ws.on('open', () =>
       ws.send(JSON.stringify({ type: 'auth', token: tokenFor(SERVER_ID) })),
@@ -229,7 +229,7 @@ describe('Console WS — handshake (auth message)', () => {
     await closeQuietly(ws);
   }, 10000);
 
-  it('rejette une action avant authentification', async () => {
+  it('rejects an action before authentication', async () => {
     const { ws, messages } = openConsole(SERVER_ID);
     ws.on('open', () => ws.send(JSON.stringify({ type: 'command', command: 'list' })));
     const error = await waitForMessage(
@@ -242,7 +242,7 @@ describe('Console WS — handshake (auth message)', () => {
 });
 
 describe('Console WS — streaming & actions', () => {
-  it('streame les logs d un process démarré via power.start', async () => {
+  it('streams logs from a process started via power.start', async () => {
     const { ws, messages } = await authenticatedConsole(SERVER_ID);
     ws.send(JSON.stringify({ type: 'power', action: 'start' }));
     const log = await waitForMessage(
@@ -253,7 +253,7 @@ describe('Console WS — streaming & actions', () => {
     await closeQuietly(ws);
   }, 15000);
 
-  it('rejette une commande sans console.write (error forbidden)', async () => {
+  it('rejects a command without console.write (error forbidden)', async () => {
     const { ws, messages } = await authenticatedConsole(
       SERVER_ID,
       tokenFor(SERVER_ID, ['console.read']),
@@ -267,7 +267,7 @@ describe('Console WS — streaming & actions', () => {
     await closeQuietly(ws);
   }, 10000);
 
-  it('rejette power.start sans la permission (error forbidden)', async () => {
+  it('rejects power.start without the permission (error forbidden)', async () => {
     const { ws, messages } = await authenticatedConsole(
       SERVER_ID,
       tokenFor(SERVER_ID, ['console.read']),
@@ -281,7 +281,7 @@ describe('Console WS — streaming & actions', () => {
     await closeQuietly(ws);
   }, 10000);
 
-  it('rejette un message illisible (error invalid-message)', async () => {
+  it('rejects an unreadable message (error invalid-message)', async () => {
     const { ws, messages } = await authenticatedConsole(SERVER_ID);
     ws.send('not-json');
     const error = await waitForMessage(
@@ -292,7 +292,7 @@ describe('Console WS — streaming & actions', () => {
     await closeQuietly(ws);
   }, 10000);
 
-  it('rate-limit les commandes au-delà de 10/s (error rate-limited)', async () => {
+  it('rate-limits commands beyond 10/s (error rate-limited)', async () => {
     const { ws, messages } = await authenticatedConsole(
       SERVER_ID,
       tokenFor(SERVER_ID, ['console.read', 'console.write']),
@@ -308,7 +308,7 @@ describe('Console WS — streaming & actions', () => {
     await closeQuietly(ws);
   }, 10000);
 
-  it('répond par le statut courant quand la commande touche un serveur inconnu', async () => {
+  it('replies with the current status when the command hits an unknown server', async () => {
     const otherId = randomUUID();
     const { ws, messages } = await authenticatedConsole(otherId, tokenFor(otherId));
     ws.send(JSON.stringify({ type: 'command', command: 'list' }));
@@ -324,7 +324,7 @@ describe('Console WS — streaming & actions', () => {
 
 describe('Console WS — expiration & refresh (re-auth)', () => {
   it(
-    'rejette une action quand le token expire en cours de connexion, puis re-auth succeed',
+    'rejects an action when the token expires mid-connection, then re-auth succeeds',
     async () => {
       // exp = now → passes the 5 s skew at auth, expired for messages after ~5 s
       const { ws, messages } = await authenticatedConsole(
@@ -356,25 +356,25 @@ describe('Console WS — expiration & refresh (re-auth)', () => {
 
 // ─── Install stream (same socket: steps + logs, no panel polling) ────────────
 
-describe('Console WS — installation en direct', () => {
+describe('Console WS — live install', () => {
   const auth = { authorization: `Bearer ${AGENT_TOKEN}` };
   const INSTALL_SERVER_ID = randomUUID();
 
-  const installPayload = (serverId: string, plugin: unknown, installDir: string) => ({
+  const installPayload = (serverId: string, recipe: unknown, installDir: string) => ({
     serverId,
     name: 'ws-install-server',
-    plugin,
+    recipe,
     variables: {},
     installDir,
     allocation: { port: 27015, memoryMb: 512 },
   });
 
-  it('streame les étapes et la sortie des commandes sur le socket', async () => {
-    const plugin = parsePlugin({
+  it('streams steps and command output on the socket', async () => {
+    const recipe = parseRecipe({
       schemaVersion: 2,
-      id: 'ws-install-plugin',
+      id: 'ws-install-recipe',
       name: 'WS Install',
-      author: 'moi',
+      author: 'me',
       variables: [],
       install: [
         { action: 'command', command: 'echo ws-install-output' },
@@ -393,7 +393,7 @@ describe('Console WS — installation en direct', () => {
       headers: auth,
       payload: installPayload(
         INSTALL_SERVER_ID,
-        plugin,
+        recipe,
         join(dataDir, 'srv-install-ws'),
       ),
     });
@@ -410,8 +410,8 @@ describe('Console WS — installation en direct', () => {
 
     const logs = socket.messages.filter((m) => m.type === 'install-log');
     const replay = logs.find((m) => m.reset);
-    expect(replay).toBeDefined(); // «Installation … démarrée» rejouée à l'event start
-    if (!replay) throw new Error('replay manquant');
+    expect(replay).toBeDefined(); // "Installation … démarrée" replayed at the start event
+    if (!replay) throw new Error('replay missing');
     expect(replay.lines.length).toBe(1);
 
     const texts = logs.flatMap((m) => m.lines.map((l) => l.message));
@@ -421,7 +421,7 @@ describe('Console WS — installation en direct', () => {
     await closeQuietly(socket.ws);
   }, 20000);
 
-  it('ne rejoue pas une installation terminée à la reconnexion', async () => {
+  it('does not replay a finished install on reconnection', async () => {
     const socket = await authenticatedConsole(INSTALL_SERVER_ID);
     await waitForMessage(socket.messages, (m) => m.type === 'status');
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -429,13 +429,13 @@ describe('Console WS — installation en direct', () => {
     await closeQuietly(socket.ws);
   }, 15000);
 
-  it('rejoue une installation échouée à la reconnexion (retry/debug)', async () => {
+  it('replays a failed install on reconnection (retry/debug)', async () => {
     const FAIL_SERVER_ID = randomUUID();
-    const plugin = parsePlugin({
+    const recipe = parseRecipe({
       schemaVersion: 2,
-      id: 'ws-fail-plugin',
+      id: 'ws-fail-recipe',
       name: 'WS Fail',
-      author: 'moi',
+      author: 'me',
       variables: [],
       install: [
         { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
@@ -448,7 +448,7 @@ describe('Console WS — installation en direct', () => {
       method: 'POST',
       url: '/servers/install',
       headers: auth,
-      payload: installPayload(FAIL_SERVER_ID, plugin, join(dataDir, 'srv-fail-ws')),
+      payload: installPayload(FAIL_SERVER_ID, recipe, join(dataDir, 'srv-fail-ws')),
     });
     expect(res.statusCode).toBe(202);
 
@@ -458,13 +458,13 @@ describe('Console WS — installation en direct', () => {
     );
     await closeQuietly(socket.ws);
 
-    // Reconnexion → le trail échoué est rejoué (reset) + status failed
+    // Reconnection → the failed trail is replayed (reset) + failed status
     const second = await authenticatedConsole(FAIL_SERVER_ID);
     const replay = await waitForMessage(
       second.messages,
       (m) => m.type === 'install-log' && m.reset,
     );
-    if (replay.type !== 'install-log') throw new Error('replay manquant');
+    if (replay.type !== 'install-log') throw new Error('replay missing');
     expect(replay.lines.some((l) => l.level === 'error')).toBe(true);
     const status = second.messages.find(
       (m): m is Extract<ConsoleServerMessage, { type: 'install-status' }> =>

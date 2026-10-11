@@ -1,2 +1,2 @@
-export * from './plugin-schema';
+export * from './recipe-schema';
 export * from './api';

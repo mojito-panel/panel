@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import AdmZip from 'adm-zip';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { parsePlugin, type PluginInput } from '@mojito/contract';
+import { parseRecipe, type RecipeInput } from '@mojito/contract';
 import { runInstall, type InstallProgress, type InstallEvent } from '../src/server/installer';
 import { resolveVariables, render } from '../src/server/templating';
 import type { SystemVariables } from '../src/server/templating';
@@ -56,13 +56,13 @@ afterAll(async () => {
   await new Promise<void>((resolve) => httpServer.close(() => resolve()));
 });
 
-/** Reusable minimal test plugin. */
-function makePlugin(overrides: Partial<PluginInput> = {}) {
-  return parsePlugin({
+/** Reusable minimal test recipe. */
+function makeRecipe(overrides: Partial<RecipeInput> = {}) {
+  return parseRecipe({
     schemaVersion: 2,
-    id: 'test-plugin',
+    id: 'test-recipe',
     name: 'Test',
-    author: 'moi',
+    author: 'me',
     variables: [
       { env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 },
     ],
@@ -75,9 +75,9 @@ function makePlugin(overrides: Partial<PluginInput> = {}) {
 // ─── Action write ─────────────────────────────────────────────────────────────
 
 describe('action write', () => {
-  it('écrit un fichier avec templating et crée les dossiers parents', async () => {
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+  it('writes a file with templating and creates parent folders', async () => {
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runWrite(
       { action: 'write', file: 'config/settings.txt', content: 'ram={{RAM_MB}} port={{SERVER_PORT}}' },
       { installDir: tmpRoot, vars },
@@ -86,9 +86,9 @@ describe('action write', () => {
     expect(content).toBe('ram=1024 port=25565');
   });
 
-  it('refuse un chemin qui s échappe du dossier d installation', async () => {
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+  it('refuses a path escaping the install folder', async () => {
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await expect(
       runWrite(
         { action: 'write', file: '../escape.txt', content: 'x' },
@@ -101,10 +101,10 @@ describe('action write', () => {
 // ─── Action replace ───────────────────────────────────────────────────────────
 
 describe('action replace', () => {
-  it('remplace une chaîne simple', async () => {
+  it('replaces a simple string', async () => {
     await writeFile(join(tmpRoot, 'app.cfg'), 'memory=512\nmode=a\n');
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runReplace(
       { action: 'replace', file: 'app.cfg', find: 'memory=512', replace: 'memory={{RAM_MB}}' },
       { installDir: tmpRoot, vars },
@@ -113,10 +113,10 @@ describe('action replace', () => {
     expect(content).toBe('memory=1024\nmode=a\n');
   });
 
-  it('remplace avec une regex', async () => {
+  it('replaces with a regex', async () => {
     await writeFile(join(tmpRoot, 'regex.cfg'), 'version=1.2.3\n');
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runReplace(
       { action: 'replace', file: 'regex.cfg', find: 'version=.*', replace: 'version=2.0.0', regex: true },
       { installDir: tmpRoot, vars },
@@ -129,29 +129,29 @@ describe('action replace', () => {
 // ─── Action configFile ────────────────────────────────────────────────────────
 
 describe('action configFile (parsers)', () => {
-  it('crée le fichier s il n existe pas (server.properties avant 1er boot)', async () => {
+  it('creates the file if it does not exist (server.properties before first boot)', async () => {
     const file = join(tmpRoot, 'sub', 'server.properties');
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runConfigFile(
       {
         action: 'configFile',
         file: 'sub/server.properties',
         parser: 'properties',
-        find: { 'server-port': '{{SERVER_PORT}}', 'motd': 'Salut' },
+        find: { 'server-port': '{{SERVER_PORT}}', 'motd': 'Hello' },
       },
       { installDir: tmpRoot, vars },
     );
     const content = await readFile(file, 'utf-8');
     expect(content).toContain('server-port=25565');
-    expect(content).toContain('motd=Salut');
+    expect(content).toContain('motd=Hello');
   });
 
-  it('parser properties : remplace et ajoute des clés', async () => {
+  it('parser properties: replaces and adds keys', async () => {
     const file = join(tmpRoot, 'server.properties');
     await writeFile(file, '# comment\nmotd=Hello\nmax-players=20\n');
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runConfigFile(
       {
         action: 'configFile',
@@ -168,11 +168,11 @@ describe('action configFile (parsers)', () => {
     expect(content).toContain('max-players=20');
   });
 
-  it('parser ini : gère les sections', async () => {
+  it('parser ini: handles sections', async () => {
     const file = join(tmpRoot, 'config.ini');
     await writeFile(file, '[server]\nname=old\nport=1111\n');
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runConfigFile(
       {
         action: 'configFile',
@@ -187,11 +187,11 @@ describe('action configFile (parsers)', () => {
     expect(content).toContain('name=old');
   });
 
-  it('parser json : chemins imbriqués', async () => {
+  it('parser json: nested paths', async () => {
     const file = join(tmpRoot, 'settings.json');
     await writeFile(file, JSON.stringify({ server: { port: 1111, ip: '0.0.0.0' }, extra: true }));
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runConfigFile(
       {
         action: 'configFile',
@@ -207,11 +207,11 @@ describe('action configFile (parsers)', () => {
     expect(doc.extra).toBe(true);
   });
 
-  it('parser yaml : chemins imbriqués et coercion', async () => {
+  it('parser yaml: nested paths and coercion', async () => {
     const file = join(tmpRoot, 'settings.yml');
     await writeFile(file, 'server:\n  port: 1111\n');
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runConfigFile(
       {
         action: 'configFile',
@@ -229,15 +229,15 @@ describe('action configFile (parsers)', () => {
 // ─── Action extract ───────────────────────────────────────────────────────────
 
 describe('action extract', () => {
-  it('extrait un zip avec stripComponents', async () => {
+  it('extracts a zip with stripComponents', async () => {
     // Create a test zip: root/nested/file.txt
     const zip = new AdmZip();
     zip.addFile('root/nested/file.txt', Buffer.from('hello zip'));
     const archivePath = join(tmpRoot, 'test.zip');
     zip.writeZip(archivePath);
 
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     await runExtract(
       { action: 'extract', archive: 'test.zip', dest: 'extracted', stripComponents: 1 },
       { installDir: tmpRoot, vars },
@@ -246,7 +246,7 @@ describe('action extract', () => {
     expect(content).toBe('hello zip');
   });
 
-  it('refuse le path traversal (validation directe)', () => {
+  it('refuses path traversal (direct validation)', () => {
     expect(() => resolveZipEntryPath(tmpRoot, '../evil.txt')).toThrow('path traversal');
     expect(() => resolveZipEntryPath(tmpRoot, 'a/../../evil.txt')).toThrow('path traversal');
     expect(() => resolveZipEntryPath(tmpRoot, 'a/..\\b.txt')).toThrow('path traversal');
@@ -262,46 +262,46 @@ describe('action extract', () => {
 // ─── exec (command/script) ───────────────────────────────────────────────────
 
 describe('exec', () => {
-  it('exécute une commande et capture stdout', async () => {
+  it('runs a command and captures stdout', async () => {
     const isWindows = process.platform === 'win32';
     const result = await exec(isWindows ? 'echo hello' : 'echo hello');
     expect(result.code).toBe(0);
     expect(result.stdout.trim()).toContain('hello');
   });
 
-  it('timeout kill la commande', async () => {
+  it('timeout kills the command', async () => {
     const isWindows = process.platform === 'win32';
     const sleepCmd = isWindows ? 'ping -n 10 127.0.0.1' : 'sleep 10';
     await expect(exec(sleepCmd, { timeoutMs: 500 })).rejects.toThrow('expirée');
   });
 
-  it('stream les lignes stdout au fil de l’eau (onLine)', async () => {
+  it('streams stdout lines as they come (onLine)', async () => {
     const lines: { stream: string; text: string; rewrite: boolean }[] = [];
     const result = await execProcess(
       process.execPath,
-      ['-e', 'console.log("un"); setTimeout(() => { console.log("deux"); }, 80);'],
+      ['-e', 'console.log("one"); setTimeout(() => { console.log("two"); }, 80);'],
       { onLine: (stream, text, rewrite) => lines.push({ stream, text, rewrite }) },
     );
     expect(result.code).toBe(0);
-    // Émises PENDANT l’exécution, dans l’ordre — pas après la fin du process
+    // Emitted DURING execution, in order — not after the process ends
     expect(lines).toEqual([
-      { stream: 'stdout', text: 'un', rewrite: false },
-      { stream: 'stdout', text: 'deux', rewrite: false },
+      { stream: 'stdout', text: 'one', rewrite: false },
+      { stream: 'stdout', text: 'two', rewrite: false },
     ]);
   });
 
-  it('marque les réécritures \\r (progress steamcmd) comme rewrite', async () => {
+  it('marks \\r rewrites (steamcmd progress) as rewrite', async () => {
     const lines: { text: string; rewrite: boolean }[] = [];
     await execProcess(
       process.execPath,
-      ['-e', 'process.stdout.write("progress 10%\\rprogress 20%\\rfin\\n");'],
+      ['-e', 'process.stdout.write("progress 10%\\rprogress 20%\\rend\\n");'],
       { onLine: (_stream, text, rewrite) => lines.push({ text, rewrite }) },
     );
-    // \r seul = réécriture de la ligne (barre de progression), \r\n = vraie ligne
+    // Lone \r = line rewrite (progress bar), \r\n = real line
     expect(lines).toEqual([
       { text: 'progress 10%', rewrite: true },
       { text: 'progress 20%', rewrite: true },
-      { text: 'fin', rewrite: false },
+      { text: 'end', rewrite: false },
     ]);
   });
 });
@@ -309,21 +309,21 @@ describe('exec', () => {
 // ─── action script (direct spawn, Windows quoting) ───────────────────────────
 
 describe('action script', () => {
-  it('exécute un script powershell (chemin avec espaces + accents UTF-8)', async () => {
+  it('runs a powershell script (path with spaces + UTF-8 accents)', async () => {
     if (process.platform !== 'win32') return;
 
-    const plugin = makePlugin();
-    const vars = resolveVariables(plugin, {}, systemVars);
+    const recipe = makeRecipe();
+    const vars = resolveVariables(recipe, {}, systemVars);
     // Folder with spaces: the old cmd /c string pass corrupted
     // the -File quoting ("Illegal characters in path").
-    const installDir = join(tmpRoot, 'dossier avec espaces');
+    const installDir = join(tmpRoot, 'folder with spaces');
     await mkdir(installDir, { recursive: true });
 
     await runScript(
       {
         action: 'script',
         shell: 'powershell',
-        content: 'Write-Output "Installation réussie — {{SERVER_NAME}}"',
+        content: 'Write-Output "Installation successful — {{SERVER_NAME}}"',
       },
       { installDir, vars },
     );
@@ -333,8 +333,8 @@ describe('action script', () => {
 // ─── runInstall orchestrator ─────────────────────────────────────────────────
 
 describe('runInstall', () => {
-  it('exécute une installation complète avec progression', async () => {
-    const plugin = makePlugin({
+  it('runs a complete install with progress', async () => {
+    const recipe = makeRecipe({
       install: [
         {
           action: 'download',
@@ -354,7 +354,7 @@ describe('runInstall', () => {
     const installDir = join(tmpRoot, 'srv1');
     const progress: InstallProgress[] = [];
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: { ...systemVars, SERVER_INSTALL_DIR: installDir },
       installDir,
@@ -377,15 +377,15 @@ describe('runInstall', () => {
     expect(progress[progress.length - 1].message).toBe('Installation terminée');
   });
 
-  it('échoue proprement si le download est 404', async () => {
-    const plugin = makePlugin({
+  it('fails cleanly when the download is 404', async () => {
+    const recipe = makeRecipe({
       install: [
         { action: 'download', url: `http://127.0.0.1:${httpPort}/missing`, dest: 'x.bin' },
       ],
     });
     const installDir = join(tmpRoot, 'srv404');
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: { ...systemVars, SERVER_INSTALL_DIR: installDir },
       installDir,
@@ -394,12 +394,12 @@ describe('runInstall', () => {
     expect(result.error).toContain('404');
   });
 
-  it('échoue si une variable inconnue est utilisée', async () => {
-    const plugin = makePlugin({
+  it('fails when an unknown variable is used', async () => {
+    const recipe = makeRecipe({
       start: { command: 'java -jar {{TOTALLY_UNKNOWN}}' },
     });
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-unknown'),
@@ -408,8 +408,8 @@ describe('runInstall', () => {
     expect(result.error).toContain('TOTALLY_UNKNOWN');
   });
 
-  it('échoue si une variable serveur est invalide', async () => {
-    const plugin = makePlugin({
+  it('fails when a server variable is invalid', async () => {
+    const recipe = makeRecipe({
       variables: [
         {
           env: 'RAM_MB',
@@ -422,7 +422,7 @@ describe('runInstall', () => {
       ],
     });
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: { RAM_MB: 99999 },
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-invalid'),
@@ -431,14 +431,14 @@ describe('runInstall', () => {
     expect(result.error).toContain('4096');
   });
 
-  it('tolère les codes de sortie de successCodes (steamcmd: 7 = auto-update)', async () => {
-    const plugin = makePlugin({
+  it('tolerates successCodes exit codes (steamcmd: 7 = auto-update)', async () => {
+    const recipe = makeRecipe({
       install: [
         { action: 'command', command: 'exit 7', successCodes: [0, 7] },
       ],
     });
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-exit7-ok'),
@@ -446,12 +446,12 @@ describe('runInstall', () => {
     expect(result.success).toBe(true);
   });
 
-  it('échoue sur un code de sortie non listé dans successCodes', async () => {
-    const plugin = makePlugin({
+  it('fails on an exit code not listed in successCodes', async () => {
+    const recipe = makeRecipe({
       install: [{ action: 'command', command: 'exit 7' }],
     });
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-exit7-ko'),
@@ -460,16 +460,16 @@ describe('runInstall', () => {
     expect(result.error).toContain('code 7');
   });
 
-  it('streame la progression via tail d un log écrit par la commande (steamcmd)', async () => {
-    // Helper : écrit 5 lignes dans progress.log, 120 ms d'intervalle —
-    // RIEN sur stdout : la seule source de step-output est le tail.
+  it('streams progress via tail of a log written by the command (steamcmd)', async () => {
+    // Helper: writes 5 lines into progress.log, 120 ms interval —
+    // NOTHING on stdout: the only source of step-output is the tail.
     const writer =
       "const {appendFileSync}=require('node:fs');let i=0;" +
       "const t=setInterval(()=>{i++;" +
       "appendFileSync('progress.log','progress line '+i+'\\n');" +
       "if(i>=5)clearInterval(t);},120);";
 
-    const plugin = makePlugin({
+    const recipe = makeRecipe({
       install: [
         { action: 'write', file: 'writer.js', content: writer },
         {
@@ -489,7 +489,7 @@ describe('runInstall', () => {
 
     const events: InstallEvent[] = [];
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-tail'),
@@ -500,7 +500,7 @@ describe('runInstall', () => {
     const outputs = (step: number) =>
       events.flatMap((e) => (e.type === 'step-output' && e.step === step ? [e.text] : []));
 
-    // Étape 1 (sans filtre) : les 5 lignes, streamées avant step-done
+    // Step 1 (without filter): the 5 lines, streamed before step-done
     for (let i = 1; i <= 5; i++) {
       expect(outputs(1)).toContain(`progress line ${i}`);
     }
@@ -508,28 +508,28 @@ describe('runInstall', () => {
     const step1First = events.findIndex((e) => e.type === 'step-output' && e.step === 1);
     expect(step1Done).toBeGreaterThan(step1First);
 
-    // Étape 2 : le tail repart de la taille actuelle (pas de rejeu des lignes
-    // 1-5) + le filtre ne garde que les lignes 1 et 3
+    // Step 2: the tail restarts from the current size (no replay of lines
+    // 1-5) + the filter only keeps lines 1 and 3
     expect(outputs(2)).toEqual(['progress line 1', 'progress line 3']);
   });
 
-  it('stream la sortie des commandes en step-output au fil de l’eau', async () => {
+  it('streams command output as step-output on the fly', async () => {
     if (process.platform !== 'win32') return;
-    // Batch file (spawn via argument array — pas de quoting cmd /c) :
-    // deux lignes espacées de 80 ms prouvent l’émission temps réel.
-    const plugin = makePlugin({
+    // Batch file (spawned via argument array — no cmd /c quoting):
+    // two lines 80 ms apart prove real-time emission.
+    const recipe = makeRecipe({
       install: [
         {
           action: 'script',
           shell: 'cmd',
           content:
-            '@echo off\nnode -e "console.log(\'ligne1\'); setTimeout(() => console.log(\'ligne2\'), 80)"',
+            '@echo off\nnode -e "console.log(\'line1\'); setTimeout(() => console.log(\'line2\'), 80)"',
         },
       ],
     });
     const events: InstallEvent[] = [];
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-stream'),
@@ -538,8 +538,8 @@ describe('runInstall', () => {
     expect(result.success).toBe(true);
 
     const outputs = events.flatMap((e) => (e.type === 'step-output' ? [e.text] : []));
-    expect(outputs).toEqual(['ligne1', 'ligne2']);
-    // La sortie arrive AVANT la fin de l’étape (streaming, pas de buffer final)
+    expect(outputs).toEqual(['line1', 'line2']);
+    // The output arrives BEFORE the step ends (streaming, no final buffer)
     const firstOutput = events.findIndex((e) => e.type === 'step-output');
     const stepDone = events.findIndex((e) => e.type === 'step-done');
     expect(stepDone).toBeGreaterThan(firstOutput);
@@ -549,10 +549,10 @@ describe('runInstall', () => {
 // ─── resolvePath ──────────────────────────────────────────────────────────────
 
 describe('resolvePath', () => {
-  it('chemin relatif → join installDir', () => {
+  it('relative path → join installDir', () => {
     expect(resolvePath('/srv/data', 'a/b.txt')).toBe(join('/srv/data', 'a', 'b.txt'));
   });
-  it('chemin absolu → inchangé', () => {
+  it('absolute path → unchanged', () => {
     expect(resolvePath('/srv/data', 'C:\\other\\file.txt')).toBe('C:\\other\\file.txt');
   });
 });

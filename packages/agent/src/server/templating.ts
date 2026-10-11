@@ -1,8 +1,8 @@
-import { RESERVED_ENV_NAMES, extractTemplateVars, type Plugin } from '@mojito/contract';
+import { RESERVED_ENV_NAMES, extractTemplateVars, type Recipe } from '@mojito/contract';
 
 /**
  * System variables provided by the agent at runtime.
- * Reserved — cannot be overridden by the plugin or the server.
+ * Reserved — cannot be overridden by the recipe or the server.
  */
 export interface SystemVariables {
   SERVER_UUID: string;
@@ -21,25 +21,25 @@ export type ResolvedVariables = Map<string, string>;
 /**
  * Resolves all variables of a server.
  * Priority (lowest to highest):
- *   1. plugin fixed env
- *   2. plugin variable defaults
+ *   1. recipe fixed env
+ *   2. recipe variable defaults
  *   3. server values (override)
  *   4. system variables (reserved — override everything)
  */
 export function resolveVariables(
-  plugin: Plugin,
+  recipe: Recipe,
   serverVariables: Record<string, string | number | boolean>,
   systemVariables: SystemVariables,
 ): ResolvedVariables {
   const vars = new Map<string, string>();
 
   // 1. Fixed env (lowest priority)
-  for (const [key, value] of Object.entries(plugin.env ?? {})) {
+  for (const [key, value] of Object.entries(recipe.env ?? {})) {
     vars.set(key, value);
   }
 
-  // 2. Plugin defaults
-  for (const variable of plugin.variables) {
+  // 2. Recipe defaults
+  for (const variable of recipe.variables) {
     vars.set(variable.env, String(variable.defaultValue));
   }
 

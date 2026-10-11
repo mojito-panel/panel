@@ -1,4 +1,4 @@
-import type { Plugin, ServerAllocationPayload } from '@mojito/contract';
+import type { Recipe, ServerAllocationPayload } from '@mojito/contract';
 import type { ServerStore, StoredServer } from '../../internal/server-store';
 import { buildSystemVariables } from '../variables';
 import { countToolSteps } from '../../tools';
@@ -10,7 +10,7 @@ export interface TrackedInstallOptions {
   store: ServerStore;
   serverId: string;
   name: string;
-  plugin: Plugin;
+  recipe: Recipe;
   variables: Record<string, string | number | boolean>;
   installDir: string;
   allocation: ServerAllocationPayload;
@@ -32,8 +32,8 @@ export interface TrackedInstallOptions {
  * on failure the store is left untouched so the panel can retry.
  */
 export function startTrackedInstall(options: TrackedInstallOptions): void {
-  const { registry, store, serverId, name, plugin, variables, installDir, allocation } = options;
-  const totalSteps = countToolSteps(plugin) + plugin.install.length;
+  const { registry, store, serverId, name, recipe, variables, installDir, allocation } = options;
+  const totalSteps = countToolSteps(recipe) + recipe.install.length;
 
   registry.start(serverId, `Installation de « ${name} » démarrée (${totalSteps} étapes)`);
   registry.update(serverId, { totalSteps });
@@ -46,7 +46,7 @@ export function startTrackedInstall(options: TrackedInstallOptions): void {
       }
 
       const result = await runInstall({
-        plugin,
+        recipe,
         variables,
         systemVariables: buildSystemVariables(serverId, name, installDir, allocation),
         installDir,
@@ -88,7 +88,7 @@ export function startTrackedInstall(options: TrackedInstallOptions): void {
       if (options.existing) {
         await store.save({
           ...options.existing,
-          plugin,
+          recipe,
           variables,
           installedAt: new Date().toISOString(),
         });
@@ -96,7 +96,7 @@ export function startTrackedInstall(options: TrackedInstallOptions): void {
         await store.save({
           serverId,
           name,
-          plugin,
+          recipe,
           variables,
           installDir,
           allocation: { port: allocation.port, memoryMb: allocation.memoryMb, ip: allocation.ip },

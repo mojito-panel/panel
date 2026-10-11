@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { loadConfig, agentConfigSchema } from '../src/config';
 
 describe('agentConfigSchema', () => {
-  it('applique les valeurs par défaut', () => {
+  it('applies default values', () => {
     const result = agentConfigSchema.parse({ token: 'a'.repeat(64) });
     expect(result.port).toBe(8080);
     expect(result.host).toBe('0.0.0.0');
@@ -10,19 +10,19 @@ describe('agentConfigSchema', () => {
     expect(result.allowedOrigins).toEqual([]);
   });
 
-  it('rejette un token trop court', () => {
+  it('rejects a too-short token', () => {
     const result = agentConfigSchema.safeParse({ token: 'short' });
     expect(result.success).toBe(false);
   });
 
-  it('convertit le port string en number', () => {
+  it('converts the port from string to number', () => {
     const result = agentConfigSchema.parse({ token: 'a'.repeat(64), port: '9090' });
     expect(result.port).toBe(9090);
   });
 });
 
 describe('loadConfig', () => {
-  it('charge depuis les variables d\'environnement', () => {
+  it('loads from environment variables', () => {
     const config = loadConfig({
       AGENT_PORT: '9000',
       AGENT_HOST: '127.0.0.1',
@@ -42,7 +42,7 @@ describe('loadConfig', () => {
     expect(config.dataDir).toBe('/data');
   });
 
-  it('lance si AGENT_TOKEN est manquant', () => {
+  it('throws when AGENT_TOKEN is missing', () => {
     expect(() => loadConfig({})).toThrow();
   });
 });

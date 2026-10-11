@@ -18,6 +18,7 @@ import {
   consoleErrorSchema,
   installStatusSchema,
   nodeStatsSchema,
+  updateServerAllocationRequestSchema,
   HEALTH_TOKEN_TTL_SECONDS,
   healthTokenPayloadSchema,
   healthServerMessageSchema,
@@ -25,7 +26,7 @@ import {
 } from '../src/api';
 
 describe('healthResponseSchema', () => {
-  it('valide une réponse health correcte', () => {
+  it('validates a correct health response', () => {
     const result = healthResponseSchema.safeParse({
       status: 'ok',
       version: '0.1.0',
@@ -34,7 +35,7 @@ describe('healthResponseSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejette un status autre que ok', () => {
+  it('rejects a status other than ok', () => {
     const result = healthResponseSchema.safeParse({
       status: 'error',
       version: '0.1.0',
@@ -45,11 +46,11 @@ describe('healthResponseSchema', () => {
 });
 
 describe('installServerRequestSchema', () => {
-  it('valide une requête d\'installation', () => {
+  it('validates an install request', () => {
     const result = installServerRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      name: 'mon-serveur',
-      plugin: { id: 'minecraft' },
+      name: 'my-server',
+      recipe: { id: 'minecraft' },
       variables: { RAM_MB: 2048, motd: 'Hello' },
       installDir: 'C:\\PanelData\\servers\\abc',
       allocation: { port: 25565, memoryMb: 4096 },
@@ -60,21 +61,21 @@ describe('installServerRequestSchema', () => {
     }
   });
 
-  it('rejette une installation sans allocation', () => {
+  it('rejects an install without allocation', () => {
     const result = installServerRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      name: 'mon-serveur',
-      plugin: {},
+      name: 'my-server',
+      recipe: {},
       variables: {},
       installDir: '/tmp',
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejette un serverId non-UUID', () => {
+  it('rejects a non-UUID serverId', () => {
     const result = installServerRequestSchema.safeParse({
       serverId: 'not-a-uuid',
-      plugin: {},
+      recipe: {},
       variables: {},
       installDir: '/tmp',
     });
@@ -83,17 +84,17 @@ describe('installServerRequestSchema', () => {
 });
 
 describe('serverActionSchema', () => {
-  it.each(['start', 'stop', 'restart', 'kill'] as const)('accepte l\'action %s', (action) => {
+  it.each(['start', 'stop', 'restart', 'kill'] as const)('accepts action %s', (action) => {
     expect(serverActionSchema.safeParse(action).success).toBe(true);
   });
 
-  it('rejette une action inconnue', () => {
+  it('rejects an unknown action', () => {
     expect(serverActionSchema.safeParse('pause').success).toBe(false);
   });
 });
 
 describe('sendCommandRequestSchema', () => {
-  it('rejette une commande vide', () => {
+  it('rejects an empty command', () => {
     const result = sendCommandRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       command: '',
@@ -102,8 +103,42 @@ describe('sendCommandRequestSchema', () => {
   });
 });
 
+describe('updateServerAllocationRequestSchema', () => {
+  it('validates a primary allocation update', () => {
+    const result = updateServerAllocationRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      allocation: { port: 25565, ip: '192.168.1.10' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a non-integer port', () => {
+    const result = updateServerAllocationRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      allocation: { port: 25565.5, ip: '192.168.1.10' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty ip', () => {
+    const result = updateServerAllocationRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      allocation: { port: 25565, ip: '' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-UUID serverId', () => {
+    const result = updateServerAllocationRequestSchema.safeParse({
+      serverId: 'not-a-uuid',
+      allocation: { port: 25565, ip: '192.168.1.10' },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('serverInfoSchema', () => {
-  it('valide un statut running avec pid', () => {
+  it('validates a running status with pid', () => {
     const result = serverInfoSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       status: 'running',
@@ -115,7 +150,7 @@ describe('serverInfoSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('valide un statut stopped sans métriques', () => {
+  it('validates a stopped status without metrics', () => {
     const result = serverInfoSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       status: 'stopped',
@@ -129,18 +164,18 @@ describe('serverInfoSchema', () => {
 });
 
 describe('installProgressSchema', () => {
-  it('valide une progression', () => {
+  it('validates a progress payload', () => {
     const result = installProgressSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       step: 2,
       totalSteps: 5,
-      message: 'Téléchargement du serveur...',
+      message: 'Downloading the server...',
       percent: 40,
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejette un pourcentage > 100', () => {
+  it('rejects a percent > 100', () => {
     const result = installProgressSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       step: 5,
@@ -153,7 +188,7 @@ describe('installProgressSchema', () => {
 });
 
 describe('logLineSchema', () => {
-  it('valide une ligne de log stdout', () => {
+  it('validates a stdout log line', () => {
     const result = logLineSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       timestamp: new Date().toISOString(),
@@ -165,7 +200,7 @@ describe('logLineSchema', () => {
 });
 
 describe('wsMessageSchema', () => {
-  it('valide un message install-progress', () => {
+  it('validates an install-progress message', () => {
     const result = wsMessageSchema.safeParse({
       type: 'install-progress',
       payload: {
@@ -179,17 +214,17 @@ describe('wsMessageSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('valide un pong', () => {
+  it('validates a pong', () => {
     expect(wsMessageSchema.safeParse({ type: 'pong' }).success).toBe(true);
   });
 
-  it('rejette un type inconnu', () => {
+  it('rejects an unknown type', () => {
     expect(wsMessageSchema.safeParse({ type: 'unknown' }).success).toBe(false);
   });
 });
 
 describe('AGENT_ROUTES', () => {
-  it('définit toutes les routes attendues', () => {
+  it('defines all expected routes', () => {
     expect(AGENT_ROUTES.health).toBe('GET /health');
     expect(AGENT_ROUTES.install).toBe('POST /servers/install');
     expect(AGENT_ROUTES.action).toBe('POST /servers/:serverId/action');
@@ -197,18 +232,19 @@ describe('AGENT_ROUTES', () => {
     expect(AGENT_ROUTES.info).toBe('GET /servers/:serverId');
     expect(AGENT_ROUTES.list).toBe('GET /servers');
     expect(AGENT_ROUTES.delete).toBe('DELETE /servers/:serverId');
+    expect(AGENT_ROUTES.allocationUpdate).toBe('POST /servers/:serverId/allocation');
     expect(AGENT_ROUTES.consoleWs).toBe('GET /servers/:serverId/ws');
   });
 });
 
 describe('permissionSchema', () => {
-  it('accepte chaque permission de la liste fermée', () => {
+  it('accepts each permission from the closed list', () => {
     for (const permission of ALL_PERMISSIONS) {
       expect(permissionSchema.safeParse(permission).success).toBe(true);
     }
   });
 
-  it('contient les permissions console/power/variables attendues', () => {
+  it('contains the expected console/power/variables permissions', () => {
     expect(ALL_PERMISSIONS).toContain('console.read');
     expect(ALL_PERMISSIONS).toContain('console.write');
     expect(ALL_PERMISSIONS).toContain('power.start');
@@ -219,7 +255,7 @@ describe('permissionSchema', () => {
     expect(ALL_PERMISSIONS).toContain('variables.write');
   });
 
-  it('rejette une permission hors liste', () => {
+  it('rejects a permission outside the list', () => {
     expect(permissionSchema.safeParse('files.read').success).toBe(false);
   });
 });
@@ -237,23 +273,23 @@ describe('consoleTokenPayloadSchema', () => {
     jti: 'tok_abc',
   };
 
-  it('valide un payload complet', () => {
+  it('validates a complete payload', () => {
     expect(consoleTokenPayloadSchema.safeParse(validPayload).success).toBe(true);
   });
 
-  it('rejette un issuer inconnu', () => {
+  it('rejects an unknown issuer', () => {
     expect(
       consoleTokenPayloadSchema.safeParse({ ...validPayload, iss: 'evil' }).success,
     ).toBe(false);
   });
 
-  it('rejette une audience autre que mojito-agent', () => {
+  it('rejects an audience other than mojito-agent', () => {
     expect(
       consoleTokenPayloadSchema.safeParse({ ...validPayload, aud: 'mojito-panel' }).success,
     ).toBe(false);
   });
 
-  it('rejette une permission inconnue dans le payload', () => {
+  it('rejects an unknown permission in the payload', () => {
     expect(
       consoleTokenPayloadSchema.safeParse({
         ...validPayload,
@@ -262,13 +298,13 @@ describe('consoleTokenPayloadSchema', () => {
     ).toBe(false);
   });
 
-  it('rejette un serverId non-uuid', () => {
+  it('rejects a non-uuid serverId', () => {
     expect(
       consoleTokenPayloadSchema.safeParse({ ...validPayload, serverId: 'abc' }).success,
     ).toBe(false);
   });
 
-  it('rejette un scope autre que websocket', () => {
+  it('rejects a scope other than websocket', () => {
     expect(
       consoleTokenPayloadSchema.safeParse({ ...validPayload, scope: 'file-upload' }).success,
     ).toBe(false);
@@ -276,7 +312,7 @@ describe('consoleTokenPayloadSchema', () => {
 });
 
 describe('consoleTokenResponseSchema', () => {
-  it('valide une réponse token + wsUrl', () => {
+  it('validates a token + wsUrl response', () => {
     expect(
       consoleTokenResponseSchema.safeParse({
         token: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig',
@@ -285,13 +321,13 @@ describe('consoleTokenResponseSchema', () => {
     ).toBe(true);
   });
 
-  it('rejette une réponse sans token', () => {
+  it('rejects a response without token', () => {
     expect(consoleTokenResponseSchema.safeParse({ wsUrl: 'ws://localhost/ws' }).success).toBe(false);
   });
 });
 
 describe('consoleClientMessageSchema', () => {
-  it('valide le message auth (handshake JWT)', () => {
+  it('validates the auth message (JWT handshake)', () => {
     expect(
       consoleClientMessageSchema.safeParse({
         type: 'auth',
@@ -300,29 +336,29 @@ describe('consoleClientMessageSchema', () => {
     ).toBe(true);
   });
 
-  it('rejette un auth sans token', () => {
+  it('rejects auth without token', () => {
     expect(consoleClientMessageSchema.safeParse({ type: 'auth' }).success).toBe(false);
   });
 
-  it('valide une commande console', () => {
+  it('validates a console command', () => {
     expect(
       consoleClientMessageSchema.safeParse({ type: 'command', command: 'say hello' }).success,
     ).toBe(true);
   });
 
-  it('rejette une commande vide', () => {
+  it('rejects an empty command', () => {
     expect(
       consoleClientMessageSchema.safeParse({ type: 'command', command: '' }).success,
     ).toBe(false);
   });
 
-  it('valide une action power', () => {
+  it('validates a power action', () => {
     expect(
       consoleClientMessageSchema.safeParse({ type: 'power', action: 'restart' }).success,
     ).toBe(true);
   });
 
-  it('rejette une action power inconnue', () => {
+  it('rejects an unknown power action', () => {
     expect(
       consoleClientMessageSchema.safeParse({ type: 'power', action: 'pause' }).success,
     ).toBe(false);
@@ -330,11 +366,11 @@ describe('consoleClientMessageSchema', () => {
 });
 
 describe('consoleServerMessageSchema', () => {
-  it('valide auth-ok', () => {
+  it('validates auth-ok', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'auth-ok' }).success).toBe(true);
   });
 
-  it('valide un batch de logs', () => {
+  it('validates a log batch', () => {
     expect(
       consoleServerMessageSchema.safeParse({
         type: 'log',
@@ -343,12 +379,12 @@ describe('consoleServerMessageSchema', () => {
     ).toBe(true);
   });
 
-  it('valide un statut et une erreur', () => {
+  it('validates a status and an error', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'running' }).success).toBe(true);
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(true);
   });
 
-  it('valide un install-status (bannière live)', () => {
+  it('validates an install-status (live banner)', () => {
     expect(
       consoleServerMessageSchema.safeParse({
         type: 'install-status',
@@ -356,14 +392,14 @@ describe('consoleServerMessageSchema', () => {
         step: 2,
         totalSteps: 7,
         percent: 28,
-        message: 'Étape 2/7 — Téléchargement',
+        message: 'Step 2/7 — Download',
         error: null,
       }).success,
     ).toBe(true);
   });
 
-  it('valide un install-log (replay reset + rewrite replace)', () => {
-    const line = { timestamp: new Date().toISOString(), level: 'step', message: 'Étape 1/2' };
+  it('validates an install-log (replay reset + rewrite replace)', () => {
+    const line = { timestamp: new Date().toISOString(), level: 'step', message: 'Step 1/2' };
     expect(
       consoleServerMessageSchema.safeParse({
         type: 'install-log',
@@ -381,7 +417,7 @@ describe('consoleServerMessageSchema', () => {
     ).toBe(true);
   });
 
-  it('rejette un install-log avec un niveau inconnu', () => {
+  it('rejects an install-log with an unknown level', () => {
     expect(
       consoleServerMessageSchema.safeParse({
         type: 'install-log',
@@ -390,18 +426,18 @@ describe('consoleServerMessageSchema', () => {
     ).toBe(false);
   });
 
-  it('rejette un code d\'erreur inconnu', () => {
+  it('rejects an unknown error code', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'kaboom' }).success).toBe(false);
   });
 
-  it('rejette un type inconnu', () => {
+  it('rejects an unknown type', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'install-progress' }).success).toBe(false);
   });
 });
 
 describe('consoleErrorSchema', () => {
   it.each(['unauthorized', 'forbidden', 'invalid-message', 'rate-limited'] as const)(
-    'accepte le code %s',
+    'accepts code %s',
     (code) => {
       expect(consoleErrorSchema.safeParse(code).success).toBe(true);
     },
@@ -417,37 +453,37 @@ describe('installStatusSchema', () => {
     step: 2,
     totalSteps: 6,
     percent: 33,
-    message: 'Étape 2/6 — Téléchargement de server.jar',
+    message: 'Step 2/6 — Downloading server.jar',
     error: null,
     logs: [
-      { timestamp: new Date().toISOString(), level: 'info', message: 'Installation démarrée' },
-      { timestamp: new Date().toISOString(), level: 'step', message: 'Étape 1/6 — Téléchargement de server.jar' },
+      { timestamp: new Date().toISOString(), level: 'info', message: 'Installation started' },
+      { timestamp: new Date().toISOString(), level: 'step', message: 'Step 1/6 — Downloading server.jar' },
       { timestamp: new Date().toISOString(), level: 'error', message: 'stderr: warning' },
     ],
     startedAt: new Date().toISOString(),
     finishedAt: null,
   };
 
-  it('valide un statut d’installation en cours', () => {
+  it('validates an in-progress install status', () => {
     expect(installStatusSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('valide un statut échoué avec erreur', () => {
+  it('validates a failed status with error', () => {
     expect(
       installStatusSchema.safeParse({
         ...valid,
         status: 'failed',
-        error: 'Étape 1 — Telechargement echoue (404 Not Found)',
+        error: 'Step 1 — Download failed (404 Not Found)',
         finishedAt: new Date().toISOString(),
       }).success,
     ).toBe(true);
   });
 
-  it('rejette un statut inconnu', () => {
+  it('rejects an unknown status', () => {
     expect(installStatusSchema.safeParse({ ...valid, status: 'kaboom' }).success).toBe(false);
   });
 
-  it('rejette un niveau de log inconnu', () => {
+  it('rejects an unknown log level', () => {
     expect(
       installStatusSchema.safeParse({
         ...valid,
@@ -458,7 +494,7 @@ describe('installStatusSchema', () => {
 });
 
 describe('AGENT_ROUTES', () => {
-  it('expose la route de statut d’installation', () => {
+  it('exposes the install status route', () => {
     expect(AGENT_ROUTES.installStatus).toBe('GET /servers/:serverId/install');
     expect(AGENT_ROUTES.reinstall).toBe('POST /servers/:serverId/reinstall');
   });
@@ -479,21 +515,21 @@ describe('nodeStatsSchema', () => {
     serversRunning: 3,
   };
 
-  it('valide des stats de node correctes', () => {
+  it('validates correct node stats', () => {
     expect(nodeStatsSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('accepte un disque indisponible (null)', () => {
+  it('accepts an unavailable disk (null)', () => {
     expect(
       nodeStatsSchema.safeParse({ ...valid, diskUsedGb: null, diskTotalGb: null }).success,
     ).toBe(true);
   });
 
-  it('rejette un cpuPercent hors bornes', () => {
+  it('rejects an out-of-bounds cpuPercent', () => {
     expect(nodeStatsSchema.safeParse({ ...valid, cpuPercent: 120 }).success).toBe(false);
   });
 
-  it('rejette une mémoire totale nulle', () => {
+  it('rejects a zero total memory', () => {
     expect(nodeStatsSchema.safeParse({ ...valid, memoryTotalMb: 0 }).success).toBe(false);
   });
 });
@@ -510,24 +546,24 @@ describe('healthTokenPayloadSchema', () => {
     jti: 'tok_health_test',
   };
 
-  it('valide un payload health correct', () => {
+  it('validates a correct health payload', () => {
     expect(healthTokenPayloadSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('rejette le scope console (scopes distincts)', () => {
+  it('rejects the console scope (distinct scopes)', () => {
     expect(healthTokenPayloadSchema.safeParse({ ...valid, scope: 'websocket' }).success).toBe(
       false,
     );
   });
 
-  it('rejette un payload sans jti', () => {
+  it('rejects a payload without jti', () => {
     const { jti: _jti, ...withoutJti } = valid;
     expect(healthTokenPayloadSchema.safeParse(withoutJti).success).toBe(false);
   });
 });
 
 describe('healthServerMessageSchema', () => {
-  it('valide une frame stats', () => {
+  it('validates a stats frame', () => {
     const result = healthServerMessageSchema.safeParse({
       type: 'stats',
       stats: {
@@ -545,14 +581,14 @@ describe('healthServerMessageSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('valide auth-ok et rejette un type inconnu', () => {
+  it('validates auth-ok and rejects an unknown type', () => {
     expect(healthServerMessageSchema.safeParse({ type: 'auth-ok' }).success).toBe(true);
     expect(healthServerMessageSchema.safeParse({ type: 'log', lines: [] }).success).toBe(false);
   });
 });
 
-describe('AGENT_ROUTES — santé', () => {
-  it('expose les routes stats et health WS', () => {
+describe('AGENT_ROUTES — health', () => {
+  it('exposes the stats and health WS routes', () => {
     expect(AGENT_ROUTES.stats).toBe('GET /stats');
     expect(AGENT_ROUTES.healthWs).toBe('GET /health/ws');
   });

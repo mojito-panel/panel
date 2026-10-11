@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
 /**
- * Zod schema of the plugin (egg) — v2 format.
+ * Zod schema of the recipe (egg) — v2 format.
  * Feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first:
  * no Docker, no mandatory bash script (`script` action as an open fallback).
  *
  * `{{ENV_VAR}}` templating (UPPERCASE) everywhere: commands, files, URLs.
- * Resolution: agent system variables > server variables > plugin defaults > fixed env.
+ * Resolution: agent system variables > server variables > recipe defaults > fixed env.
  */
 
 // ─── System variables (reserved, provided by the agent at runtime) ───────────
@@ -31,11 +31,11 @@ export const SYSTEM_VARIABLES_SCHEMA = {
   SERVER_INSTALL_DIR: 'string — dossier d installation du serveur',
 } as const;
 
-// ─── Plugin variables (Pelican EggVariable equivalent) ─────────────────────
+// ─── Recipe variables (Pelican EggVariable equivalent) ─────────────────────
 
 export const variableTypeSchema = z.enum(['string', 'number', 'boolean']);
 
-export const pluginVariableSchema = z.object({
+export const recipeVariableSchema = z.object({
   /** Environment variable name (UPPERCASE) — templating + injection at spawn. */
   env: z
     .string()
@@ -62,18 +62,18 @@ export const pluginVariableSchema = z.object({
   options: z.array(z.string()).optional(),
 });
 
-export type PluginVariable = z.infer<typeof pluginVariableSchema>;
+export type RecipeVariable = z.infer<typeof recipeVariableSchema>;
 
 // ─── Requirements ─────────────────────────────────────────────────────────────
 
-export const pluginRequirementsSchema = z.object({
+export const recipeRequirementsSchema = z.object({
   minRamMb: z.number().int().positive().optional(),
   minDiskMb: z.number().int().positive().optional(),
   minCpuPercent: z.number().int().min(1).max(100).optional(),
   requiredCommands: z.array(z.string()).optional(),
 });
 
-export type PluginRequirements = z.infer<typeof pluginRequirementsSchema>;
+export type RecipeRequirements = z.infer<typeof recipeRequirementsSchema>;
 
 // ─── Runner actions ────────────────────────────────────────────────────────
 
@@ -241,10 +241,10 @@ export const STEAM_MOD_ENV = 'STEAM_MOD';
  * - `java` without a declared `JAVA_VERSION` variable
  * - a tool feature variable used but NOT declared
  */
-export function findToolFeatureErrors(plugin: Plugin): string[] {
+export function findToolFeatureErrors(recipe: Recipe): string[] {
   const errors: string[] = [];
-  const declared = new Set(plugin.variables.map((v) => v.env));
-  const hasFeature = (name: ToolFeature) => plugin.features.includes(name);
+  const declared = new Set(recipe.variables.map((v) => v.env));
+  const hasFeature = (name: ToolFeature) => recipe.features.includes(name);
 
   if (hasFeature('java') && !declared.has(JAVA_VERSION_ENV)) {
     errors.push(`La feature « java » requiert une variable « ${JAVA_VERSION_ENV} » déclarée`);
@@ -281,9 +281,9 @@ export const startConfigSchema = z.object({
 
 export type StartConfig = z.infer<typeof startConfigSchema>;
 
-// ─── Full plugin ───────────────────────────────────────────────────────────
+// ─── Full recipe ───────────────────────────────────────────────────────────
 
-export const pluginSchema = z.object({
+export const recipeSchema = z.object({
   schemaVersion: z.literal(2),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
   name: z.string().min(1),
@@ -292,11 +292,11 @@ export const pluginSchema = z.object({
   tags: z.array(z.string()).default([]),
   /** Pelican-style feature flags: eula, pid_limit… and tool features (java, steamcmd). */
   features: z.array(z.string()).default([]),
-  /** URL of a plugin update JSON (Pelican's meta.update_url equivalent). */
+  /** URL of a recipe update JSON (Pelican's meta.update_url equivalent). */
   updateUrl: z.string().url().optional(),
-  requirements: pluginRequirementsSchema.optional(),
+  requirements: recipeRequirementsSchema.optional(),
   runtime: runtimeSchema.optional(),
-  variables: z.array(pluginVariableSchema).default([]),
+  variables: z.array(recipeVariableSchema).default([]),
   install: z.array(runnerActionSchema).default([]),
   start: startConfigSchema,
   logs: logsConfigSchema.optional(),
@@ -304,10 +304,10 @@ export const pluginSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
 });
 
-export type Plugin = z.infer<typeof pluginSchema>;
+export type Recipe = z.infer<typeof recipeSchema>;
 
-/** Input type of the plugin schema (fields with optional defaults). */
-export type PluginInput = z.input<typeof pluginSchema>;
+/** Input type of the recipe schema (fields with optional defaults). */
+export type RecipeInput = z.input<typeof recipeSchema>;
 
 /** Input type of a runner action (fields with optional defaults). */
 export type RunnerActionInput = z.input<typeof runnerActionSchema>;
@@ -315,18 +315,18 @@ export type RunnerActionInput = z.input<typeof runnerActionSchema>;
 // ─── Validation helpers ────────────────────────────────────────────────────
 
 /**
- * Validates a raw JSON object as a plugin.
+ * Validates a raw JSON object as a recipe.
  * Throws a ZodError if invalid.
  */
-export function parsePlugin(data: unknown): Plugin {
-  return pluginSchema.parse(data);
+export function parseRecipe(data: unknown): Recipe {
+  return recipeSchema.parse(data);
 }
 
 /**
- * Validates a plugin and returns the result without throwing.
+ * Validates a recipe and returns the result without throwing.
  */
-export function safeParsePlugin(data: unknown) {
-  return pluginSchema.safeParse(data);
+export function safeParseRecipe(data: unknown) {
+  return recipeSchema.safeParse(data);
 }
 
 /**
@@ -339,15 +339,15 @@ export function extractTemplateVars(template: string): string[] {
 }
 
 /**
- * Checks that all variables used in the plugin's templates
- * are declared (plugin variables, system variables, or fixed env).
+ * Checks that all variables used in the recipe's templates
+ * are declared (recipe variables, system variables, or fixed env).
  * Returns the list of unknown variables.
  */
-export function findUnknownVariables(plugin: Plugin): string[] {
+export function findUnknownVariables(recipe: Recipe): string[] {
   const declared = new Set<string>([
-    ...plugin.variables.map((v) => v.env),
+    ...recipe.variables.map((v) => v.env),
     ...RESERVED_ENV_NAMES,
-    ...(plugin.env ? Object.keys(plugin.env) : []),
+    ...(recipe.env ? Object.keys(recipe.env) : []),
   ]);
   const used = new Set<string>();
 
@@ -355,12 +355,12 @@ export function findUnknownVariables(plugin: Plugin): string[] {
     for (const v of extractTemplateVars(text)) used.add(v);
   };
 
-  collectFrom(plugin.start.command);
-  if (plugin.start.workingDirectory) collectFrom(plugin.start.workingDirectory);
-  if (plugin.start.ready) collectFrom(plugin.start.ready.pattern);
-  if (plugin.start.stop) collectFrom(plugin.start.stop.value);
+  collectFrom(recipe.start.command);
+  if (recipe.start.workingDirectory) collectFrom(recipe.start.workingDirectory);
+  if (recipe.start.ready) collectFrom(recipe.start.ready.pattern);
+  if (recipe.start.stop) collectFrom(recipe.start.stop.value);
 
-  for (const action of plugin.install) {
+  for (const action of recipe.install) {
     if (action.action === 'download') {
       collectFrom(action.url);
       collectFrom(action.dest);
@@ -393,11 +393,11 @@ export function findUnknownVariables(plugin: Plugin): string[] {
 }
 
 /**
- * Validates a plugin variable's value (Pelican's Laravel rules equivalent).
+ * Validates a recipe variable's value (Pelican's Laravel rules equivalent).
  * Returns an error message, or null if valid.
  */
 export function validateVariableValue(
-  variable: PluginVariable,
+  variable: RecipeVariable,
   value: string | number | boolean,
 ): string | null {
   if (variable.type === 'number') {

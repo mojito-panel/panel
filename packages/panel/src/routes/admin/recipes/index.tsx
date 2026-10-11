@@ -4,39 +4,39 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Pencil, Download, RefreshCw, Plus } from 'lucide-react';
 import {
-  listPluginsFn,
-  importPluginsFn,
-  getPluginFn,
-  deletePluginFn,
+  listRecipesFn,
+  importRecipesFn,
+  getRecipeFn,
+  deleteRecipeFn,
 } from '~/server/functions/admin';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 
-export const Route = createFileRoute('/admin/plugins/')({
-  component: AdminPluginsPage,
+export const Route = createFileRoute('/admin/recipes/')({
+  component: AdminRecipesPage,
 });
 
 type ImportMutationInput = { jsons: string[]; urls: string[] };
 
-function AdminPluginsPage() {
+function AdminRecipesPage() {
   const queryClient = useQueryClient();
-  const listPlugins = useServerFn(listPluginsFn);
-  const importPlugins = useServerFn(importPluginsFn);
-  const getPlugin = useServerFn(getPluginFn);
-  const deletePlugin = useServerFn(deletePluginFn);
+  const listRecipes = useServerFn(listRecipesFn);
+  const importRecipes = useServerFn(importRecipesFn);
+  const getRecipe = useServerFn(getRecipeFn);
+  const deleteRecipe = useServerFn(deleteRecipeFn);
 
-  const query = useQuery({ queryKey: ['plugins'], queryFn: () => listPlugins() });
+  const query = useQuery({ queryKey: ['recipes'], queryFn: () => listRecipes() });
 
   const importMutation = useMutation({
-    mutationFn: (input: ImportMutationInput) => importPlugins({ data: input }),
+    mutationFn: (input: ImportMutationInput) => importRecipes({ data: input }),
   });
 
   const remove = useMutation({
-    mutationFn: (pluginId: string) => deletePlugin({ data: { pluginId } }),
+    mutationFn: (recipeId: string) => deleteRecipe({ data: { recipeId } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['plugins'] });
+      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
     },
   });
 
@@ -46,10 +46,10 @@ function AdminPluginsPage() {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    const rawText = String(formData.get('pluginJson') ?? '').trim();
-    const url = String(formData.get('pluginUrl') ?? '').trim();
+    const rawText = String(formData.get('recipeJson') ?? '').trim();
+    const url = String(formData.get('recipeUrl') ?? '').trim();
     const files = formData
-      .getAll('pluginFiles')
+      .getAll('recipeFiles')
       .filter((f): f is File => f instanceof File && f.size > 0);
 
     if (!rawText && !url && files.length === 0) return;
@@ -63,20 +63,20 @@ function AdminPluginsPage() {
     form.reset();
   };
 
-  /** Re-import from the plugin's updateUrl (upsert — same behavior as Pelican). */
+  /** Re-import from the recipe's updateUrl (upsert — same behavior as Pelican). */
   const updateFromUrl = (url: string) => {
     importMutation.reset();
     importMutation.mutate({ jsons: [], urls: [url] });
   };
 
-  /** Export: downloads the plugin's raw JSON. */
-  const exportPlugin = async (pluginId: string, slug: string) => {
-    const result = await getPlugin({ data: { pluginId } });
+  /** Export: downloads the recipe's raw JSON. */
+  const exportRecipe = async (recipeId: string, slug: string) => {
+    const result = await getRecipe({ data: { recipeId } });
     const blob = new Blob([result.json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `plugin-${slug}.json`;
+    link.download = `recipe-${slug}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
@@ -85,15 +85,15 @@ function AdminPluginsPage() {
     <div>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Plugins</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Recettes</h1>
           <p className="text-muted-foreground">
             Eggs (format v2, compatible Pelican-like) installables sur les serveurs.
           </p>
         </div>
         <Button asChild>
-          <Link to="/admin/plugins/new">
+          <Link to="/admin/recipes/new">
             <Plus />
-            Créer un plugin
+            Créer une recette
           </Link>
         </Button>
       </div>
@@ -101,26 +101,26 @@ function AdminPluginsPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Importer des plugins</CardTitle>
+            <CardTitle>Importer des recettes</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={onImportSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="pluginJson">JSON (texte)</Label>
+                <Label htmlFor="recipeJson">JSON (texte)</Label>
                 <textarea
-                  id="pluginJson"
-                  name="pluginJson"
+                  id="recipeJson"
+                  name="recipeJson"
                   rows={8}
-                  placeholder={'{\n  "schemaVersion": 2,\n  "id": "mon-plugin",\n  …'}
+                  placeholder={'{\n  "schemaVersion": 2,\n  "id": "ma-recette",\n  …'}
                   className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pluginFiles">Fichiers (.json)</Label>
+                <Label htmlFor="recipeFiles">Fichiers (.json)</Label>
                 <input
-                  id="pluginFiles"
-                  name="pluginFiles"
+                  id="recipeFiles"
+                  name="recipeFiles"
                   type="file"
                   multiple
                   accept=".json,application/json"
@@ -129,12 +129,12 @@ function AdminPluginsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="pluginUrl">Depuis une URL</Label>
+                <Label htmlFor="recipeUrl">Depuis une URL</Label>
                 <Input
-                  id="pluginUrl"
-                  name="pluginUrl"
+                  id="recipeUrl"
+                  name="recipeUrl"
                   type="url"
-                  placeholder="https://github.com/…/blob/…/plugin.json"
+                  placeholder="https://github.com/…/blob/…/recipe.json"
                 />
                 <p className="text-xs text-muted-foreground">
                   Les URLs GitHub (blob) sont converties en raw automatiquement.
@@ -180,29 +180,29 @@ function AdminPluginsPage() {
         </Card>
 
         <div className="space-y-3">
-          {(query.data ?? []).map((plugin) => (
-            <div key={plugin.id} className="rounded-lg border p-4">
+          {(query.data ?? []).map((recipe) => (
+            <div key={recipe.id} className="rounded-lg border p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-semibold">{plugin.name}</p>
+                  <p className="font-semibold">{recipe.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {plugin.slug} · v{plugin.schemaVersion} ·{' '}
-                    {plugin.variables.length} variable(s)
+                    {recipe.slug} · v{recipe.schemaVersion} ·{' '}
+                    {recipe.variables.length} variable(s)
                   </p>
-                  {plugin.updateUrl && (
+                  {recipe.updateUrl && (
                     <p className="mt-1 truncate text-xs text-muted-foreground">
-                      MAJ : {plugin.updateUrl}
+                      MAJ : {recipe.updateUrl}
                     </p>
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                  {plugin.updateUrl && (
+                  {recipe.updateUrl && (
                     <Button
                       variant="ghost"
                       size="sm"
                       title="Re-importer depuis l'URL de mise à jour"
                       disabled={importMutation.isPending}
-                      onClick={() => updateFromUrl(plugin.updateUrl as string)}
+                      onClick={() => updateFromUrl(recipe.updateUrl as string)}
                     >
                       <RefreshCw />
                       Mettre à jour
@@ -210,8 +210,8 @@ function AdminPluginsPage() {
                   )}
                   <Button variant="ghost" size="sm" asChild>
                     <Link
-                      to="/admin/plugins/$pluginId"
-                      params={{ pluginId: plugin.id }}
+                      to="/admin/recipes/$recipeId"
+                      params={{ recipeId: recipe.id }}
                     >
                       <Pencil />
                       Éditer
@@ -220,7 +220,7 @@ function AdminPluginsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => void exportPlugin(plugin.id, plugin.slug)}
+                    onClick={() => void exportRecipe(recipe.id, recipe.slug)}
                   >
                     <Download />
                     Exporter
@@ -230,8 +230,8 @@ function AdminPluginsPage() {
                     size="sm"
                     disabled={remove.isPending}
                     onClick={() => {
-                      if (confirm(`Supprimer le plugin « ${plugin.name} » ?`)) {
-                        remove.mutate(plugin.id);
+                      if (confirm(`Supprimer la recette « ${recipe.name} » ?`)) {
+                        remove.mutate(recipe.id);
                       }
                     }}
                   >
@@ -242,7 +242,7 @@ function AdminPluginsPage() {
             </div>
           ))}
           {query.data?.length === 0 && (
-            <p className="text-muted-foreground">Aucun plugin importé.</p>
+            <p className="text-muted-foreground">Aucune recette importée.</p>
           )}
           {remove.isError && (
             <p className="text-sm text-destructive">{remove.error.message}</p>

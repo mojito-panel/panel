@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
-import type { PluginVariable } from '@mojito/contract';
+import type { RecipeVariable } from '@mojito/contract';
 import { getServerFn, updateServerVariablesFn } from '~/server/functions/servers';
 import { makeUpdateServerVariablesSchema } from '~/validators/server';
 import { Button } from '~/components/ui/button';
@@ -26,8 +26,8 @@ export const Route = createFileRoute('/servers/$serverId/variables')({
 const SYSTEM_ENV_PREFIX = 'SERVER_';
 
 /**
- * Resolves the plugin's start command with the CURRENT variable values
- * (form value > plugin default). System variables stay literal — only the
+ * Resolves the recipe's start command with the CURRENT variable values
+ * (form value > recipe default). System variables stay literal — only the
  * agent can resolve them. Pelican equivalent: the read-only startup
  * command box.
  */
@@ -82,7 +82,7 @@ function ServerVariablesPage() {
     return <p className="text-sm text-muted-foreground">Chargement…</p>;
   }
 
-  const definitions = [...(server.plugin.variables ?? [])].sort((a, b) => a.sort - b.sort);
+  const definitions = [...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort);
   const editable = definitions.filter((v) => v.userViewable && v.userEditable);
   const readonly = definitions.filter((v) => v.userViewable && !v.userEditable);
   const defaults = new Map(definitions.map((v) => [v.env, v.defaultValue]));
@@ -106,7 +106,7 @@ function ServerVariablesPage() {
           <CardTitle>Variables</CardTitle>
           <CardDescription>
             Ces valeurs alimentent la commande de démarrage et les fichiers de
-            configuration générés par le plugin. Elles s'appliquent au prochain
+            configuration générés par la recette. Elles s'appliquent au prochain
             démarrage du serveur.
           </CardDescription>
         </CardHeader>
@@ -135,7 +135,7 @@ function ServerVariablesPage() {
               ))
             ) : (
               <p className="text-sm text-muted-foreground">
-                Ce plugin n'a aucune variable éditable.
+                Cette recette n'a aucune variable éditable.
               </p>
             )}
 
@@ -153,7 +153,7 @@ function ServerVariablesPage() {
           <CardHeader>
             <CardTitle>Variables en lecture seule</CardTitle>
             <CardDescription>
-              Définies par l'administrateur via le plugin — non modifiables
+              Définies par l'administrateur via la recette — non modifiables
               ici.
             </CardDescription>
           </CardHeader>
@@ -177,7 +177,7 @@ function ServerVariablesPage() {
           <CardTitle>Commande de démarrage</CardTitle>
           <CardDescription>
             Résolue avec les valeurs actuelles — lecture seule, définie par le
-            plugin. Les variables système ({'{{SERVER_…}}'}) sont injectées par
+            recette. Les variables système ({'{{SERVER_…}}'}) sont injectées par
             l'agent au démarrage.
           </CardDescription>
         </CardHeader>
@@ -185,7 +185,7 @@ function ServerVariablesPage() {
           <form.Subscribe selector={(s) => s.values.variables}>
             {(variables) => (
               <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-sm">
-                {resolveCommand(server.plugin.start.command, variables, defaults)}
+                {resolveCommand(server.recipe.start.command, variables, defaults)}
               </pre>
             )}
           </form.Subscribe>

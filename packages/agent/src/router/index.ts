@@ -74,7 +74,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
   registerFilesRoutes(app, { store });
 
   // ─── Browser console WS (JWT auth, log streaming, commands, power) ──────
-  // Own scope: the websocket plugin must be booted BEFORE the
+  // Own scope: the websocket recipe must be booted BEFORE the
   // `{ websocket: true }` routes are registered.
   app.register(async (instance) => {
     await instance.register(websocket);

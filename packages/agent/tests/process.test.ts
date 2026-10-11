@@ -6,7 +6,7 @@ import { ServerProcessManager } from '../src/environment/process';
 import { ServerManager, PowerActionError } from '../src/server/manager';
 import { ServerStore } from '../src/internal/server-store';
 import { toPanelStatus } from '../src/environment/states';
-import { parsePlugin, type Plugin } from '@mojito/contract';
+import { parseRecipe, type Recipe } from '@mojito/contract';
 
 const NODE = process.execPath;
 
@@ -28,7 +28,7 @@ afterAll(async () => {
 // ─── ServerProcessManager ─────────────────────────────────────────────────────
 
 describe('ServerProcessManager', () => {
-  it('spawn → running, logs capturés, exit propre → offline', async () => {
+  it('spawn → running, logs captured, clean exit → offline', async () => {
     const logs: string[] = [];
     const exitCalls: Array<{ code: number | null; clean: boolean }> = [];
     const manager = new ServerProcessManager({
@@ -56,7 +56,7 @@ describe('ServerProcessManager', () => {
     expect(exitCalls[0]).toEqual({ code: 0, clean: true });
   });
 
-  it('injecte les variables d environnement dans le process', async () => {
+  it('injects environment variables into the process', async () => {
     const logs: string[] = [];
     const manager = new ServerProcessManager({ onLog: (l) => logs.push(l) });
 
@@ -74,7 +74,7 @@ describe('ServerProcessManager', () => {
     expect(logs).toContain('PORT=25565');
   });
 
-  it('readyPattern émet onReady une seule fois', async () => {
+  it('readyPattern emits onReady exactly once', async () => {
     let readyCount = 0;
     const manager = new ServerProcessManager({
       onReady: () => readyCount++,
@@ -95,7 +95,7 @@ describe('ServerProcessManager', () => {
     expect(readyCount).toBe(1);
   });
 
-  it('sendCommand écrit sur le stdin du process (console interactive)', async () => {
+  it('sendCommand writes to the process stdin (interactive console)', async () => {
     const logs: string[] = [];
     const manager = new ServerProcessManager({ onLog: (l) => logs.push(l) });
 
@@ -117,12 +117,12 @@ describe('ServerProcessManager', () => {
     expect(logs).toContain('echo:hello console');
   });
 
-  it('sendCommand retourne false si le process est offline', () => {
+  it('sendCommand returns false when the process is offline', () => {
     const manager = new ServerProcessManager();
     expect(manager.sendCommand('x')).toBe(false);
   });
 
-  it('stop gracieux par commande : stopping → sortie avant timeout → offline', async () => {
+  it('graceful stop via command: stopping → exit before timeout → offline', async () => {
     const states: string[] = [];
     const manager = new ServerProcessManager({ onStateChange: (s) => states.push(s) });
 
@@ -148,7 +148,7 @@ describe('ServerProcessManager', () => {
     expect(states[states.length - 1]).toBe('offline');
   });
 
-  it('killTree force la sortie d un process qui ignore le stop', async () => {
+  it('killTree forces the exit of a process ignoring stop', async () => {
     const manager = new ServerProcessManager();
 
     manager.spawn({
@@ -166,7 +166,7 @@ describe('ServerProcessManager', () => {
     expect(manager.getState()).toBe('offline');
   });
 
-  it('exit code non nul sans stop demandé = crash (non clean)', async () => {
+  it('non-zero exit code without a requested stop = crash (not clean)', async () => {
     const exitCalls: Array<{ code: number | null; clean: boolean }> = [];
     const manager = new ServerProcessManager({
       onExit: (code, clean) => exitCalls.push({ code, clean }),
@@ -186,7 +186,7 @@ describe('ServerProcessManager', () => {
     expect(exitCalls[0]).toEqual({ code: 3, clean: false });
   });
 
-  it('ring buffer : le buffer de logs est limité', async () => {
+  it('ring buffer: the log buffer is capped', async () => {
     const manager = new ServerProcessManager();
     // Max 1000 lines — we generate 1500 by spamming stdout
     manager.spawn({
@@ -206,7 +206,7 @@ describe('ServerProcessManager', () => {
     expect(manager.getLogs()[manager.getLogs().length - 1]).toBe('line-1499');
   });
 
-  it('getLogsAfter : logs incrémentaux avec index, gère la troncature du buffer', async () => {
+  it('getLogsAfter: incremental logs with index, handles buffer truncation', async () => {
     const manager = new ServerProcessManager();
 
     manager.spawn({
@@ -248,13 +248,13 @@ describe('ServerProcessManager', () => {
 // ─── ServerStore ─────────────────────────────────────────────────────────────
 
 describe('ServerStore', () => {
-  it('save, get, list, delete avec écriture sur disque', async () => {
+  it('save, get, list, delete with disk persistence', async () => {
     const store = new ServerStore(tmpRoot);
-    const plugin = makePlugin();
+    const recipe = makeRecipe();
     const entry = {
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       name: 'test',
-      plugin,
+      recipe,
       variables: {},
       installDir: join(tmpRoot, 'srv-store'),
       allocation: { port: 25565, memoryMb: 2048, ip: '0.0.0.0' },
@@ -274,7 +274,7 @@ describe('ServerStore', () => {
     expect(await store.get(entry.serverId)).toBeNull();
   });
 
-  it('fichier corrompu → repart vide sans crash', async () => {
+  it('corrupted file → starts empty without a crash', async () => {
     const corruptDir = join(tmpRoot, 'corrupt');
     const { mkdir } = await import('node:fs/promises');
     await mkdir(corruptDir, { recursive: true });
@@ -286,12 +286,12 @@ describe('ServerStore', () => {
 
 // ─── ServerManager (power lock + crash detection) ───────────────────────────
 
-function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
-  return parsePlugin({
+function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
+  return parseRecipe({
     schemaVersion: 2,
-    id: 'test-plugin',
+    id: 'test-recipe',
     name: 'Test',
-    author: 'moi',
+    author: 'me',
     install: [],
     start: { command: 'echo ok' },
     ...overrides,
@@ -304,9 +304,9 @@ describe('ServerManager', () => {
     const registry = new ServerManager({ store, crashLoopSeconds: opts.crashLoopSeconds });
     const markerFile = join(tmpRoot, 'spawn-count.txt');
 
-    // Plugin whose start process appends a line to a file
+    // Recipe whose start process appends a line to a file
     // (lets us count actual spawns, including auto restarts)
-    const plugin = makePlugin({
+    const recipe = makeRecipe({
       start: {
         command: nodeCommand(
           `require('fs').appendFileSync(${JSON.stringify(markerFile)}, 'x'); process.exit(0);`,
@@ -318,7 +318,7 @@ describe('ServerManager', () => {
     await store.save({
       serverId,
       name: 'test',
-      plugin,
+      recipe,
       variables: {},
       installDir: tmpRoot,
       allocation: { port: 25565, memoryMb: 2048, ip: '0.0.0.0' },
@@ -335,7 +335,7 @@ describe('ServerManager', () => {
     ).rejects.toMatchObject({ code: 'not_found' });
   });
 
-  it('start → spawn du process (exit 0 = clean, pas de restart)', async () => {
+  it('start → process spawn (exit 0 = clean, no restart)', async () => {
     const { registry, serverId, markerFile } = await setupRegistry();
     await registry.handlePowerAction(serverId, 'start');
 
@@ -345,14 +345,14 @@ describe('ServerManager', () => {
     expect(registry.getState(serverId)).toBe('offline');
   });
 
-  it('double start concurrent → la 2e action est rejetée (power lock)', async () => {
+  it('concurrent double start → the 2nd action is rejected (power lock)', async () => {
     const { registry, serverId, markerFile } = await setupRegistry();
     // Long process so the 1st start is still "running"
     const store = new ServerStore(tmpRoot);
     await store.save({
       serverId,
       name: 'test',
-      plugin: makePlugin({
+      recipe: makeRecipe({
         start: { command: nodeCommand('setInterval(() => {}, 1000);') },
       }),
       variables: {},
@@ -373,7 +373,7 @@ describe('ServerManager', () => {
     expect(registry.getState(serverId)).toBe('offline');
   });
 
-  it('crash detection : restart auto puis anti-crash-loop', async () => {
+  it('crash detection: auto restart then anti-crash-loop', async () => {
     // Process that crashes immediately (exit 1) → auto restart → re-crash too
     // recent → no 3rd spawn (anti-loop, like wings crashTooFrequent)
     const markerFile = join(tmpRoot, 'crash-count.txt');
@@ -386,7 +386,7 @@ describe('ServerManager', () => {
     await store.save({
       serverId,
       name: 'test-crash',
-      plugin: makePlugin({
+      recipe: makeRecipe({
         start: {
           command: nodeCommand(
             `require('fs').appendFileSync(${JSON.stringify(markerFile)}, 'x'); process.exit(1);`,
@@ -410,7 +410,7 @@ describe('ServerManager', () => {
     expect(registry.getState(serverId)).toBe('offline');
   }, 15000);
 
-  it('toPanelStatus : mapping états runtime → panel', () => {
+  it('toPanelStatus: runtime states → panel mapping', () => {
     expect(toPanelStatus('offline', false)).toBe('stopped');
     expect(toPanelStatus('offline', true)).toBe('crashed');
     expect(toPanelStatus('running', false)).toBe('running');
@@ -418,7 +418,7 @@ describe('ServerManager', () => {
     expect(toPanelStatus('stopping', false)).toBe('running');
   });
 
-  it('PowerActionError expose son code', () => {
+  it('PowerActionError exposes its code', () => {
     const err = new PowerActionError('test', 'not_running');
     expect(err.code).toBe('not_running');
   });

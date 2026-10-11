@@ -10,7 +10,7 @@ import { steamcmdWarmup } from './steamcmd';
  * Tools prebuilt by the agent, ISOLATED per server inside its install
  * directory (`.bin/<tool>` — nothing shared between servers: SteamCMD may
  * cache credentials per install dir, JDKs must not collide between
- * different versions declared by two plugins):
+ * different versions declared by two recipes):
  *   <installDir>/.bin/java/       — Microsoft OpenJDK (bin/java.exe)
  *   <installDir>/.bin/steamcmd/   — SteamCMD (steamcmd.exe)
  *
@@ -23,8 +23,8 @@ import { steamcmdWarmup } from './steamcmd';
 /** Marker file written once a tool is fully installed (records the version). */
 const TOOL_MARKER = '.mojito-tool.json';
 
-/** A plugin tool, templates already rendered. */
-export interface ResolvedPluginTool {
+/** A recipe tool, templates already rendered. */
+export interface ResolvedRecipeTool {
   name: 'java' | 'steamcmd';
   /** Installed version (java: major; steamcmd: none) — compared to the marker. */
   key: string;
@@ -67,18 +67,18 @@ const STEAMCMD_DOWNLOAD_URL = 'https://steamcdn-a.akamaihd.net/client/installer/
 const pending = new Map<string, Promise<EnsureToolResult>>();
 
 /** Tool directory: `<installDir>/.bin/<name>` (isolated per server). */
-export function toolInstallDir(installDir: string, tool: ResolvedPluginTool): string {
+export function toolInstallDir(installDir: string, tool: ResolvedRecipeTool): string {
   return join(installDir, '.bin', tool.name);
 }
 
-function buildRuntime(dir: string, tool: ResolvedPluginTool): ToolRuntime {
+function buildRuntime(dir: string, tool: ResolvedRecipeTool): ToolRuntime {
   if (tool.name === 'java') {
     return { binDir: join(dir, 'bin'), env: { JAVA_HOME: dir } };
   }
   return { binDir: dir, env: {} };
 }
 
-function defaultDownloadUrl(tool: ResolvedPluginTool): string {
+function defaultDownloadUrl(tool: ResolvedRecipeTool): string {
   return tool.name === 'java' ? JAVA_DOWNLOAD_URL(tool.key) : STEAMCMD_DOWNLOAD_URL;
 }
 
@@ -97,7 +97,7 @@ async function readMarker(dir: string): Promise<{ key: string } | null> {
  * when the marker matches.
  */
 export async function ensureTool(
-  tool: ResolvedPluginTool,
+  tool: ResolvedRecipeTool,
   options: EnsureToolOptions,
 ): Promise<EnsureToolResult> {
   const dir = toolInstallDir(options.installDir, tool);
@@ -116,7 +116,7 @@ export async function ensureTool(
 }
 
 async function installTool(
-  tool: ResolvedPluginTool,
+  tool: ResolvedRecipeTool,
   options: EnsureToolOptions,
   dir: string,
 ): Promise<EnsureToolResult> {

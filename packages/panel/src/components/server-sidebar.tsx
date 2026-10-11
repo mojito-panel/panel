@@ -38,7 +38,7 @@ const serverItems = [
   { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, soon: true },
   { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, soon: true },
   { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, soon: true },
-  { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: true },
+  { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false },
   { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, soon: false },
   { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, soon: false },
   { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: true },

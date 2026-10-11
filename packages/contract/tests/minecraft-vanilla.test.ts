@@ -2,31 +2,31 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { safeParsePlugin, findUnknownVariables, findToolFeatureErrors } from '../src/plugin-schema';
+import { safeParseRecipe, findUnknownVariables, findToolFeatureErrors } from '../src/recipe-schema';
 
-const pluginPath = join(
+const recipePath = join(
   fileURLToPath(new URL('.', import.meta.url)),
-  '../../../plugins/minecraft-vanilla.json',
+  '../../../recipes/minecraft-vanilla.json',
 );
 
-const raw = JSON.parse(readFileSync(pluginPath, 'utf8'));
+const raw = JSON.parse(readFileSync(recipePath, 'utf8'));
 
-describe('plugin minecraft-vanilla', () => {
-  it('est valide contre le schema v2', () => {
-    const result = safeParsePlugin(raw);
+describe('minecraft-vanilla recipe', () => {
+  it('is valid against the v2 schema', () => {
+    const result = safeParseRecipe(raw);
     expect(result.success).toBe(true);
   });
 
-  it('ne reference aucune variable inconnue', () => {
-    const parsed = safeParsePlugin(raw);
+  it('references no unknown variables', () => {
+    const parsed = safeParseRecipe(raw);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(findUnknownVariables(parsed.data)).toEqual([]);
     }
   });
 
-  it('a les variables attendues avec defaults valides', () => {
-    const parsed = safeParsePlugin(raw);
+  it('has the expected variables with valid defaults', () => {
+    const parsed = safeParseRecipe(raw);
     if (!parsed.success) throw parsed.error;
     const envs = parsed.data.variables.map((v) => v.env);
     expect(envs).toEqual([
@@ -41,17 +41,17 @@ describe('plugin minecraft-vanilla', () => {
     ]);
   });
 
-  it('declare la feature java — JDK préchargé par l’agent dans le .bin du serveur (pas de Java hôte requis)', () => {
-    const parsed = safeParsePlugin(raw);
+  it('declares the java feature — JDK preloaded by the agent into the server .bin (no host Java required)', () => {
+    const parsed = safeParseRecipe(raw);
     if (!parsed.success) throw parsed.error;
     expect(parsed.data.features).toContain('java');
-    // Le JDK est fourni par l'agent (feature java + variable JAVA_VERSION) :
-    // plus aucune étape download/extract dans le script d'installation
+    // The JDK is provided by the agent (java feature + JAVA_VERSION variable):
+    // no download/extract steps left in the install script
     expect(parsed.data.install.some((a) => a.action === 'download' || a.action === 'extract')).toBe(false);
-    // La commande de démarrage appelle java via le PATH injecté
+    // The start command calls java via the injected PATH
     expect(parsed.data.start.command).toContain('java -Xms');
     expect(parsed.data.runtime).toBeUndefined();
-    // findToolFeatureErrors : feature java + variable JAVA_VERSION déclarée → OK
+    // findToolFeatureErrors: java feature + JAVA_VERSION variable declared → OK
     expect(findToolFeatureErrors(parsed.data)).toEqual([]);
   });
 });

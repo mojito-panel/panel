@@ -2,86 +2,86 @@ import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Download, Trash2 } from 'lucide-react';
-import { parsePlugin } from '@mojito/contract';
-import { getPluginFn, updatePluginFn, deletePluginFn } from '~/server/functions/admin';
+import { parseRecipe } from '@mojito/contract';
+import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
 import { Button } from '~/components/ui/button';
-import { PluginEditor } from '~/components/plugin-editor/plugin-editor';
+import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
 import {
-  pluginEditorValueToPlugin,
-  pluginToEditorValue,
-  type PluginEditorValue,
-} from '~/validators/plugin-editor';
+  recipeEditorValueToRecipe,
+  recipeToEditorValue,
+  type RecipeEditorValue,
+} from '~/validators/recipe-editor';
 
-export const Route = createFileRoute('/admin/plugins/$pluginId/')({
-  component: EditPluginPage,
+export const Route = createFileRoute('/admin/recipes/$recipeId/')({
+  component: EditRecipePage,
 });
 
-function EditPluginPage() {
-  const { pluginId } = Route.useParams();
+function EditRecipePage() {
+  const { recipeId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const getPlugin = useServerFn(getPluginFn);
-  const updatePlugin = useServerFn(updatePluginFn);
-  const deletePlugin = useServerFn(deletePluginFn);
+  const getRecipe = useServerFn(getRecipeFn);
+  const updateRecipe = useServerFn(updateRecipeFn);
+  const deleteRecipe = useServerFn(deleteRecipeFn);
 
   const query = useQuery({
-    queryKey: ['plugin', pluginId],
-    queryFn: () => getPlugin({ data: { pluginId } }),
+    queryKey: ['recipe', recipeId],
+    queryFn: () => getRecipe({ data: { recipeId } }),
   });
 
   const update = useMutation({
-    mutationFn: async (value: PluginEditorValue) => {
-      const { plugin, issues } = pluginEditorValueToPlugin(value);
-      if (!plugin) {
-        throw new Error(`Plugin invalide : ${(issues ?? []).join(' · ')}`);
+    mutationFn: async (value: RecipeEditorValue) => {
+      const { recipe, issues } = recipeEditorValueToRecipe(value);
+      if (!recipe) {
+        throw new Error(`Recette invalide : ${(issues ?? []).join(' · ')}`);
       }
-      return updatePlugin({ data: { pluginId, json: JSON.stringify(plugin, null, 2) } });
+      return updateRecipe({ data: { recipeId, json: JSON.stringify(recipe, null, 2) } });
     },
     onSuccess: async () => {
-      // List only — ['plugin'] is NOT invalidated so the form keeps its state
-      await queryClient.invalidateQueries({ queryKey: ['plugins'] });
+      // List only — ['recipe'] is NOT invalidated so the form keeps its state
+      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
     },
   });
 
   const remove = useMutation({
-    mutationFn: () => deletePlugin({ data: { pluginId } }),
+    mutationFn: () => deleteRecipe({ data: { recipeId } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['plugins'] });
-      await navigate({ to: '/admin/plugins' });
+      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await navigate({ to: '/admin/recipes' });
     },
   });
 
   if (query.isPending) {
-    return <p className="text-muted-foreground">Chargement du plugin…</p>;
+    return <p className="text-muted-foreground">Chargement de la recette…</p>;
   }
   if (query.isError) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
         <Button variant="ghost" asChild>
-          <Link to="/admin/plugins">← Plugins</Link>
+          <Link to="/admin/recipes">← Recettes</Link>
         </Button>
       </div>
     );
   }
 
-  // Stored JSON → contract plugin (defaults applied) → editor value.
+  // Stored JSON → contract recipe (defaults applied) → editor value.
   // The whole page remounts via `key` when the server data changes.
-  const initial = pluginToEditorValue(parsePlugin(JSON.parse(query.data.json)));
+  const initial = recipeToEditorValue(parseRecipe(JSON.parse(query.data.json)));
 
   /** Export: downloads the stored JSON (Pelican's ExportEggAction). */
-  const exportPlugin = () => {
+  const exportRecipe = () => {
     const blob = new Blob([query.data?.json ?? ''], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `plugin-${query.data?.slug ?? 'export'}.json`;
+    link.download = `recipe-${query.data?.slug ?? 'export'}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   return (
-    <PluginEditor
+    <RecipeEditor
       key={`${query.data.id}-${query.dataUpdatedAt}`}
       title={query.data.name}
       initial={initial}
@@ -92,8 +92,8 @@ function EditPluginPage() {
         <>
           <Button
             variant="outline"
-            onClick={() => void exportPlugin()}
-            title="Exporter le JSON du plugin"
+            onClick={() => void exportRecipe()}
+            title="Exporter le JSON de la recette"
           >
             <Download />
             Exporter
@@ -102,7 +102,7 @@ function EditPluginPage() {
             variant="destructive"
             disabled={remove.isPending}
             onClick={() => {
-              if (confirm(`Supprimer le plugin « ${query.data?.name} » ?`)) {
+              if (confirm(`Supprimer la recette « ${query.data?.name} » ?`)) {
                 remove.mutate();
               }
             }}

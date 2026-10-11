@@ -2,14 +2,16 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { toast } from 'sonner';
 import { listNodesFn, createNodeFn, deleteNodeFn } from '~/server/functions/admin';
 import { createNodeSchema, type CreateNodeDto } from '~/validators/node';
+import { buildAgentConfig } from '~/lib/agent-config';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 
-export const Route = createFileRoute('/admin/nodes')({
+export const Route = createFileRoute('/admin/nodes/')({
   component: AdminNodesPage,
 });
 
@@ -130,18 +132,34 @@ function AdminNodesPage() {
               <p className="mt-2 text-sm text-destructive">{create.error.message}</p>
             )}
 
-            {/* Token shown ONCE after creation */}
+            {/* Agent config shown ONCE after creation — the token inside will
+                never be displayed again */}
             {create.data?.agentToken && (
               <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4">
                 <p className="font-semibold text-amber-800">
-                  Copie ce token maintenant — il ne sera plus jamais affiché.
+                  Copie cette configuration maintenant — le token ne sera plus jamais affiché.
                 </p>
                 <p className="mt-1 text-xs text-amber-700">
-                  À mettre dans la config de l'agent (AGENT_TOKEN) :
+                  Placer ce fichier <code>icecube.yml</code> à côté de{' '}
+                  <code>icecube.exe</code> sur le node, puis démarrer l'agent.
                 </p>
                 <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs">
-                  {create.data.agentToken}
+                  {buildAgentConfig(create.data)}
                 </pre>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(buildAgentConfig(create.data!))
+                      .then(() => toast.success('Configuration icecube.yml copiée'))
+                      .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
+                  }}
+                >
+                  Copier la configuration
+                </Button>
               </div>
             )}
           </CardContent>
@@ -149,7 +167,12 @@ function AdminNodesPage() {
 
         <div className="space-y-3">
           {(query.data ?? []).map((node) => (
-            <div key={node.id} className="rounded-lg border p-4">
+            <Link
+              key={node.id}
+              to="/admin/nodes/$nodeId"
+              params={{ nodeId: node.id }}
+              className="block rounded-lg border p-4 transition-colors hover:border-primary"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold">{node.name}</p>
@@ -161,7 +184,8 @@ function AdminNodesPage() {
                   variant="destructive"
                   size="sm"
                   disabled={remove.isPending}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
                     if (confirm(`Supprimer le node « ${node.name} » ?`)) {
                       remove.mutate(node.id);
                     }
@@ -170,7 +194,7 @@ function AdminNodesPage() {
                   Supprimer
                 </Button>
               </div>
-            </div>
+            </Link>
           ))}
           {query.data?.length === 0 && (
             <p className="text-muted-foreground">Aucun node enregistré.</p>

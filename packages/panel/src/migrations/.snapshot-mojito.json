@@ -423,7 +423,7 @@
       "comment": null
     },
     {
-      "name": "plugin",
+      "name": "recipe",
       "schema": "public",
       "columns": {
         "created_at": {
@@ -553,7 +553,7 @@
           ],
           "composite": false,
           "constraint": true,
-          "keyName": "plugin_pkey",
+          "keyName": "recipe_pkey",
           "primary": true,
           "unique": true
         },
@@ -563,7 +563,7 @@
           ],
           "composite": false,
           "constraint": true,
-          "keyName": "plugin_slug_unique",
+          "keyName": "recipe_slug_unique",
           "primary": false,
           "unique": true
         }
@@ -662,8 +662,8 @@
           "enumItems": [],
           "mappedType": "string"
         },
-        "plugin_id": {
-          "name": "plugin_id",
+        "recipe_id": {
+          "name": "recipe_id",
           "type": "varchar(255)",
           "unsigned": false,
           "autoincrement": false,

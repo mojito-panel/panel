@@ -4,7 +4,7 @@ import type { ServerInstance } from './server';
 import { PowerActionError } from './errors';
 import { resolveVariables, render } from './templating';
 import { buildSystemVariables } from './variables';
-import { buildToolEnv, ensurePluginTools, resolvePluginTools } from '../tools';
+import { buildToolEnv, ensureRecipeTools, resolveRecipeTools } from '../tools';
 
 /**
  * Power actions (≈ wings server/power.go): start/stop/restart/kill.
@@ -56,27 +56,27 @@ async function executePowerAction(
 
 /**
  * Builds the templated command and spawns the process.
- * The plugin's tool features (java, steamcmd) are ensured in the server's
+ * The recipe's tool features (java, steamcmd) are ensured in the server's
  * `.bin/` and injected into the environment: PATH + JAVA_HOME — the start
  * command can simply call `java`, whatever the host has installed.
  */
 async function spawnServer(instance: ServerInstance, stored: StoredServer): Promise<void> {
-  const plugin = stored.plugin;
+  const recipe = stored.recipe;
   const systemVars = buildSystemVariables(
     stored.serverId,
     stored.name,
     stored.installDir,
     stored.allocation,
   );
-  const resolved = resolveVariables(plugin, stored.variables, systemVars);
+  const resolved = resolveVariables(recipe, stored.variables, systemVars);
   const env: Record<string, string> = {};
   for (const [key, value] of resolved) {
     env[key] = value;
   }
 
   try {
-    const tools = resolvePluginTools(plugin, resolved);
-    const runtimes = await ensurePluginTools(tools, stored.installDir);
+    const tools = resolveRecipeTools(recipe, resolved);
+    const runtimes = await ensureRecipeTools(tools, stored.installDir);
     Object.assign(env, buildToolEnv(runtimes));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -84,10 +84,10 @@ async function spawnServer(instance: ServerInstance, stored: StoredServer): Prom
   }
 
   instance.manager.spawn({
-    command: render(plugin.start.command, resolved),
+    command: render(recipe.start.command, resolved),
     cwd: stored.installDir,
     env,
-    readyPattern: plugin.start.ready?.pattern,
-    stop: plugin.start.stop,
+    readyPattern: recipe.start.ready?.pattern,
+    stop: recipe.start.stop,
   });
 }

@@ -3,20 +3,30 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
-import { Node, Plugin, Server, User } from '~/db/entities';
-import { parsePlugin, type Plugin as PluginDefinition } from '@mojito/contract';
+import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
+import { parseRecipe, type Recipe as RecipeDefinition } from '@mojito/contract';
 import { requireUser, requireAdmin, HttpError } from '../session';
 import { encryptSecret, decryptSecret } from '../crypto';
-import { agentHealth, agentGetStats } from '../agent/client';
+import { agentHealth, agentGetStats, agentUpdateAllocation, AgentError } from '../agent/client';
 import { signHealthToken } from '../jwt';
-import { createNodeSchema, deleteNodeSchema } from '~/validators/node';
 import {
-  importPluginsSchema,
-  getPluginSchema,
-  createPluginSchema,
-  updatePluginSchema,
-  deletePluginSchema,
-} from '~/validators/plugin';
+  createNodeSchema,
+  deleteNodeSchema,
+  updateNodeSchema,
+  nodeIdSchema,
+  createAllocationsSchema,
+  allocationIdSchema,
+  assignAllocationSchema,
+  parsePortsSpec,
+  PORTS_SPEC_MESSAGE,
+} from '~/validators/node';
+import {
+  importRecipesSchema,
+  getRecipeSchema,
+  createRecipeSchema,
+  updateRecipeSchema,
+  deleteRecipeSchema,
+} from '~/validators/recipe';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
@@ -63,14 +73,16 @@ export const createNodeFn = createServerFn({ method: 'POST' })
     em.persist(node);
     await em.flush();
 
-    // The token is returned ONCE — the admin copies it into the agent
-    // config (AGENT_TOKEN) and it will never be replayable in clear again.
+    // The token is returned ONCE — the admin copies the generated icecube.yml
+    // (below) onto the node and it will never be replayable in clear again.
     return {
       id: node.id,
       name: node.name,
       fqdn: node.fqdn,
       agentPort: node.agentPort,
       agentToken: token,
+      // Panel URL injected into the generated agent config (icecube.yml).
+      panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
     };
   });
 
@@ -95,17 +107,337 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
     return { deleted: true };
   });
 
-// ─── Plugins ───────────────────────────────────────────────────────────────────
+/**
+ * Node detail (Pelican EditNode/ViewNode equivalent): stored fields,
+ * server count, and a LIVE agent version ping (non-fatal — the agent may
+ * be down, that is what the status column is for). The token is NEVER
+ * returned (encrypted at rest, shown once at creation/reset).
+ */
+export const getNodeFn = createServerFn({ method: 'GET' })
+  .validator(nodeIdSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const node = await em.findOne(Node, { id: data.nodeId });
+    if (!node) throw new HttpError(404, 'Node introuvable');
+
+    const serverCount = await em.count(Server, { nodeId: node.id });
+
+    // Live agent version — best effort, never blocks the page.
+    let agentVersion: string | null = null;
+    try {
+      const health = await agentHealth(node);
+      agentVersion = health.version;
+    } catch {
+      agentVersion = null;
+    }
+
+    return {
+      id: node.id,
+      name: node.name,
+      fqdn: node.fqdn,
+      agentPort: node.agentPort,
+      status: node.status,
+      lastSeenAt: node.lastSeenAt,
+      createdAt: node.createdAt,
+      serverCount,
+      agentVersion,
+      // Panel URL for the (re)generated agent configuration.
+      panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
+    };
+  });
+
+/**
+ * Basic settings update (Pelican "basic_settings" tab equivalent).
+ */
+export const updateNodeFn = createServerFn({ method: 'POST' })
+  .validator(updateNodeSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const node = await em.findOne(Node, { id: data.nodeId });
+    if (!node) throw new HttpError(404, 'Node introuvable');
+
+    node.name = data.name;
+    node.fqdn = data.fqdn;
+    node.agentPort = data.agentPort;
+    await em.flush();
+
+    return { updated: true };
+  });
+
+/**
+ * Token reset (Pelican "reset token" action equivalent): generates a NEW
+ * token, stores it encrypted and returns it ONCE — the admin copies the
+ * regenerated icecube.yml and updates the agent's config file.
+ */
+export const resetNodeTokenFn = createServerFn({ method: 'POST' })
+  .validator(nodeIdSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const node = await em.findOne(Node, { id: data.nodeId });
+    if (!node) throw new HttpError(404, 'Node introuvable');
+
+    const token = randomBytes(32).toString('hex');
+    node.agentToken = encryptSecret(token);
+    await em.flush();
+
+    return {
+      agentToken: token,
+      panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
+    };
+  });
+
+// ─── Allocations (admin node pool — Pelican NodeResource "Allocations") ──────
+
+/**
+ * Free allocations of a node — available to any signed-in user (the server
+ * creation form picks from this pool, like Pelican's deployment form).
+ */
+export const listFreeNodeAllocationsFn = createServerFn({ method: 'GET' })
+  .validator(nodeIdSchema)
+  .handler(async ({ data }) => {
+    await requireUser();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+    const free = await em.find(Allocation, { nodeId: data.nodeId, serverId: null });
+    return free
+      .sort((a, b) => a.port - b.port)
+      .map((allocation) => ({
+        id: allocation.id,
+        ip: allocation.ip,
+        port: allocation.port,
+        alias: allocation.alias,
+      }));
+  });
+
+/**
+ * All allocations of a node with their assigned server (null = free),
+ * plus the servers installed on the node (the "assign" picker needs them).
+ */
+export const listNodeAllocationsFn = createServerFn({ method: 'GET' })
+  .validator(nodeIdSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const [allocations, servers] = await Promise.all([
+      em.find(Allocation, { nodeId: data.nodeId }),
+      em.find(Server, { nodeId: data.nodeId }),
+    ]);
+
+    return allocations
+      .sort((a, b) => a.port - b.port)
+      .map((allocation) => ({
+        id: allocation.id,
+        ip: allocation.ip,
+        port: allocation.port,
+        alias: allocation.alias,
+        primary: allocation.primary,
+        serverId: allocation.serverId,
+        serverName:
+          servers.find((s) => s.id === allocation.serverId)?.name ?? null,
+      }));
+  });
+
+/**
+ * Creates allocations on a node from an IP + ports spec ("25565" or
+ * "25570-25575, 25599"). Ports already allocated on that IP are skipped —
+ * the report tells the admin what was created and what was left alone.
+ */
+export const createNodeAllocationsFn = createServerFn({ method: 'POST' })
+  .validator(createAllocationsSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const node = await em.findOne(Node, { id: data.nodeId });
+    if (!node) throw new HttpError(404, 'Node introuvable');
+
+    const ports = parsePortsSpec(data.ports);
+    if (!ports) throw new HttpError(422, PORTS_SPEC_MESSAGE);
+
+    const existing = await em.find(Allocation, { nodeId: data.nodeId, ip: data.ip });
+    const takenPorts = new Set(existing.map((a) => a.port));
+
+    const now = new Date();
+    const alias = data.alias.trim() === '' ? null : data.alias.trim();
+    let created = 0;
+    for (const port of ports) {
+      if (takenPorts.has(port)) continue;
+      em.persist(
+        em.create(Allocation, {
+          id: randomUUID(),
+          nodeId: data.nodeId,
+          serverId: null,
+          ip: data.ip,
+          port,
+          alias,
+          primary: false,
+          createdAt: now,
+        }),
+      );
+      created++;
+    }
+    await em.flush();
+
+    return {
+      created,
+      skipped: ports.length - created,
+    };
+  });
+
+/** Deletes a FREE allocation — an assigned one must be revoked first. */
+export const deleteAllocationFn = createServerFn({ method: 'POST' })
+  .validator(allocationIdSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
+    if (allocation.serverId !== null) {
+      throw new HttpError(409, 'Cette allocation est affectée à un serveur — révoque-la d’abord');
+    }
+
+    em.remove(allocation);
+    await em.flush();
+    return { deleted: true };
+  });
+
+/**
+ * Assigns a free allocation to a server of the same node (Pelican "assign"
+ * action). A server without any primary promotes the newcomer and syncs
+ * the agent cache — otherwise the primary is left untouched.
+ */
+export const assignAllocationFn = createServerFn({ method: 'POST' })
+  .validator(assignAllocationSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
+    if (allocation.serverId !== null) {
+      throw new HttpError(409, 'Cette allocation est déjà affectée à un serveur');
+    }
+
+    const server = await em.findOne(Server, { id: data.serverId });
+    if (!server) throw new HttpError(404, 'Serveur introuvable');
+    if (server.nodeId !== allocation.nodeId) {
+      throw new HttpError(422, 'Ce serveur n’est pas installé sur le node de l’allocation');
+    }
+
+    const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
+      (a) => a.primary,
+    );
+    allocation.serverId = server.id;
+    allocation.primary = !hadPrimary;
+    await em.flush();
+
+    if (!hadPrimary) {
+      const node = await em.findOne(Node, { id: server.nodeId });
+      if (node) {
+        try {
+          await agentUpdateAllocation(node, server.id, {
+            port: allocation.port,
+            ip: allocation.ip,
+          });
+        } catch (err) {
+          if (err instanceof AgentError && err.statusCode === 404) {
+            // tolerated — agent out of sync, DB remains the source of truth
+          } else {
+            if (err instanceof AgentError) {
+              throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
+            }
+            throw err;
+          }
+        }
+      }
+    }
+
+    return { id: allocation.id };
+  });
+
+/**
+ * Revokes an assigned allocation — it returns to the node's free pool
+ * (Pelican "revoke" action). Revoking the primary promotes the first other
+ * allocation of the server and syncs the agent; refusing when it is the
+ * last one keeps every server reachable through a primary allocation.
+ */
+export const revokeAllocationFn = createServerFn({ method: 'POST' })
+  .validator(allocationIdSchema)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation || allocation.serverId === null) {
+      throw new HttpError(404, 'Allocation libre introuvable');
+    }
+
+    const assigned = await em.find(Allocation, { serverId: allocation.serverId });
+    const others = assigned.filter((a) => a.id !== allocation.id).sort((a, b) => a.port - b.port);
+
+    if (allocation.primary && others.length === 0) {
+      throw new HttpError(409, 'Un serveur doit conserver au moins une allocation principale');
+    }
+
+    const wasPrimary = allocation.primary;
+    const server = await em.findOne(Server, { id: allocation.serverId });
+    allocation.serverId = null;
+    allocation.primary = false;
+    let promoted: { port: number; ip: string } | null = null;
+    if (wasPrimary && others.length > 0) {
+      others[0].primary = true;
+      promoted = { port: others[0].port, ip: others[0].ip };
+    }
+    await em.flush();
+
+    if (wasPrimary && promoted && server) {
+      const node = await em.findOne(Node, { id: server.nodeId });
+      if (node) {
+        try {
+          await agentUpdateAllocation(node, server.id, promoted);
+        } catch (err) {
+          if (err instanceof AgentError && err.statusCode === 404) {
+            // tolerated — agent out of sync, DB remains the source of truth
+          } else {
+            if (err instanceof AgentError) {
+              throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
+            }
+            throw err;
+          }
+        }
+      }
+    }
+
+    return { id: allocation.id };
+  });
+
+// ─── Recipes ───────────────────────────────────────────────────────────────────
 
 /** Parses raw JSON and validates it against the contract's v2 schema. */
-function parsePluginJson(raw: string): PluginDefinition {
-  return parsePlugin(JSON.parse(raw));
+function parseRecipeJson(raw: string): RecipeDefinition {
+  return parseRecipe(JSON.parse(raw));
 }
 
 /** Readable error message (ZodError → list of fields in error). */
-function pluginErrorMessage(err: unknown): string {
+function recipeErrorMessage(err: unknown): string {
   if (err instanceof ZodError) {
-    return err.issues.map((i) => `${i.path.join('.') || 'plugin'} : ${i.message}`).join(' · ');
+    return err.issues.map((i) => `${i.path.join('.') || 'recipe'} : ${i.message}`).join(' · ');
   }
   return (err as Error).message;
 }
@@ -114,7 +446,7 @@ function pluginErrorMessage(err: unknown): string {
  * Converts a github.com/…/blob/… URL to raw.githubusercontent.com/…/raw/…
  * (catalog GitHub URLs point to the web page, not the raw file).
  */
-function normalizePluginUrl(url: string): string {
+function normalizeRecipeUrl(url: string): string {
   const parsed = new URL(url);
   if (parsed.hostname === 'github.com' && parsed.pathname.includes('/blob/')) {
     return `https://raw.githubusercontent.com${parsed.pathname.replace('/blob/', '/raw/')}${parsed.search}`;
@@ -122,9 +454,9 @@ function normalizePluginUrl(url: string): string {
   return url;
 }
 
-/** Downloads a plugin's JSON from a URL (.json extension required). */
-async function fetchPluginJsonFromUrl(url: string): Promise<string> {
-  const normalized = normalizePluginUrl(url);
+/** Downloads a recipe's JSON from a URL (.json extension required). */
+async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
+  const normalized = normalizeRecipeUrl(url);
   if (!new URL(normalized).pathname.toLowerCase().endsWith('.json')) {
     throw new HttpError(400, 'Seules les URLs pointant vers un .json sont supportées');
   }
@@ -148,67 +480,67 @@ async function fetchPluginJsonFromUrl(url: string): Promise<string> {
 }
 
 /**
- * Creates the plugin or updates the one with the same slug (upsert —
+ * Creates the recipe or updates the one with the same slug (upsert —
  * a re-import updates the definition, like Pelican eggs).
  */
-async function upsertPlugin(
+async function upsertRecipe(
   em: EntityManager,
-  pluginJson: PluginDefinition,
+  recipeJson: RecipeDefinition,
 ): Promise<{ slug: string; name: string; created: boolean }> {
-  const existing = await em.findOne(Plugin, { slug: pluginJson.id });
+  const existing = await em.findOne(Recipe, { slug: recipeJson.id });
   const now = new Date();
 
   if (existing) {
-    existing.name = pluginJson.name;
-    existing.schemaVersion = pluginJson.schemaVersion;
-    existing.json = pluginJson;
+    existing.name = recipeJson.name;
+    existing.schemaVersion = recipeJson.schemaVersion;
+    existing.json = recipeJson;
     existing.updatedAt = now;
     await em.flush();
     return { slug: existing.slug, name: existing.name, created: false };
   }
 
-  const plugin = em.create(Plugin, {
+  const recipe = em.create(Recipe, {
     id: randomUUID(),
-    slug: pluginJson.id,
-    name: pluginJson.name,
-    schemaVersion: pluginJson.schemaVersion,
-    json: pluginJson,
+    slug: recipeJson.id,
+    name: recipeJson.name,
+    schemaVersion: recipeJson.schemaVersion,
+    json: recipeJson,
     createdAt: now,
     updatedAt: now,
   });
-  em.persist(plugin);
+  em.persist(recipe);
   await em.flush();
-  return { slug: plugin.slug, name: plugin.name, created: true };
+  return { slug: recipe.slug, name: recipe.name, created: true };
 }
 
-export const listPluginsFn = createServerFn({ method: 'GET' }).handler(async () => {
+export const listRecipesFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireUser();
   const orm = await initOrm();
   const em = orm.em.fork();
-  const plugins = await em.find(Plugin, {});
-  return plugins.map((plugin) => {
-    const def = plugin.json as PluginDefinition;
+  const recipes = await em.find(Recipe, {});
+  return recipes.map((recipe) => {
+    const def = recipe.json as RecipeDefinition;
     return {
-      id: plugin.id,
-      slug: plugin.slug,
-      name: plugin.name,
-      schemaVersion: plugin.schemaVersion,
+      id: recipe.id,
+      slug: recipe.slug,
+      name: recipe.name,
+      schemaVersion: recipe.schemaVersion,
       /** Variable definitions (auto-generated form at creation). */
       variables: def.variables ?? [],
-      /** Update URL (re-import) if defined by the plugin. */
+      /** Update URL (re-import) if defined by the recipe. */
       updateUrl: def.updateUrl ?? null,
-      createdAt: plugin.createdAt,
+      createdAt: recipe.createdAt,
     };
   });
 });
 
 /**
- * Batch plugin import: raw JSONs (textarea/files) + URLs.
+ * Batch recipe import: raw JSONs (textarea/files) + URLs.
  * Each source is processed independently — failures do not cancel
- * successes (per-plugin report, like Pelican egg import).
+ * successes (per-recipe report, like Pelican egg import).
  */
-export const importPluginsFn = createServerFn({ method: 'POST' })
-  .validator(importPluginsSchema)
+export const importRecipesFn = createServerFn({ method: 'POST' })
+  .validator(importRecipesSchema)
   .handler(async ({ data }) => {
     await requireAdmin();
     const orm = await initOrm();
@@ -225,133 +557,133 @@ export const importPluginsFn = createServerFn({ method: 'POST' })
     for (const [index, source] of sources.entries()) {
       const label = source.url ?? `JSON #${index + 1}`;
       try {
-        const raw = source.url ? await fetchPluginJsonFromUrl(source.url) : source.raw;
+        const raw = source.url ? await fetchRecipeJsonFromUrl(source.url) : source.raw;
         if (!raw) throw new HttpError(400, 'JSON vide');
-        const pluginJson = parsePluginJson(raw);
-        const saved = await upsertPlugin(em, pluginJson);
+        const recipeJson = parseRecipeJson(raw);
+        const saved = await upsertRecipe(em, recipeJson);
         imported.push({ ...saved, source: label });
       } catch (err) {
-        failed.push({ source: label, error: pluginErrorMessage(err) });
+        failed.push({ source: label, error: recipeErrorMessage(err) });
       }
     }
 
     return { imported, failed };
   });
 
-export const getPluginFn = createServerFn({ method: 'POST' })
-  .validator(getPluginSchema)
+export const getRecipeFn = createServerFn({ method: 'POST' })
+  .validator(getRecipeSchema)
   .handler(async ({ data }) => {
     await requireAdmin();
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const plugin = await em.findOne(Plugin, { id: data.pluginId });
-    if (!plugin) throw new HttpError(404, 'Plugin introuvable');
+    const recipe = await em.findOne(Recipe, { id: data.recipeId });
+    if (!recipe) throw new HttpError(404, 'Recette introuvable');
 
     return {
-      id: plugin.id,
-      slug: plugin.slug,
-      name: plugin.name,
-      schemaVersion: plugin.schemaVersion,
+      id: recipe.id,
+      slug: recipe.slug,
+      name: recipe.name,
+      schemaVersion: recipe.schemaVersion,
       /** Pretty-printed raw JSON — used for editing AND export. */
-      json: JSON.stringify(plugin.json, null, 2),
+      json: JSON.stringify(recipe.json, null, 2),
     };
   });
 
 /**
- * Creates a new plugin from the editor UI (JSON payload validated against
+ * Creates a new recipe from the editor UI (JSON payload validated against
  * the v2 contract). Unlike an import (upsert), a slug clash is REJECTED —
  * the editor shows the conflict instead of silently overwriting.
  */
-export const createPluginFn = createServerFn({ method: 'POST' })
-  .validator(createPluginSchema)
+export const createRecipeFn = createServerFn({ method: 'POST' })
+  .validator(createRecipeSchema)
   .handler(async ({ data }) => {
     await requireAdmin();
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    let pluginJson: PluginDefinition;
+    let recipeJson: RecipeDefinition;
     try {
-      pluginJson = parsePluginJson(data.json);
+      recipeJson = parseRecipeJson(data.json);
     } catch (err) {
-      throw new HttpError(400, `Plugin invalide : ${pluginErrorMessage(err)}`);
+      throw new HttpError(400, `Recipe invalide : ${recipeErrorMessage(err)}`);
     }
 
-    const clash = await em.findOne(Plugin, { slug: pluginJson.id });
+    const clash = await em.findOne(Recipe, { slug: recipeJson.id });
     if (clash) {
-      throw new HttpError(409, `Un plugin avec le slug « ${pluginJson.id} » existe déjà`);
+      throw new HttpError(409, `Une recette avec le slug « ${recipeJson.id} » existe déjà`);
     }
 
     const now = new Date();
-    const plugin = em.create(Plugin, {
+    const recipe = em.create(Recipe, {
       id: randomUUID(),
-      slug: pluginJson.id,
-      name: pluginJson.name,
-      schemaVersion: pluginJson.schemaVersion,
-      json: pluginJson,
+      slug: recipeJson.id,
+      name: recipeJson.name,
+      schemaVersion: recipeJson.schemaVersion,
+      json: recipeJson,
       createdAt: now,
       updatedAt: now,
     });
-    em.persist(plugin);
+    em.persist(recipe);
     await em.flush();
 
-    return { id: plugin.id, slug: plugin.slug, name: plugin.name };
+    return { id: recipe.id, slug: recipe.slug, name: recipe.name };
   });
 
 /**
- * Edits an existing plugin: the full JSON is revalidated against the v2 schema.
+ * Edits an existing recipe: the full JSON is revalidated against the v2 schema.
  * The slug (id) can change — uniqueness is rechecked.
  */
-export const updatePluginFn = createServerFn({ method: 'POST' })
-  .validator(updatePluginSchema)
+export const updateRecipeFn = createServerFn({ method: 'POST' })
+  .validator(updateRecipeSchema)
   .handler(async ({ data }) => {
     await requireAdmin();
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const plugin = await em.findOne(Plugin, { id: data.pluginId });
-    if (!plugin) throw new HttpError(404, 'Plugin introuvable');
+    const recipe = await em.findOne(Recipe, { id: data.recipeId });
+    if (!recipe) throw new HttpError(404, 'Recette introuvable');
 
-    let pluginJson: PluginDefinition;
+    let recipeJson: RecipeDefinition;
     try {
-      pluginJson = parsePluginJson(data.json);
+      recipeJson = parseRecipeJson(data.json);
     } catch (err) {
-      throw new HttpError(400, `Plugin invalide : ${pluginErrorMessage(err)}`);
+      throw new HttpError(400, `Recipe invalide : ${recipeErrorMessage(err)}`);
     }
 
-    if (pluginJson.id !== plugin.slug) {
-      const clash = await em.findOne(Plugin, { slug: pluginJson.id });
+    if (recipeJson.id !== recipe.slug) {
+      const clash = await em.findOne(Recipe, { slug: recipeJson.id });
       if (clash) {
-        throw new HttpError(409, `Un plugin avec le slug « ${pluginJson.id} » existe déjà`);
+        throw new HttpError(409, `Une recette avec le slug « ${recipeJson.id} » existe déjà`);
       }
-      plugin.slug = pluginJson.id;
+      recipe.slug = recipeJson.id;
     }
 
-    plugin.name = pluginJson.name;
-    plugin.schemaVersion = pluginJson.schemaVersion;
-    plugin.json = pluginJson;
-    plugin.updatedAt = new Date();
+    recipe.name = recipeJson.name;
+    recipe.schemaVersion = recipeJson.schemaVersion;
+    recipe.json = recipeJson;
+    recipe.updatedAt = new Date();
     await em.flush();
 
-    return { id: plugin.id, slug: plugin.slug, name: plugin.name };
+    return { id: recipe.id, slug: recipe.slug, name: recipe.name };
   });
 
-export const deletePluginFn = createServerFn({ method: 'POST' })
-  .validator(deletePluginSchema)
+export const deleteRecipeFn = createServerFn({ method: 'POST' })
+  .validator(deleteRecipeSchema)
   .handler(async ({ data }) => {
     await requireAdmin();
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const plugin = await em.findOne(Plugin, { id: data.pluginId });
-    if (!plugin) throw new HttpError(404, 'Plugin introuvable');
+    const recipe = await em.findOne(Recipe, { id: data.recipeId });
+    if (!recipe) throw new HttpError(404, 'Recette introuvable');
 
-    const servers = await em.find(Server, { pluginId: plugin.id });
+    const servers = await em.find(Server, { recipeId: recipe.id });
     if (servers.length > 0) {
-      throw new HttpError(409, `${servers.length} serveur(s) utilisent ce plugin`);
+      throw new HttpError(409, `${servers.length} serveur(s) utilisent cette recette`);
     }
 
-    em.remove(plugin);
+    em.remove(recipe);
     await em.flush();
     return { deleted: true };
   });
@@ -371,17 +703,17 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
   const orm = await initOrm();
   const em = orm.em.fork();
 
-  const [serverCount, nodeCount, userCount, pluginCount] = await Promise.all([
+  const [serverCount, nodeCount, userCount, recipeCount] = await Promise.all([
     em.count(Server),
     em.count(Node),
     em.count(User),
-    em.count(Plugin),
+    em.count(Recipe),
   ]);
 
-  const [servers, nodes, plugins, users] = await Promise.all([
+  const [servers, nodes, recipes, users] = await Promise.all([
     em.find(Server, {}),
     em.find(Node, {}),
-    em.find(Plugin, {}),
+    em.find(Recipe, {}),
     em.find(User, {}),
   ]);
 
@@ -424,7 +756,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
       name: server.name,
       status: server.status,
       nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
-      pluginName: plugins.find((p) => p.id === server.pluginId)?.name ?? '—',
+      recipeName: recipes.find((p) => p.id === server.recipeId)?.name ?? '—',
       ownerEmail: users.find((u) => u.id === server.ownerId)?.email ?? '—',
       createdAt: server.createdAt,
     }));
@@ -436,7 +768,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
       installing: installingCount,
       nodes: nodeCount,
       users: userCount,
-      plugins: pluginCount,
+      recipes: recipeCount,
     },
     nodes: nodeDtos,
     recentServers,

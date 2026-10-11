@@ -9,14 +9,14 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { FieldShell } from './fields';
-import type { PluginForm } from './plugin-editor';
+import type { RecipeForm } from './recipe-editor';
 
 /**
  * Tab « Démarrage » — Pelican's Process Management tab: startup command,
  * graceful stop, readiness detection (config.startup) and log config.
  */
 
-export function ProcessTab({ form }: { form: PluginForm }) {
+export function ProcessTab({ form }: { form: RecipeForm }) {
   return (
     <div className="space-y-6">
       <Card>
@@ -24,7 +24,7 @@ export function ProcessTab({ form }: { form: PluginForm }) {
           <CardTitle>Commande de démarrage</CardTitle>
           <CardDescription>
             Templating {'{{VAR}}'} : variables système &gt; variables du serveur &gt;{' '}
-            defaults du plugin &gt; environnement fixe.
+            defaults de la recette &gt; environnement fixe.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

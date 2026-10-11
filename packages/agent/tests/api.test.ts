@@ -47,19 +47,19 @@ async function waitForInstall(
       }
     }
     if (Date.now() - startedAt > timeoutMs) {
-      throw new Error(`L'installation de ${serverId} n'a pas terminé à temps`);
+      throw new Error(`The install for ${serverId} did not finish in time`);
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 
-const validPlugin = (install: unknown[] = [
+const validRecipe = (install: unknown[] = [
   { action: 'write', file: 'marker.txt', content: 'port={{SERVER_PORT}}' },
 ]) => ({
   schemaVersion: 2,
-  id: 'test-plugin',
+  id: 'test-recipe',
   name: 'Test',
-  author: 'moi',
+  author: 'me',
   variables: [{ env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 }],
   install,
   start: { command: 'echo {{SERVER_PORT}}' },
@@ -78,7 +78,7 @@ describe('Agent API (Fastify)', () => {
   });
 
   describe('GET /health (public)', () => {
-    it('retourne 200 sans token', async () => {
+    it('returns 200 without a token', async () => {
       const res = await app.inject({ method: 'GET', url: '/health' });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -88,13 +88,13 @@ describe('Agent API (Fastify)', () => {
     });
   });
 
-  describe('Authentification Bearer token', () => {
-    it('rejette une requête sans token (401)', async () => {
+  describe('Bearer token authentication', () => {
+    it('rejects a request without a token (401)', async () => {
       const res = await app.inject({ method: 'GET', url: '/servers' });
       expect(res.statusCode).toBe(401);
     });
 
-    it('rejette un mauvais token (401)', async () => {
+    it('rejects a wrong token (401)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/servers',
@@ -103,7 +103,7 @@ describe('Agent API (Fastify)', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('rejette un header mal formé (401)', async () => {
+    it('rejects a malformed header (401)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/servers',
@@ -112,7 +112,7 @@ describe('Agent API (Fastify)', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('accepte le bon token (200)', async () => {
+    it('accepts the correct token (200)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/servers',
@@ -123,8 +123,8 @@ describe('Agent API (Fastify)', () => {
     });
   });
 
-  describe('GET /servers/:serverId (authentifié)', () => {
-    it('retourne 404 pour un serveur inconnu', async () => {
+  describe('GET /servers/:serverId (authenticated)', () => {
+    it('returns 404 for an unknown server', async () => {
       const res = await app.inject({
         method: 'GET',
         url: `/servers/${OTHER_ID}`,
@@ -156,15 +156,15 @@ describe('Agent API — POST /servers/install', () => {
 
   const installBody = (overrides: Record<string, unknown> = {}) => ({
     serverId: SERVER_ID,
-    name: 'mon-serveur',
-    plugin: validPlugin(),
+    name: 'my-server',
+    recipe: validRecipe(),
     variables: {},
     installDir: join(config.dataDir, 'srv'),
     allocation: { port: 25565, memoryMb: 2048 },
     ...overrides,
   });
 
-  it('retourne 401 sans token', async () => {
+  it('returns 401 without a token', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -173,7 +173,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('retourne 400 si la requête est invalide (allocation manquante)', async () => {
+  it('returns 400 when the request is invalid (missing allocation)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -185,25 +185,25 @@ describe('Agent API — POST /servers/install', () => {
     expect(body.error).toBe('Requête invalide');
   });
 
-  it('retourne 400 si le plugin est invalide', async () => {
+  it('returns 400 when the recipe is invalid', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
-      payload: installBody({ plugin: { foo: 'bar' } }),
+      payload: installBody({ recipe: { foo: 'bar' } }),
     });
     expect(res.statusCode).toBe(400);
     const body = res.json();
-    expect(body.error).toBe('Plugin invalide');
+    expect(body.error).toBe('Recette invalide');
   });
 
-  it('retourne 422 (immédiat) si une variable du template est inconnue', async () => {
+  it('returns 422 (immediate) when a template variable is unknown', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody({
-        plugin: validPlugin([
+        recipe: validRecipe([
           { action: 'write', file: 'x.txt', content: '{{UNKNOWN_VAR}}' },
         ]),
       }),
@@ -212,7 +212,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(res.json().error).toContain('UNKNOWN_VAR');
   });
 
-  it('démarre l’installation en arrière-plan (202) puis l’exécute', async () => {
+  it('starts the install in the background (202) then runs it', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
@@ -241,13 +241,13 @@ describe('Agent API — POST /servers/install', () => {
     expect(logText).toContain('Installation terminée');
   });
 
-  it('enregistre la sortie des commandes (stdout) dans les logs d’installation', async () => {
+  it('records command output (stdout) in the install logs', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody({
-        plugin: validPlugin([
+        recipe: validRecipe([
           { action: 'command', command: 'echo mojito-install-output' },
         ]),
       }),
@@ -258,20 +258,20 @@ describe('Agent API — POST /servers/install', () => {
     expect(status.status).toBe('installed');
     const logText = status.logs.map((l) => l.message).join('\n');
     expect(logText).toContain('mojito-install-output');
-    // Étapes = niveau 'step' (jaune dans le panel), sortie de commande = 'info' (gris)
+    // Steps = 'step' level (yellow in the panel), command output = 'info' (grey)
     const stepLine = status.logs.find((l) => l.message.startsWith('Étape 1/1'));
     expect(stepLine?.level).toBe('step');
     const outputLine = status.logs.find((l) => l.message === 'mojito-install-output');
     expect(outputLine?.level).toBe('info');
   });
 
-  it('échoue en arrière-plan si une étape du runner échoue (status failed)', async () => {
+  it('fails in the background when a runner step fails (failed status)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody({
-        plugin: validPlugin([
+        recipe: validRecipe([
           { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
         ]),
       }),
@@ -284,7 +284,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(status.error).toContain('Étape 1');
   });
 
-  it('après install : GET 200 stopped, action 404/400, command 409 sans process', async () => {
+  it('after install: GET 200 stopped, action 404/400, command 409 without a process', async () => {
     // Install a valid server and wait for completion
     const install = await app.inject({
       method: 'POST',
@@ -338,7 +338,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(ids).toContain(SERVER_ID);
   });
 
-  it('DELETE : 404 inconnu, supprime store + dossier, GET → 404 ensuite', async () => {
+  it('DELETE: 404 for unknown, removes store + folder, GET → 404 afterwards', async () => {
     const { access } = await import('node:fs/promises');
 
     // DELETE on an unknown server → 404
@@ -389,15 +389,15 @@ describe('Agent API — POST /servers/install', () => {
     expect(again.statusCode).toBe(404);
   });
 
-  it('DELETE : 409 si le process tourne, 200 après kill', async () => {
+  it('DELETE: 409 while the process runs, 200 after kill', async () => {
     // Install a server with a long-running process
     const install = await app.inject({
       method: 'POST',
       url: '/servers/install',
       headers: auth,
       payload: installBody({
-        plugin: {
-          ...validPlugin(),
+        recipe: {
+          ...validRecipe(),
           start: { command: `"${process.execPath}" -e "setInterval(() => {}, 1000);"` },
         },
       }),
@@ -441,7 +441,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(del.json().removed).toBe(true);
   });
 
-  it('GET /servers/:id/logs : 404 inconnu, lignes incrémentales après install', async () => {
+  it('GET /servers/:id/logs: 404 for unknown, incremental lines after install', async () => {
     // Unknown server → 404
     const unknown = await app.inject({
       method: 'GET',
@@ -472,7 +472,7 @@ describe('Agent API — POST /servers/install', () => {
     expect(logs.json().status).toBe('stopped');
   });
 
-  it('installDir relatif est résolu sous le dataDir de l agent', async () => {
+  it('a relative installDir is resolved under the agent dataDir', async () => {
     // A relative "rel-check" installDir must land under config.dataDir
     const install = await app.inject({
       method: 'POST',
@@ -503,11 +503,11 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
   let app: FastifyInstance;
   const auth = { authorization: `Bearer ${TEST_TOKEN}` };
 
-  const pluginWithContent = (content: string) => ({
+  const recipeWithContent = (content: string) => ({
     schemaVersion: 2,
-    id: 'test-plugin',
+    id: 'test-recipe',
     name: 'Test',
-    author: 'moi',
+    author: 'me',
     variables: [{ env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 }],
     install: [{ action: 'write', file: 'marker.txt', content }],
     start: { command: 'echo {{SERVER_PORT}}' },
@@ -515,15 +515,15 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
 
   const installBody = (content: string) => ({
     serverId: SERVER_ID,
-    name: 'mon-serveur',
-    plugin: pluginWithContent(content),
+    name: 'my-server',
+    recipe: recipeWithContent(content),
     variables: {},
     installDir: join(config.dataDir, 'srv'),
     allocation: { port: 25565, memoryMb: 2048 },
   });
 
   const reinstallBody = (overrides: Record<string, unknown> = {}) => ({
-    plugin: pluginWithContent('reinstalled-port={{SERVER_PORT}}'),
+    recipe: recipeWithContent('reinstalled-port={{SERVER_PORT}}'),
     variables: {},
     ...overrides,
   });
@@ -539,7 +539,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     await app.close();
   });
 
-  it('retourne 401 sans token', async () => {
+  it('returns 401 without a token', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/reinstall`,
@@ -548,7 +548,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('retourne 404 pour un serveur inconnu', async () => {
+  it('returns 404 for an unknown server', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${OTHER_ID}/reinstall`,
@@ -559,7 +559,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     expect(res.json().code).toBe('not_found');
   });
 
-  it('retourne 400 si le plugin est invalide', async () => {
+  it('returns 400 when the recipe is invalid', async () => {
     // Install first so the server is known (404 would mask the 400)
     const install = await app.inject({
       method: 'POST',
@@ -574,13 +574,13 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
       method: 'POST',
       url: `/servers/${SERVER_ID}/reinstall`,
       headers: auth,
-      payload: reinstallBody({ plugin: { foo: 'bar' } }),
+      payload: reinstallBody({ recipe: { foo: 'bar' } }),
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe('Plugin invalide');
+    expect(res.json().error).toBe('Recette invalide');
   });
 
-  it('réinstalle en arrière-plan : relance le runner, statut installing puis stopped', async () => {
+  it('reinstalls in the background: re-runs the runner, installing status then stopped', async () => {
     // Install v1 → marker = port=25565
     const install = await app.inject({
       method: 'POST',
@@ -595,7 +595,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     const markerPath = join(config.dataDir, 'srv', 'marker.txt');
     expect(await readFile(markerPath, 'utf-8')).toBe('port=25565');
 
-    // Reinstall with a NEW plugin version (different install content) — 202,
+    // Reinstall with a NEW recipe version (different install content) — 202,
     // the runner re-runs in the background
     const res = await app.inject({
       method: 'POST',
@@ -612,7 +612,7 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     // The runner re-ran in the SAME installDir with the STORED allocation
     expect(await readFile(markerPath, 'utf-8')).toBe('reinstalled-port=25565');
 
-    // The store kept the server (with the updated plugin)
+    // The store kept the server (with the updated recipe)
     const info = await app.inject({
       method: 'GET',
       url: `/servers/${SERVER_ID}`,
@@ -622,14 +622,14 @@ describe('Agent API — POST /servers/:serverId/reinstall', () => {
     expect(info.json().status).toBe('stopped');
   });
 
-  it('échoue en arrière-plan si une étape du runner échoue (store inchangé)', async () => {
+  it('fails in the background when a runner step fails (store unchanged)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/reinstall`,
       headers: auth,
       payload: reinstallBody({
-        plugin: {
-          ...pluginWithContent('x'),
+        recipe: {
+          ...recipeWithContent('x'),
           install: [
             { action: 'download', url: 'http://127.0.0.1:1/missing.bin', dest: 'x.bin' },
           ],
@@ -658,11 +658,11 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
   let app: FastifyInstance;
   const auth = { authorization: `Bearer ${TEST_TOKEN}` };
 
-  const varsPlugin = () => ({
+  const varsRecipe = () => ({
     schemaVersion: 2,
-    id: 'vars-plugin',
+    id: 'vars-recipe',
     name: 'Vars',
-    author: 'moi',
+    author: 'me',
     variables: [
       { env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 },
       {
@@ -689,7 +689,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
       payload: {
         serverId: VARS_ID,
         name: 'vars-server',
-        plugin: varsPlugin(),
+        recipe: varsRecipe(),
         variables: { RAM_MB: 2048 },
         installDir: join(config.dataDir, 'vars-srv'),
         allocation: { port: 25566, memoryMb: 2048 },
@@ -704,7 +704,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     await app.close();
   });
 
-  it('retourne 401 sans token', async () => {
+  it('returns 401 without a token', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${VARS_ID}/variables`,
@@ -713,7 +713,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('retourne 404 pour un serveur inconnu', async () => {
+  it('returns 404 for an unknown server', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${OTHER_ID}/variables`,
@@ -723,7 +723,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('retourne 400 si la requête est invalide', async () => {
+  it('returns 400 when the request is invalid', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${VARS_ID}/variables`,
@@ -734,7 +734,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     expect(res.json().error).toBe('Requête invalide');
   });
 
-  it('retourne 422 si une valeur viole les règles du plugin', async () => {
+  it('returns 422 when a value violates the recipe rules', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${VARS_ID}/variables`,
@@ -745,7 +745,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     expect(res.json().error).toContain('RAM');
   });
 
-  it('retourne 422 si une valeur ne respecte pas la regex du plugin', async () => {
+  it('returns 422 when a value does not match the recipe regex', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${VARS_ID}/variables`,
@@ -756,7 +756,7 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     expect(res.json().error).toContain('Version');
   });
 
-  it('met à jour la variable demandée et préserve les autres (fusion)', async () => {
+  it('updates the requested variable and preserves the others (merge)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: `/servers/${VARS_ID}/variables`,
@@ -769,5 +769,94 @@ describe('Agent API — POST /servers/:serverId/variables', () => {
     // The untouched override survives, the edited one is applied
     expect(body.variables.RAM_MB).toBe(2048);
     expect(body.variables.GAME_VERSION).toBe('1.20.4');
+  });
+});
+
+// ─── POST /servers/:serverId/allocation route (panel "Network" page) ─────────
+
+describe('Agent API — POST /servers/:serverId/allocation', () => {
+  const ALLOC_ID = '880e8400-e29b-41d4-a716-446655440000';
+  let app: FastifyInstance;
+  const auth = { authorization: `Bearer ${TEST_TOKEN}` };
+
+  const allocRecipe = () => ({
+    schemaVersion: 2,
+    id: 'alloc-recipe',
+    name: 'Alloc',
+    author: 'me',
+    variables: [],
+    install: [{ action: 'write', file: 'marker.txt', content: 'p={{SERVER_PORT}}' }],
+    start: { command: 'echo {{SERVER_PORT}}' },
+  });
+
+  beforeAll(async () => {
+    app = createAgentServer(config);
+    await app.ready();
+
+    // Install a server with a primary allocation
+    const res = await app.inject({
+      method: 'POST',
+      url: '/servers/install',
+      headers: auth,
+      payload: {
+        serverId: ALLOC_ID,
+        name: 'alloc-server',
+        recipe: allocRecipe(),
+        variables: {},
+        installDir: join(config.dataDir, 'alloc-srv'),
+        allocation: { port: 25570, memoryMb: 4096, ip: '10.0.0.5' },
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    const status = await waitForInstall(app, ALLOC_ID, auth);
+    expect(status.status).toBe('installed');
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('returns 401 without a token', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${ALLOC_ID}/allocation`,
+      payload: { allocation: { port: 25571, ip: '10.0.0.5' } },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 404 for an unknown server', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${OTHER_ID}/allocation`,
+      headers: auth,
+      payload: { allocation: { port: 25571, ip: '10.0.0.5' } },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 400 when the request is invalid', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${ALLOC_ID}/allocation`,
+      headers: auth,
+      payload: { allocation: { port: 'not-a-port' } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('Requête invalide');
+  });
+
+  it('updates port/ip and preserves memory (merge)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/servers/${ALLOC_ID}/allocation`,
+      headers: auth,
+      payload: { allocation: { port: 25580, ip: '10.0.0.9' } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.serverId).toBe(ALLOC_ID);
+    // The new primary port/ip is applied, the memory limit survives
+    expect(body.allocation).toEqual({ port: 25580, memoryMb: 4096, ip: '10.0.0.9' });
   });
 });

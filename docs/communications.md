@@ -1,34 +1,34 @@
-# Communications Panel ↔ Agent ↔ Client web
+# Panel ↔ Agent ↔ Web client communications
 
-> Référence des flux de communication entre les trois acteurs du système.
-> Les schémas Zod partagés (`@mojito/contract`) font foi : ce document décrit
-> les *workflows*, pas les types exacts (voir `packages/contract/src/api.ts`).
+> Reference for the communication flows between the three actors of the system.
+> The shared Zod schemas (`@mojito/contract`) are authoritative: this document describes
+> the *workflows*, not the exact types (see `packages/contract/src/api.ts`).
 
-## Acteurs
+## Actors
 
-| Acteur | Rôle |
+| Actor | Role |
 |---|---|
-| **Client web** (navigateur) | React 19 + TanStack Router/Query. Ne parle JAMAIS directement au panel pour les actions serveur : il appelle des *server functions* TanStack Start (SSR-aware), ou l'agent en direct pour la console (JWT court). |
-| **Panel** (`@mojito/panel`) | TanStack Start (SSR Node). Seul détenteur de la DB (Postgres/MikroORM) et des sessions (better-auth). Parle à l'agent en HTTP `Bearer <token du node>` (token chiffré AES-256-GCM au repos). |
-| **Agent** (`@mojito/agent`) | Fastify, 1 par machine. Daemon générique : exécute le runner d'installation des plugins, gère les process de jeu, expose la console WS. Ne connaît ni les joueurs ni la DB. |
+| **Web client** (browser) | React 19 + TanStack Router/Query. NEVER talks to game servers directly: it calls TanStack Start *server functions* (SSR-aware), or the agent directly for the console (short-lived JWT). |
+| **Panel** (`@mojito/panel`) | TanStack Start (Node SSR). Sole owner of the DB (Postgres/MikroORM) and of sessions (better-auth). Talks to the agent over HTTP `Bearer <node token>` (token encrypted AES-256-GCM at rest). |
+| **Agent** (`@mojito/agent`) | Fastify, 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB. |
 
 ```mermaid
 graph LR
-    subgraph Navigateur
-        UI[Client React<br/>TanStack Query]
+    subgraph Browser
+        UI[React client<br/>TanStack Query]
     end
     subgraph Panel
         SFN[Server functions<br/>TanStack Start]
         AUTH[better-auth<br/>sessions]
         ORM[MikroORM / Postgres]
-        AGENTC[Client agent<br/>Bearer + fetch]
-        JWT[Signature JWT console<br/>HS256 = token du node]
+        AGENTC[Agent client<br/>Bearer + fetch]
+        JWT[Console JWT signing<br/>HS256 = node token]
     end
-    subgraph "Machine de jeu (node)"
-        AG[Agent Fastify]
-        RUN[Runner d'installation]
-        PROC[Process serveur de jeu]
-        REG[(Registry d'installation)]
+    subgraph "Game machine (node)"
+        AG[Fastify agent]
+        RUN[Installation runner]
+        PROC[Game server process]
+        REG[(Installation registry)]
         STORE[(servers.json)]
     end
 
@@ -37,183 +37,183 @@ graph LR
     SFN <--> ORM
     SFN <--> AGENTC
     AGENTC -- "HTTP Bearer" --> AG
-    UI -- "WS direct (JWT console)" --> AG
+    UI -- "direct WS (console JWT)" --> AG
     AG <--> RUN
     AG <--> PROC
     RUN --> REG
     AG <--> STORE
 ```
 
-**Règles d'or**
-- Le panel ne touche jamais aux serveurs de jeu : tout passe par l'agent.
-- Le client ne parle à l'agent QUE via la console WS, avec un JWT court signé par le panel avec le token du node (secret partagé panel ↔ agent, 1 par node — style Pelican).
-- Le token d'agent n'est jamais loggé, ni envoyé au navigateur.
+**Golden rules**
+- The panel never touches game servers: everything goes through the agent.
+- The client talks to the agent ONLY via the WS console, with a short-lived JWT signed by the panel using the node token (panel ↔ agent shared secret, 1 per node — Pelican style).
+- The agent token is never logged, nor sent to the browser.
 
 ---
 
-## 1. Authentification (session SSR)
+## 1. Authentication (SSR session)
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur
+    participant N as Browser
     participant P as Panel (__root beforeLoad)
     participant D as Postgres
 
-    N->>P: GET /servers (cookie de session)
+    N->>P: GET /servers (session cookie)
     P->>D: queryClient.fetchQuery(['auth'])
-    P-->>N: session SSR (user dans le contexte du routeur)
-    Note over N,P: TanStack Query cache la session 60 s (staleTime)
-    N->>N: beforeLoad du layout : pas de user → redirect /login
+    P-->>N: SSR session (user in the router context)
+    Note over N,P: TanStack Query caches the session for 60 s (staleTime)
+    N->>N: layout beforeLoad: no user → redirect /login
 ```
 
 - Login/register/signOut → `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
-- Garde d'accès : `_app` (connecté), `admin/route.tsx` (rôle admin), `servers/$serverId/route.tsx` (connecté) — la propriété du serveur est vérifiée côté **server function** (`loadOwnedServer`), pas dans le routeur.
+- Access guards: `_app` (logged in), `admin/route.tsx` (admin role), `servers/$serverId/route.tsx` (logged in) — server ownership is verified on the **server function** side (`loadOwnedServer`), not in the router.
 
 ---
 
-## 2. Création + installation d'un serveur (async, suivi en direct)
+## 2. Server creation + installation (async, live tracking)
 
-L'installation peut durer des minutes (JDK, JAR Mojang…). Elle démarre en **arrière-plan** côté agent, et le navigateur suit la progression étape par étape.
+Installation can take minutes (JDK, Mojang JAR…). It starts in the **background** on the agent side, and the browser tracks progress step by step.
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur (/servers/new)
+    participant N as Browser (/servers/new)
     participant P as Panel (installServerFn)
     participant D as Postgres
     participant A as Agent (POST /servers/install)
     participant R as Runner + Registry
 
-    N->>P: POST installServerFn {name, nodeId, pluginId, port, memoryMb, variables}
+    N->>P: POST installServerFn {name, nodeId, recipeId, allocationId, memoryMb, variables}
     P->>D: INSERT server (status: installing) + allocation
-    P->>A: POST /servers/install {serverId, plugin, variables, installDir, allocation}
-    A->>A: Validation synchrone (Zod : requête, plugin, variables)
-    alt requête/plugin invalide
-        A-->>P: 400 / 422 (détail)
+    P->>A: POST /servers/install {serverId, recipe, variables, installDir, allocation}
+    A->>A: Synchronous validation (Zod: request, recipe, variables)
+    alt invalid request/recipe
+        A-->>P: 400 / 422 (detail)
         P->>D: DELETE server + allocation (rollback)
-        P-->>N: erreur HttpError
-    else accepté
+        P-->>N: HttpError
+    else accepted
         A-->>P: 202 { status: "installing" }
         P-->>N: { id } → redirect /servers/$serverId/console
-        A->>R: startTrackedInstall (arrière-plan)
-        R->>R: étape 1..N : téléchargements, scripts, écritures…
-        R->>R: Registry : chaque étape + sortie des commandes STREAMÉE ligne par ligne
-        Note over N,A: L'installation streame sur la console WS<br/>(mêmes socket/JWT que les logs runtime)
-        loop WS direct (console)
-            A-->>N: { type: "install-status", step, percent, error } (bannière)
-            A-->>N: { type: "install-log", lines[] } (étapes=jaune, sortie=gris, erreurs=rouge)
+        A->>R: startTrackedInstall (background)
+        R->>R: step 1..N: downloads, scripts, writes…
+        R->>R: Registry: each step + command output STREAMED line by line
+        Note over N,A: Installation streams on the WS console<br/>(same socket/JWT as runtime logs)
+        loop direct WS (console)
+            A-->>N: { type: "install-status", step, percent, error } (banner)
+            A-->>N: { type: "install-log", lines[] } (steps=yellow, output=gray, errors=red)
         end
-        R->>A: store.save(servers.json) si succès
-        R-->>A: Registry: status "installed" (+ "failed", erreur à l'étape X sinon)
-        N->>N: install-status terminal → getInstallStatusFn UNE FOIS (sync DB)<br/>→ invalidate ['server'] → console normale
-        Note over N: en cas d'échec : bannière rouge + bouton « Réessayer »<br/>(retryInstallFn relance le même serverId)
+        R->>A: store.save(servers.json) on success
+        R-->>A: Registry: status "installed" (+ "failed", error at step X otherwise)
+        N->>N: terminal install-status → getInstallStatusFn ONCE (DB sync)<br/>→ invalidate ['server'] → normal console
+        Note over N: on failure: red banner + « Réessayer » button<br/>(retryInstallFn relaunches the same serverId)
     end
 ```
 
-**Points clés**
-- Le panel persiste **avant** d'appeler l'agent : l'utilisateur est redirigé immédiatement vers la console du serveur.
-- La validation rapide (variables inconnues/invalides) est refusée **avant** le 202 → le formulaire affiche l'erreur et les lignes DB sont retirées.
-- Un échec du runner (téléchargement 404, script en erreur…) n'est PAS une erreur HTTP : il apparaît dans le statut d'installation (`failed` + `error`), le store n'est pas modifié, la DB passe `install_failed`.
-- **Pas de polling** en chemin nominal : les étapes et la sortie des commandes sont poussées par l'agent sur le socket console (`install-status` + `install-log`). `getInstallStatusFn` n'est appelé qu'**une fois** à la fin (statut terminal) pour synchroniser la DB (`installing → stopped / install_failed`).
-- **Fallback** : si le WS n'est pas utilisable (proxy sans WS, origine refusée…), la page retombe sur le polling `GET /servers/:serverId/install` (panneau d'installation dédié).
-- Logs d'installation (registry, en mémoire côté agent) : niveaux `step` (jaune), `info` (gris), `error` (rouge) ; la sortie des commandes est streamée **au fil de l'eau** — les réécritures `\r` (barres de progression type steamcmd) remplacent la ligne précédente au lieu de s'empiler, les lignes identiques consécutives sont fusionnées ; plafond 2000 lignes (dernières conservées).
-- **Outils muets sur un pipe** : certains programmes console (steamcmd) n'impriment leur progression que sur un vrai terminal — sur un pipe ils restent silencieux. Une action `command` peut déclarer `tail` (`file` + `filter` regex + `intervalMs`) : l'agent tail le log écrit pendant l'exécution (ex : `logs/content_log.txt` de steamcmd) et streame les nouvelles lignes en direct.
-- Une action `command` peut déclarer `successCodes` (codes de sortie traités comme succès) — steamcmd sort avec le code 7 après son auto-update (`Update complete, launching...`) alors que le job a réussi.
-- Les logs d'installation vivent dans la mémoire de l'agent (registry) : perdus si l'agent redémarre, le statut DB reste `install_failed` avec bouton *Réessayer*. À la (re)connexion WS, une installation **en cours ou échouée** est rejouée (`install-log` + `reset`), une installation terminée ne l'est pas.
+**Key points**
+- The panel persists **before** calling the agent: the user is immediately redirected to the server console.
+- Fast validation (unknown/invalid variables) is rejected **before** the 202 → the form displays the error and the DB rows are removed.
+- A runner failure (404 download, failing script…) is NOT an HTTP error: it shows up in the installation status (`failed` + `error`), the store is not modified, the DB switches to `install_failed`.
+- **No polling** on the happy path: steps and command output are pushed by the agent on the console socket (`install-status` + `install-log`). `getInstallStatusFn` is called only **once** at the end (terminal status) to synchronize the DB (`installing → stopped / install_failed`).
+- **Fallback**: if WS is not usable (proxy without WS, refused origin…), the page falls back to polling `GET /servers/:serverId/install` (dedicated installation panel).
+- Installation logs (registry, in memory on the agent side): levels `step` (yellow), `info` (gray), `error` (red); command output is streamed **as it comes** — `\r` rewrites (progress bars like steamcmd's) replace the previous line instead of stacking up, consecutive identical lines are merged; 2000-line cap (latest kept).
+- **Tools silent on a pipe**: some console programs (steamcmd) print their progress only on a real terminal — on a pipe they stay silent. A `command` action can declare `tail` (`file` + regex `filter` + `intervalMs`): the agent tails the log file written during execution (e.g. steamcmd's `logs/content_log.txt`) and streams the new lines live.
+- A `command` action can declare `successCodes` (exit codes treated as success) — steamcmd exits with code 7 after its self-update (`Update complete, launching...`) even though the job succeeded.
+- Installation logs live in the agent's memory (registry): lost if the agent restarts, the DB status stays `install_failed` with the *Réessayer* button. On WS (re)connection, an **in-progress or failed** installation is replayed (`install-log` + `reset`), a finished installation is not.
 
 ---
 
-## 3. Console temps réel (navigateur ↔ agent en direct)
+## 3. Real-time console (browser ↔ agent direct)
 
-Deux modes : WS direct (chemin nominal) ou polling via le panel (fallback si WS impossible).
+Two modes: direct WS (happy path) or polling via the panel (fallback if WS impossible).
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur (XtermConsole)
+    participant N as Browser (XtermConsole)
     participant P as Panel (createConsoleTokenFn)
     participant A as Agent (WS /servers/:id/ws)
 
     N->>P: POST createConsoleTokenFn(serverId)
-    P->>P: signConsoleToken (JWT HS256, clé = token du node, TTL 300 s)
+    P->>P: signConsoleToken (HS256 JWT, key = node token, TTL 300 s)
     P-->>N: { token, wsUrl }
-    N->>A: WebSocket ouvert (SANS auth dans l'URL)
+    N->>A: WebSocket open (NO auth in the URL)
     N->>A: { type: "auth", token }
-    A->>A: vérifie signature, aud, scope, exp, serverId, permissions
+    A->>A: checks signature, aud, scope, exp, serverId, permissions
     A-->>N: { type: "auth-ok" }
-    A-->>N: { type: "log", lines[] } (streaming live)
+    A-->>N: { type: "log", lines[] } (live streaming)
     A-->>N: { type: "status", status } (running/stopped/crashed)
-    opt installation en cours ou échouée (dernière connue)
-        A-->>N: { type: "install-status", ... } + { type: "install-log", lines[], reset: true } (rejeu du trail)
+    opt installation in progress or failed (last known)
+        A-->>N: { type: "install-status", ... } + { type: "install-log", lines[], reset: true } (trail replay)
     end
 
-    Note over N,A: Commandes et actions power en direct
-    N->>A: { type: "command", command: "stop" } (stdin du process)
+    Note over N,A: Commands and power actions in real time
+    N->>A: { type: "command", command: "stop" } (process stdin)
     N->>A: { type: "power", action: "restart" }
 
-    Note over N,A: Installation = même socket : étapes et sortie poussées en direct
-    A-->>N: { type: "install-status", status, step, percent, error } (bannière)
-    A-->>N: { type: "install-log", lines[], replace } (logs, progress \r en place)
+    Note over N,A: Installation = same socket: steps and output pushed live
+    A-->>N: { type: "install-status", status, step, percent, error } (banner)
+    A-->>N: { type: "install-log", lines[], replace } (logs, in-place \r progress)
 
-    Note over N,A: Refresh du token AVANT expiration (re-auth sans reconnexion)
-    N->>P: POST createConsoleTokenFn (nouveau JWT)
+    Note over N,A: Token refresh BEFORE expiry (re-auth without reconnecting)
+    N->>P: POST createConsoleTokenFn (new JWT)
     N->>A: { type: "auth", token }
     A-->>N: { type: "auth-ok" }
 ```
 
-**Fallback polling** (WS indisponible : proxy sans WS, agent vieux, origine refusée — 3 tentatives max) :
+**Polling fallback** (WS unavailable: proxy without WS, old agent, refused origin — 3 attempts max):
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur
+    participant N as Browser
     participant P as Panel (getServerLogsFn)
     participant A as Agent
 
-    loop polling incrémental
+    loop incremental polling
         N->>P: GET getServerLogsFn(serverId, after=N)
         P->>A: GET /servers/:serverId/logs?after=N (Bearer)
         A-->>P: { lines[], next, status }
-        P-->>N: lignes ajoutées au terminal (curseur next)
+        P-->>N: lines appended to the terminal (cursor next)
     end
 ```
 
-En mode dégradé, une installation en cours bascule aussi sur le polling : le panneau d'installation dédié (`getInstallStatusFn` → `GET /servers/:serverId/install`) remplace la console.
+In degraded mode, an in-progress installation also switches to polling: the dedicated installation panel (`getInstallStatusFn` → `GET /servers/:serverId/install`) replaces the console.
 
-**Sécurité console**
-- JWT court (300 s), rafraîchi par re-`auth` — jamais de token dans l'URL/query string.
-- `scope: websocket`, `serverId` verrouillé sur le paramètre de route WS.
-- Chaque message est re-vérifié (permissions + expiration) ; l'agent peut rate-limiter (`error: rate-limited`).
-- L'origine du navigateur est vérifiée par l'agent (`allowedOrigins`).
+**Console security**
+- Short-lived JWT (300 s), refreshed via re-`auth` — never a token in the URL/query string.
+- `scope: websocket`, `serverId` locked to the WS route parameter.
+- Every message is re-checked (permissions + expiry); the agent can rate-limit (`error: rate-limited`).
+- The browser origin is checked by the agent (`allowedOrigins`).
 
 ---
 
-## 4. Actions power & commandes (chemin panel)
+## 4. Power actions & commands (panel path)
 
-Quand le WS direct n'est pas actif, les actions passent par des server functions (même validation de propriétaire côté panel, même Bearer côté agent) :
+When direct WS is not active, actions go through server functions (same owner validation on the panel side, same Bearer on the agent side):
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur
+    participant N as Browser
     participant P as Panel (serverActionFn / sendCommandFn)
     participant A as Agent
 
     N->>P: POST serverActionFn { serverId, action: start|stop|restart|kill }
-    P->>P: loadOwnedServer (propriétaire ou admin)
+    P->>P: loadOwnedServer (owner or admin)
     P->>A: POST /servers/:serverId/action { action } (Bearer)
-    A-->>P: { status } (sync DB)
+    A-->>P: { status } (DB sync)
     P-->>N: { action, status }
     N->>N: invalidate ['server', serverId]
 ```
 
-`kill` force-passe le verrou du serveur (un process coincé reste tuable, comme wings). Les erreurs agent sont mappées : `not_found` → 404, conflit d'état → 409.
+`kill` force-bypasses the server lock (a stuck process stays killable, like wings). Agent errors are mapped: `not_found` → 404, state conflict → 409.
 
 ---
 
-## 5. Réinstallation (Paramètres → console)
+## 5. Reinstallation (Settings → console)
 
-Même runner que l'installation, mais **en place** : arrêt du serveur, dossier et allocation conservés, plugin **à jour** envoyé par le panel.
+Same runner as installation, but **in place**: server stopped, directory and allocation kept, **up-to-date** recipe sent by the panel.
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur (Paramètres)
+    participant N as Browser (Settings)
     participant P as Panel (reinstallServerFn)
     participant D as Postgres
     participant A as Agent
@@ -221,109 +221,110 @@ sequenceDiagram
 
     N->>N: confirm() (« fichiers peuvent être supprimés… »)
     N->>P: POST reinstallServerFn(serverId)
-    P->>D: SELECT server, plugin (JSON à jour), variables
-    P->>A: POST /servers/:serverId/reinstall { plugin, variables }
-    A->>A: validation Zod + serveur connu + pas d'install en cours
+    P->>D: SELECT server, recipe (up-to-date JSON), variables
+    P->>A: POST /servers/:serverId/reinstall { recipe, variables }
+    A->>A: Zod validation + known server + no install in progress
     A-->>P: 202 { status: "installing" }
     P->>D: UPDATE server.status = installing
-    P-->>N: redirect → console (panneau d'installation)
-    A->>R: arrière-plan : STOP du process si running, puis runner
-    Note over N,R: Le suivi est identique au flux d'installation<br/>(console WS : install-status + install-log, cf. §2)
-    R->>A: store.save (plugin/variables mis à jour) si succès
+    P-->>N: redirect → console (installation panel)
+    A->>R: background: STOP the process if running, then runner
+    Note over N,R: Tracking is identical to the installation flow<br/>(WS console: install-status + install-log, see §2)
+    R->>A: store.save (recipe/variables updated) on success
 ```
 
-**Serveur inconnu côté agent** — le store de l'agent (`servers.json`) n'est écrit qu'en cas de **succès** d'installation. Une installation échouée (ou un dataDir agent perdu) laisse donc la DB panel et le store agent désynchronisés, et `/reinstall` répond 404. Le panel gère ce cas : sur 404, `reinstallServerFn` retombe sur une **installation complète** (`POST /servers/install`) reconstruite depuis la DB (plugin courant, variables, allocation, `installDir` = `servers/<uuid>`).
+**Unknown server on the agent side** — the agent's store (`servers.json`) is written only on installation **success**. A failed installation (or a lost agent dataDir) therefore leaves the panel DB and the agent store out of sync, and `/reinstall` answers 404. The panel handles this case: on 404, `reinstallServerFn` falls back to a **full installation** (`POST /servers/install`) rebuilt from the DB (current recipe, variables, allocation, `installDir` = `servers/<uuid>`).
 
 ---
 
-## 6. Édition des variables (page Variables)
+## 6. Variable editing (Variables page)
 
-La page `/servers/$serverId/variables` (ex-« Démarrage ») édite les variables du plugin
-après l'installation. La **DB panel est la source de vérité** (colonne `server.variables`) ;
-l'agent ne garde qu'un **cache** (`servers.json`) utilisé au start. Comme wings tire sa
-config du panel à chaque démarrage alors que l'agent mojito ne peut pas appeler le panel
-(pas de credentials), c'est le panel qui **pousse** la sync au moment de la sauvegarde —
-indispensable aussi parce qu'un start peut être déclenché directement par le navigateur
-via le WS console, sans passer par le panel.
+The `/servers/$serverId/variables` page (formerly "Startup") edits the recipe variables
+after installation. The **panel DB is the source of truth** (`server.variables` column);
+the agent only keeps a **cache** (`servers.json`) used at start. While wings pulls its
+config from the panel on every boot, the mojito agent cannot call the panel
+(no credentials), so the panel **pushes** the sync at save time — this is also
+essential because a start can be triggered directly by the browser
+via the WS console, without going through the panel.
 
 ```mermaid
 sequenceDiagram
-    participant N as Navigateur (Variables)
+    participant N as Browser (Variables)
     participant P as Panel (updateServerVariablesFn)
     participant D as Postgres
     participant A as Agent (POST /variables)
 
-    N->>P: POST updateServerVariablesFn { serverId, variables (record complet) }
-    P->>P: loadOwnedServer + merge : seules les variables userEditable<br/>acceptent les nouvelles valeurs (les autres gardent leur valeur)
-    P->>P: re-validation des règles du plugin (validateVariableValue du contract :<br/>required, min/max, pattern, options) → 422 sinon
+    N->>P: POST updateServerVariablesFn { serverId, variables (full record) }
+    P->>P: loadOwnedServer + merge: only userEditable variables<br/>accept the new values (the others keep their value)
+    P->>P: re-validation of the recipe rules (validateVariableValue from the contract:<br/>required, min/max, pattern, options) → 422 otherwise
     P->>A: POST /servers/:serverId/variables { variables } (Bearer)
-    alt agent ne connaît pas le serveur (404)
-        P->>D: UPDATE server.variables (l'agent rattrapera à la prochaine install complète)
-    else agent injoignable / erreur
-        P-->>N: 502 — rien n'est écrit (pas de divergence DB ↔ cache)
+    alt agent does not know the server (404)
+        P->>D: UPDATE server.variables (the agent will catch up on the next full install)
+    else agent unreachable / error
+        P-->>N: 502 — nothing is written (no DB ↔ cache divergence)
     else OK
-        A->>A: re-validation (règles du plugin stocké) + refus si install en cours (409)
-        A->>A: fusion + store.save(servers.json)
+        A->>A: re-validation (rules of the stored recipe) + refusal if an install is in progress (409)
+        A->>A: merge + store.save(servers.json)
         P->>D: UPDATE server.variables
-        P-->>N: toast succès — « appliquées au prochain démarrage »
+        P-->>N: success toast — « appliquées au prochain démarrage »
     end
 ```
 
-**Points clés**
-- Validation en **trois couches** qui partagent la même fonction du contract :
-  schéma de formulaire (TanStack Form, messages mappés par champ), server function (422),
-  agent (422). Aucune divergence possible entre les règles.
-- Les nouvelles valeurs s'appliquent au **prochain start** (résolution du templating,
-  env au spawn, provisioning des outils `java`/`steamcmd`) — un process en cours garde
-  son environnement d'origine.
-- Les variables `userViewable && !userEditable` s'affichent en lecture seule ;
-  les non-viewables restent dans le record mais ne sont pas éditables.
-- La commande de démarrage résolue est affichée en lecture seule : les variables du
-  plugin sont substituées en direct (valeur courante > default), les variables système
-  (`{{SERVER_…}}`) restent littérales — seul l'agent peut les résoudre.
+**Key points**
+- Validation in **three layers** sharing the same contract function:
+  form schema (TanStack Form, messages mapped per field), server function (422),
+  agent (422). No divergence possible between the rules.
+- New values apply on the **next start** (templating resolution,
+  env at spawn, `java`/`steamcmd` tool provisioning) — a running process keeps
+  its original environment.
+- `userViewable && !userEditable` variables display as read-only;
+  non-viewable ones stay in the record but are not editable.
+- The resolved startup command is displayed read-only: recipe variables are
+  substituted live (current value > default), system variables
+  (`{{SERVER_…}}`) stay literal — only the agent can resolve them.
 
 ---
 
-## 7. Cycle de vie d'un serveur (statuts)
+## 7. Server lifecycle (statuses)
 
 ```mermaid
 stateDiagram-v2
-    [*] --> installing : création / réinstallation
-    installing --> stopped : runner terminé
-    installing --> install_failed : échec du runner
+    [*] --> installing : creation / reinstall
+    installing --> stopped : runner finished
+    installing --> install_failed : runner failure
     install_failed --> installing : « Réessayer » (retryInstallFn)
     stopped --> running : start
     running --> stopped : stop/restart
-    running --> crashed : exit non propre
-    crashed --> running : auto-restart (anti crash-loop 60 s)
-    crashed --> stopped : arrêt manuel
+    running --> crashed : unclean exit
+    crashed --> running : auto-restart (60 s anti crash-loop)
+    crashed --> stopped : manual stop
 ```
 
-- Le statut **DB** est synchronisé par les server functions (`getServerFn` interroge l'agent et corrige la DB ; `getInstallStatusFn` suit l'installation).
-- L'agent connaît un état runtime plus fin (`offline/starting/running/stopping`) mappé vers les 5 statuts panel.
+- The **DB** status is synchronized by server functions (`getServerFn` queries the agent and corrects the DB; `getInstallStatusFn` tracks the installation).
+- The agent knows a finer runtime state (`offline/starting/running/stopping`) mapped to the 5 panel statuses.
 
 ---
 
-## 8. Référence des routes
+## 8. Route reference
 
-### Panel ↔ Agent (Bearer token du node — `AGENT_ROUTES`)
+### Panel ↔ Agent (node Bearer token — `AGENT_ROUTES`)
 
 | Route | Usage |
 |---|---|
 | `GET /health` | Public — healthcheck (version, uptime) |
-| `POST /servers/install` | Démarre une installation (202) — validation sync 400/422 |
-| `POST /servers/:serverId/reinstall` | Réinstalle en place (202, arrête le serveur d'abord) |
-| `GET /servers/:serverId/install` | Statut d'installation + logs (sync fin d'install + fallback polling) |
-| `POST /servers/:serverId/variables` | Sync du cache de variables (fusion + re-validation, refus si install en cours) — cf. §6 |
-| `GET /servers` | Liste des serveurs de l'agent |
-| `GET /servers/:serverId` | Info runtime (statut, logs récents) |
-| `GET /servers/:serverId/logs?after=N` | Logs incrémentaux (fallback console) |
+| `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
+| `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
+| `GET /servers/:serverId/install` | Installation status + logs (end-of-install sync + polling fallback) |
+| `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
+| `POST /servers/:serverId/allocation` | Primary allocation sync (port/ip of the next start, refused if an install is in progress) — see §6 |
+| `GET /servers` | List of the agent's servers |
+| `GET /servers/:serverId` | Runtime info (status, recent logs) |
+| `GET /servers/:serverId/logs?after=N` | Incremental logs (console fallback) |
 | `POST /servers/:serverId/action` | start / stop / restart / kill |
-| `POST /servers/:serverId/command` | Commande stdin |
-| `DELETE /servers/:serverId` | Suppression (refus si install ou process actif) |
-| `GET /servers/:serverId/ws` | Console navigateur — JWT console (voir §3) |
+| `POST /servers/:serverId/command` | stdin command |
+| `DELETE /servers/:serverId` | Deletion (refused if an install or a process is active) |
+| `GET /servers/:serverId/ws` | Browser console — console JWT (see §3) |
 
-### Navigateur ↔ Agent (WS console, JWT)
+### Browser ↔ Agent (WS console, JWT)
 
 | Message (→ agent) | Message (← agent) |
 |---|---|
@@ -331,22 +332,26 @@ stateDiagram-v2
 | `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime) |
 | `{ type: "power", action }` | `{ type: "status", status }` |
 | | `{ type: "install-status", status, step, totalSteps, percent, message, error }` |
-| | `{ type: "install-log", lines[], reset, replace }` — `reset` = rejeu complet (effacer la console), `replace` = réécriture `\r` (progress), niveaux `step`/`info`/`error` |
+| | `{ type: "install-log", lines[], reset, replace }` — `reset` = full replay (clear the console), `replace` = `\r` rewrite (progress), levels `step`/`info`/`error` |
 | | `{ type: "error", code }` |
 
-### Server functions exposées au navigateur (`packages/panel/src/server/functions/`)
+### Server functions exposed to the browser (`packages/panel/src/server/functions/`)
 
-| Fonction | Méthode | Rôle |
+| Function | Method | Role |
 |---|---|---|
-| `installServerFn` | POST | Créer + démarrer l'installation |
-| `getInstallStatusFn` | GET | Statut/logs d'installation (sync fin d'install + fallback polling) |
-| `retryInstallFn` | POST | Relancer une installation échouée |
-| `listServersFn` | GET | Liste (admin : tout, sinon les siens) |
-| `getServerFn` | GET | Détail + sync runtime + logs |
-| `getServerLogsFn` | GET | Logs incrémentaux (fallback console) |
-| `createConsoleTokenFn` | POST | JWT console + wsUrl |
+| `installServerFn` | POST | Create + start the installation |
+| `getInstallStatusFn` | GET | Installation status/logs (end-of-install sync + polling fallback) |
+| `retryInstallFn` | POST | Relaunch a failed installation |
+| `listServersFn` | GET | List (admin: everything, otherwise own servers) |
+| `getServerFn` | GET | Detail + runtime sync + logs |
+| `getServerLogsFn` | GET | Incremental logs (console fallback) |
+| `createConsoleTokenFn` | POST | Console JWT + wsUrl |
 | `serverActionFn` | POST | start/stop/restart/kill |
-| `sendCommandFn` | POST | Commande stdin via panel |
-| `reinstallServerFn` | POST | Réinstallation en place |
-| `updateServerVariablesFn` | POST | Édition des variables (merge userEditable + sync agent) — cf. §6 |
-| `deleteServerFn` | POST | Suppression (agent + DB) |
+| `sendCommandFn` | POST | stdin command via panel |
+| `reinstallServerFn` | POST | In-place reinstallation |
+| `updateServerVariablesFn` | POST | Variable editing (userEditable merge + agent sync) — see §6 |
+| `getServerNetworkFn` | GET | Server allocations + free ones on the node (Network page) |
+| `addServerAllocationFn` | POST | Claim a free allocation on the node |
+| `removeServerAllocationFn` | POST | Release a non-primary allocation |
+| `setPrimaryServerAllocationFn` | POST | Set the primary allocation + agent sync (next start) |
+| `deleteServerFn` | POST | Deletion (agent + DB, allocations returned to the node pool) |

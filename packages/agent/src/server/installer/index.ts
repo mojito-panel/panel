@@ -2,7 +2,7 @@ import {
   findToolFeatureErrors,
   findUnknownVariables,
   validateVariableValue,
-  type Plugin,
+  type Recipe,
   type RunnerAction,
 } from '@mojito/contract';
 import { mkdir } from 'node:fs/promises';
@@ -11,7 +11,7 @@ import {
   buildToolEnv,
   countToolSteps,
   ensureTool,
-  resolvePluginTools,
+  resolveRecipeTools,
   runSteamcmdContentInstall,
 } from '../../tools';
 import type { EnsureToolResult } from '../../tools';
@@ -24,8 +24,8 @@ import { runExtract } from './actions/extract';
 import { runCommand, runScript, type ExecOptions } from './actions/exec';
 
 export interface InstallOptions {
-  plugin: Plugin;
-  /** Server variable values (override plugin defaults). */
+  recipe: Recipe;
+  /** Server variable values (override recipe defaults). */
   variables: Record<string, string | number | boolean>;
   /** System variables provided by the agent. */
   systemVariables: SystemVariables;
@@ -92,20 +92,20 @@ function formatBytes(bytes: number): string {
  * 400/422 instead of a delayed failure.
  */
 export function validateInstall(
-  plugin: Plugin,
+  recipe: Recipe,
   variables: Record<string, string | number | boolean>,
 ): string | null {
-  const unknown = findUnknownVariables(plugin);
+  const unknown = findUnknownVariables(recipe);
   if (unknown.length > 0) {
-    return `Variables inconnues dans le plugin : ${unknown.join(', ')}`;
+    return `Variables inconnues dans la recette : ${unknown.join(', ')}`;
   }
 
-  const toolErrors = findToolFeatureErrors(plugin);
+  const toolErrors = findToolFeatureErrors(recipe);
   if (toolErrors.length > 0) {
     return toolErrors.join(' ; ');
   }
 
-  for (const variable of plugin.variables) {
+  for (const variable of recipe.variables) {
     const value = variables[variable.env];
     if (value !== undefined) {
       const error = validateVariableValue(variable, value);
@@ -127,26 +127,26 @@ function stepOutputEmitter(
 }
 
 /**
- * Runs a plugin's install actions, step by step,
+ * Runs a recipe's install actions, step by step,
  * with strict variable validation before starting.
  */
 export async function runInstall(options: InstallOptions): Promise<InstallResult> {
-  const { plugin, variables, systemVariables, installDir, onProgress, onEvent } = options;
+  const { recipe, variables, systemVariables, installDir, onProgress, onEvent } = options;
 
   // 1. Strict validation: unknown variable = install error
-  const upfrontError = validateInstall(plugin, variables);
+  const upfrontError = validateInstall(recipe, variables);
   if (upfrontError) {
     return { success: false, error: upfrontError, resolvedVars: new Map() };
   }
 
   // 2. Resolve variables
-  const resolvedVars = resolveVariables(plugin, variables, systemVariables);
+  const resolvedVars = resolveVariables(recipe, variables, systemVariables);
 
   // 3. Prepare the install directory
   await mkdir(installDir, { recursive: true });
 
-  const toolStepCount = countToolSteps(plugin);
-  const totalSteps = toolStepCount + plugin.install.length;
+  const toolStepCount = countToolSteps(recipe);
+  const totalSteps = toolStepCount + recipe.install.length;
 
   const emitStepStart = (step: number, message: string) => {
     onProgress?.({
@@ -163,7 +163,7 @@ export async function runInstall(options: InstallOptions): Promise<InstallResult
   let toolEnv: Record<string, string> | undefined;
   let step = 0;
   if (toolStepCount > 0) {
-    const tools = resolvePluginTools(plugin, resolvedVars);
+    const tools = resolveRecipeTools(recipe, resolvedVars);
     const runtimes: EnsureToolResult[] = [];
     try {
       for (const tool of tools) {
@@ -218,8 +218,8 @@ export async function runInstall(options: InstallOptions): Promise<InstallResult
 
   // 5. Run the actions (numbering continues after the actually-consumed tool steps)
   const actionOffset = step;
-  for (let actionStep = 0; actionStep < plugin.install.length; actionStep++) {
-    const action = plugin.install[actionStep];
+  for (let actionStep = 0; actionStep < recipe.install.length; actionStep++) {
+    const action = recipe.install[actionStep];
     step = actionOffset + actionStep;
     const startMessage = render(describeAction(action), resolvedVars);
     emitStepStart(step, startMessage);

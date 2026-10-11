@@ -79,8 +79,8 @@ export const Node = defineEntity({
   },
 });
 
-export const Plugin = defineEntity({
-  name: 'plugin',
+export const Recipe = defineEntity({
+  name: 'recipe',
   properties: {
     id: p.string().primary(),
     slug: p.string().length(128).unique(),
@@ -98,23 +98,31 @@ export const Server = defineEntity({
     id: p.string().primary(),
     name: p.string().length(128),
     nodeId: p.string().fieldName('node_id'),
-    pluginId: p.string().fieldName('plugin_id'),
+    recipeId: p.string().fieldName('recipe_id'),
     ownerId: p.string().fieldName('owner_id'),
     status: p.string().default('stopped'),
+    /** Memory limit (Mo) — source of SERVER_MEMORY, no host bridging in V1. */
+    memoryMb: p.integer().fieldName('memory_mb').default(2048),
     variables: p.json<Record<string, string | number | boolean>>(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },
 });
 
-export const ServerAllocation = defineEntity({
-  name: 'server_allocation',
+export const Allocation = defineEntity({
+  name: 'allocation',
   properties: {
     id: p.string().primary(),
-    serverId: p.string().fieldName('server_id'),
+    /** Owning node — the IP:port pool is per node (Pelican semantics). */
+    nodeId: p.string().fieldName('node_id'),
+    /** Assigned server — null = free allocation in the node pool. */
+    serverId: p.string().fieldName('server_id').nullable(),
+    ip: p.string().length(255).default('0.0.0.0'),
     port: p.integer(),
-    maxRamMb: p.integer().fieldName('max_ram_mb'),
-    maxCpuPercent: p.integer().fieldName('max_cpu_percent').default(100),
+    /** Human-readable name shown next to IP:port (Pelican alias). */
+    alias: p.string().length(255).nullable(),
+    /** Primary allocation of the server — source of SERVER_PORT / SERVER_IP. */
+    primary: p.boolean().fieldName('is_primary').default(false),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
   },
 });

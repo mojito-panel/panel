@@ -11,7 +11,7 @@ const USER_ID = 'user_sym';
 const SERVER_ID = randomUUID();
 
 describe('Panel sign ↔ agent verify (symmetry)', () => {
-  it('un token signé par le panel est accepté par l’agent', () => {
+  it('a token signed by the panel is accepted by the agent', () => {
     const { token } = signConsoleToken({ userId: USER_ID, serverId: SERVER_ID }, SECRET);
     const payload = verifyConsoleToken(token, SECRET, { serverId: SERVER_ID });
     expect(payload.sub).toBe(USER_ID);
@@ -19,12 +19,12 @@ describe('Panel sign ↔ agent verify (symmetry)', () => {
     expect(hasConsolePermission(payload, 'console.write')).toBe(true);
   });
 
-  it('l’agent rejette un secret différent (rotation de secret désynchronisée)', () => {
+  it('the agent rejects a different secret (desynchronized secret rotation)', () => {
     const { token } = signConsoleToken({ userId: USER_ID, serverId: SERVER_ID }, SECRET);
     expect(() => verifyConsoleToken(token, 'other-secret-0123456789abcdef', { serverId: SERVER_ID })).toThrow();
   });
 
-  it('l’agent rejette un token expiré émis par le panel (TTL court)', () => {
+  it('the agent rejects a token expired issued by the panel (short TTL)', () => {
     const past = Math.floor(Date.now() / 1000) - 3600;
     const { token } = signConsoleToken(
       { userId: USER_ID, serverId: SERVER_ID, now: past * 1000 },

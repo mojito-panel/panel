@@ -10,9 +10,9 @@ export interface ProcessSpawnConfig {
   cwd: string;
   /** Resolved variables, injected into the process environment. */
   env: Record<string, string>;
-  /** Plugin ready pattern (optional detection). */
+  /** Recipe ready pattern (optional detection). */
   readyPattern?: string;
-  /** Plugin graceful stop config. */
+  /** Recipe graceful stop config. */
   stop?: StopConfig;
 }
 

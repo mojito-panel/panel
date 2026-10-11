@@ -1,8 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
 import { randomUUID } from 'node:crypto';
+import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
-import { Node, Plugin, Server, ServerAllocation } from '~/db/entities';
-import type { Plugin as PluginContract } from '@mojito/contract';
+import { Node, Recipe, Server, Allocation } from '~/db/entities';
+import type { IServer } from '~/db/types';
+import type { Recipe as RecipeContract } from '@mojito/contract';
 import { requireUser, HttpError, loadOwnedServer } from '../session';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
@@ -16,6 +18,7 @@ import {
   agentDeleteServer,
   agentReinstallServer,
   agentUpdateServerVariables,
+  agentUpdateAllocation,
   AgentError,
 } from '../agent/client';
 import { validateVariableValue } from '@mojito/contract';
@@ -25,6 +28,7 @@ import {
   serverActionInputSchema,
   sendCommandSchema,
   serverLogsQuerySchema,
+  serverAllocationActionSchema,
 } from '~/validators/server';
 
 type ServerStatusDb =
@@ -33,6 +37,41 @@ type ServerStatusDb =
   | 'stopped'
   | 'running'
   | 'crashed';
+
+// ─── Allocation helpers ───────────────────────────────────────────────────────
+
+/** Loads the server's primary allocation (null when none is assigned). */
+async function findPrimaryAllocation(em: EntityManager, serverId: string) {
+  const allocations = await em.find(Allocation, { serverId });
+  return allocations.find((a) => a.primary) ?? null;
+}
+
+/**
+ * Pushes the server's primary allocation to the agent's cache — the new
+ * port/ip apply at the NEXT start. Same tolerance as the variables sync:
+ * a 404 (agent out of sync) is ignored, the DB stays the source of truth.
+ */
+async function pushPrimaryAllocation(em: EntityManager, server: IServer): Promise<void> {
+  const node = await em.findOne(Node, { id: server.nodeId });
+  if (!node) return;
+  const primary = await findPrimaryAllocation(em, server.id);
+  if (!primary) return;
+  try {
+    await agentUpdateAllocation(node, server.id, {
+      port: primary.port,
+      ip: primary.ip,
+    });
+  } catch (err) {
+    if (err instanceof AgentError && err.statusCode === 404) {
+      // tolerated — agent out of sync, DB remains the source of truth
+    } else {
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
+      }
+      throw err;
+    }
+  }
+}
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
@@ -46,7 +85,7 @@ export const listServersFn = createServerFn({ method: 'GET' }).handler(async () 
     user.role === 'admin' ? {} : { ownerId: user.id },
   );
   const nodes = await em.find(Node, {});
-  const plugins = await em.find(Plugin, {});
+  const recipes = await em.find(Recipe, {});
 
   return servers.map((server) => ({
     id: server.id,
@@ -54,8 +93,8 @@ export const listServersFn = createServerFn({ method: 'GET' }).handler(async () 
     status: server.status,
     nodeId: server.nodeId,
     nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
-    pluginId: server.pluginId,
-    pluginName: plugins.find((p) => p.id === server.pluginId)?.name ?? '—',
+    recipeId: server.recipeId,
+    recipeName: recipes.find((p) => p.id === server.recipeId)?.name ?? '—',
     createdAt: server.createdAt,
   }));
 });
@@ -72,8 +111,19 @@ export const installServerFn = createServerFn({ method: 'POST' })
     const node = await em.findOne(Node, { id: data.nodeId });
     if (!node) throw new HttpError(404, 'Node introuvable');
 
-    const plugin = await em.findOne(Plugin, { id: data.pluginId });
-    if (!plugin) throw new HttpError(404, 'Plugin introuvable');
+    const recipe = await em.findOne(Recipe, { id: data.recipeId });
+    if (!recipe) throw new HttpError(404, 'Recette introuvable');
+
+    // Pelican semantics: the port comes from the node's allocation pool —
+    // the chosen allocation must be free and belong to the selected node
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
+    if (allocation.serverId !== null) {
+      throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
+    }
+    if (allocation.nodeId !== data.nodeId) {
+      throw new HttpError(422, 'Cette allocation n’appartient pas au node sélectionné');
+    }
 
     const serverId = randomUUID();
     const now = new Date();
@@ -84,24 +134,19 @@ export const installServerFn = createServerFn({ method: 'POST' })
       id: serverId,
       name: data.name,
       nodeId: data.nodeId,
-      pluginId: data.pluginId,
+      recipeId: data.recipeId,
       ownerId: user.id,
       status: 'installing',
+      memoryMb: data.memoryMb,
       variables: data.variables,
       createdAt: now,
       updatedAt: now,
     });
     em.persist(server);
 
-    const allocation = em.create(ServerAllocation, {
-      id: randomUUID(),
-      serverId,
-      port: data.port,
-      maxRamMb: data.memoryMb,
-      maxCpuPercent: 100,
-      createdAt: now,
-    });
-    em.persist(allocation);
+    // The claimed allocation becomes the server's primary (port + ip)
+    allocation.serverId = serverId;
+    allocation.primary = true;
     await em.flush();
 
     // 2. Start the background install on the agent (fast — the agent only
@@ -111,18 +156,26 @@ export const installServerFn = createServerFn({ method: 'POST' })
       await agentInstallServer(node, {
         serverId,
         name: data.name,
-        plugin: plugin.json,
+        recipe: recipe.json,
         variables: data.variables,
         installDir: `servers/${serverId}`,
-        allocation: { port: data.port, memoryMb: data.memoryMb },
+        allocation: {
+          port: allocation.port,
+          memoryMb: data.memoryMb,
+          ip: allocation.ip,
+        },
       });
     } catch (err) {
-      // The install could not even start → remove the rows and report
+      // The install could not even start → remove the server row, free the
+      // allocation and report
       const em2 = orm.em.fork();
-      const dbAllocation = await em2.findOne(ServerAllocation, { serverId });
-      if (dbAllocation) em2.remove(dbAllocation);
       const dbServer = await em2.findOne(Server, { id: serverId });
       if (dbServer) em2.remove(dbServer);
+      const dbAllocation = await em2.findOne(Allocation, { id: allocation.id });
+      if (dbAllocation) {
+        dbAllocation.serverId = null;
+        dbAllocation.primary = false;
+      }
       await em2.flush();
 
       if (err instanceof AgentError) {
@@ -204,20 +257,24 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
     const node = await em.findOne(Node, { id: server.nodeId });
     if (!node) throw new HttpError(500, 'Node introuvable');
 
-    const plugin = await em.findOne(Plugin, { id: server.pluginId });
-    if (!plugin) throw new HttpError(500, 'Plugin introuvable');
+    const recipe = await em.findOne(Recipe, { id: server.recipeId });
+    if (!recipe) throw new HttpError(500, 'Recette introuvable');
 
-    const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
+    const allocation = await findPrimaryAllocation(em, server.id);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
       await agentInstallServer(node, {
         serverId: server.id,
         name: server.name,
-        plugin: plugin.json,
+        recipe: recipe.json,
         variables: server.variables,
         installDir: `servers/${server.id}`,
-        allocation: { port: allocation.port, memoryMb: allocation.maxRamMb },
+        allocation: {
+          port: allocation.port,
+          memoryMb: server.memoryMb,
+          ip: allocation.ip,
+        },
       });
       server.status = 'installing';
       await em.flush();
@@ -247,10 +304,10 @@ export const getServerFn = createServerFn({ method: 'GET' })
     const em = orm.em.fork();
 
     const node = await em.findOne(Node, { id: server.nodeId });
-    const plugin = await em.findOne(Plugin, { id: server.pluginId });
-    const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
+    const recipe = await em.findOne(Recipe, { id: server.recipeId });
+    const primaryAllocation = await findPrimaryAllocation(em, server.id);
 
-    if (!node || !plugin) {
+    if (!node || !recipe) {
       throw new HttpError(500, 'Configuration du serveur incomplète');
     }
 
@@ -276,7 +333,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
       // Agent unreachable → serve the DB state
     }
 
-    const pluginJson = plugin.json as PluginContract;
+    const recipeJson = recipe.json as RecipeContract;
 
     return {
       id: server.id,
@@ -287,16 +344,20 @@ export const getServerFn = createServerFn({ method: 'GET' })
       variables: server.variables,
       createdAt: server.createdAt,
       node: { id: node.id, name: node.name, fqdn: node.fqdn },
-      plugin: {
-        id: plugin.id,
-        name: plugin.name,
-        slug: plugin.slug,
+      recipe: {
+        id: recipe.id,
+        name: recipe.name,
+        slug: recipe.slug,
         // Variable definitions for the UI (forms)
-        variables: pluginJson.variables ?? [],
-        start: pluginJson.start,
+        variables: recipeJson.variables ?? [],
+        start: recipeJson.start,
       },
-      allocation: allocation
-        ? { port: allocation.port, memoryMb: allocation.maxRamMb }
+      allocation: primaryAllocation
+        ? {
+            port: primaryAllocation.port,
+            ip: primaryAllocation.ip,
+            memoryMb: server.memoryMb,
+          }
         : null,
       logs,
     };
@@ -331,7 +392,7 @@ export const serverActionFn = createServerFn({ method: 'POST' })
     }
   });
 
-// ─── Reinstall (stop + re-run the plugin's install script) ────────────────────
+// ─── Reinstall (stop + re-run the recipe's install script) ────────────────────
 
 export const reinstallServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
@@ -346,17 +407,17 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     const node = await em.findOne(Node, { id: server.nodeId });
     if (!node) throw new HttpError(500, 'Node introuvable');
 
-    // The CURRENT plugin is sent — an update of the plugin JSON is picked up
+    // The CURRENT recipe is sent — an update of the recipe JSON is picked up
     // on reinstall, like an egg update in Pelican.
-    const plugin = await em.findOne(Plugin, { id: server.pluginId });
-    if (!plugin) throw new HttpError(500, 'Plugin introuvable');
+    const recipe = await em.findOne(Recipe, { id: server.recipeId });
+    if (!recipe) throw new HttpError(500, 'Recette introuvable');
 
-    const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
+    const allocation = await findPrimaryAllocation(em, server.id);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
       const result = await agentReinstallServer(node, server.id, {
-        plugin: plugin.json,
+        recipe: recipe.json,
         variables: server.variables,
       });
       // The reinstall now runs in the background — the console shows the
@@ -374,10 +435,14 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
           await agentInstallServer(node, {
             serverId: server.id,
             name: server.name,
-            plugin: plugin.json,
+            recipe: recipe.json,
             variables: server.variables,
             installDir: `servers/${server.id}`,
-            allocation: { port: allocation.port, memoryMb: allocation.maxRamMb },
+            allocation: {
+              port: allocation.port,
+              memoryMb: server.memoryMb,
+              ip: allocation.ip,
+            },
           });
           server.status = 'installing';
           await em.flush();
@@ -412,22 +477,22 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
       user.role === 'admin',
     );
 
-    const plugin = await em.findOne(Plugin, { id: server.pluginId });
-    if (!plugin) throw new HttpError(500, 'Plugin introuvable');
-    const pluginJson = plugin.json as PluginContract;
+    const recipe = await em.findOne(Recipe, { id: server.recipeId });
+    if (!recipe) throw new HttpError(500, 'Recette introuvable');
+    const recipeJson = recipe.json as RecipeContract;
 
     // Merge: only userEditable variables accept the submitted values, the
     // others keep their current value (Pelican semantics — non-editable
     // variables are read-only for the owner)
     const variables: Record<string, string | number | boolean> = { ...server.variables };
-    for (const variable of pluginJson.variables ?? []) {
+    for (const variable of recipeJson.variables ?? []) {
       if (variable.userEditable && data.variables[variable.env] !== undefined) {
         variables[variable.env] = data.variables[variable.env];
       }
     }
 
     // Same validation rules as the install (contract reuse)
-    for (const variable of pluginJson.variables ?? []) {
+    for (const variable of recipeJson.variables ?? []) {
       const value = variables[variable.env];
       if ((value === undefined || value === '') && variable.required) {
         throw new HttpError(422, `${variable.name} est requis`);
@@ -576,11 +641,150 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
       }
     }
 
-    // DB deletion (server + allocation)
-    const allocation = await em.findOne(ServerAllocation, { serverId: server.id });
-    if (allocation) em.remove(allocation);
+    // DB deletion — the server's allocations return to the node's free pool
+    const allocations = await em.find(Allocation, { serverId: server.id });
+    for (const allocation of allocations) {
+      allocation.serverId = null;
+      allocation.primary = false;
+    }
     em.remove(server);
     await em.flush();
 
     return { deleted: true };
+  });
+
+// ─── Network page (allocations) ──────────────────────────────────────────────
+
+/** Serializable allocation DTO shared by the Network page queries. */
+function allocationDto(allocation: {
+  id: string;
+  ip: string;
+  port: number;
+  alias: string | null | undefined;
+  primary: boolean;
+}) {
+  return {
+    id: allocation.id,
+    ip: allocation.ip,
+    port: allocation.port,
+    alias: allocation.alias ?? null,
+    primary: allocation.primary,
+  };
+}
+
+/**
+ * Allocations of a server + the free ones of its node (Pelican Network
+ * page: list, claim from the pool, set primary, release).
+ */
+export const getServerNetworkFn = createServerFn({ method: 'GET' })
+  .validator(serverLogsQuerySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const assigned = await em.find(Allocation, { serverId: server.id });
+    const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
+    const byPort = (a: { port: number }, b: { port: number }) => a.port - b.port;
+
+    return {
+      allocations: assigned.sort(byPort).map(allocationDto),
+      free: free.sort(byPort).map(allocationDto),
+    };
+  });
+
+/** Claims a FREE allocation of the server's node and assigns it to the server. */
+export const addServerAllocationFn = createServerFn({ method: 'POST' })
+  .validator(serverAllocationActionSchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
+    if (allocation.serverId !== null) {
+      throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
+    }
+    if (allocation.nodeId !== server.nodeId) {
+      throw new HttpError(422, 'Cette allocation n’appartient pas au node du serveur');
+    }
+
+    // A server without any primary (legacy data) promotes the newcomer and
+    // syncs the agent — otherwise the primary is left untouched
+    const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
+      (a) => a.primary,
+    );
+    allocation.serverId = server.id;
+    allocation.primary = !hadPrimary;
+    await em.flush();
+
+    if (!hadPrimary) await pushPrimaryAllocation(em, server);
+    return { id: allocation.id };
+  });
+
+/**
+ * Releases a non-primary allocation — it returns to the node's free pool.
+ * The primary must be moved first (refuse otherwise, like Pelican).
+ */
+export const removeServerAllocationFn = createServerFn({ method: 'POST' })
+  .validator(serverAllocationActionSchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation || allocation.serverId !== server.id) {
+      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
+    }
+    if (allocation.primary) {
+      throw new HttpError(409, 'Définis une autre allocation principale avant de retirer celle-ci');
+    }
+
+    allocation.serverId = null;
+    allocation.primary = false;
+    await em.flush();
+
+    return { id: allocation.id };
+  });
+
+/**
+ * Sets the primary allocation (source of SERVER_PORT / SERVER_IP) and
+ * pushes it to the agent — the change applies at the next start.
+ */
+export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
+  .validator(serverAllocationActionSchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadOwnedServer(
+      data.serverId,
+      user.id,
+      user.role === 'admin',
+    );
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation || allocation.serverId !== server.id) {
+      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
+    }
+
+    const assigned = await em.find(Allocation, { serverId: server.id });
+    for (const entry of assigned) {
+      entry.primary = entry.id === allocation.id;
+    }
+    await em.flush();
+
+    await pushPrimaryAllocation(em, server);
+    return { id: allocation.id };
   });

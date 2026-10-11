@@ -1,13 +1,13 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { Plugin } from '@mojito/contract';
+import type { Recipe } from '@mojito/contract';
 
 /** Persisted entry for a server installed on this agent. */
 export interface StoredServer {
   serverId: string;
   name: string;
-  plugin: Plugin;
+  recipe: Recipe;
   variables: Record<string, string | number | boolean>;
   installDir: string;
   allocation: { port: number; memoryMb: number; ip: string };

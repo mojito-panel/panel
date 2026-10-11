@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./plugin-schema": "./src/plugin-schema.ts",
+    "./recipe-schema": "./src/recipe-schema.ts",
     "./api": "./src/api.ts"
   },
   "scripts": {

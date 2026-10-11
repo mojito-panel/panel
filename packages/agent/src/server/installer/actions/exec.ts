@@ -115,7 +115,7 @@ function spawnChild(file: string, args: string[], options: ExecOptions): Promise
  * Runs a command in a shell, with optional timeout.
  * On Windows: cmd /c; otherwise: /bin/sh -c.
  * Used by the install runner for the `command` and `script` actions
- * of plugins (e.g. java, steamcmd, powershell).
+ * of recipes (e.g. java, steamcmd, powershell).
  */
 export function exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
   const isWindows = process.platform === 'win32';
@@ -228,7 +228,7 @@ function startLogTail(
 /**
  * `command` action: runs a binary in the install directory.
  * Failure (non-success code) = install error.
- * Resolved variables (plugin + system) are injected into the environment.
+ * Resolved variables (recipe + system) are injected into the environment.
  * Returns the exec result (stdout/stderr) for the install log.
  */
 export async function runCommand(

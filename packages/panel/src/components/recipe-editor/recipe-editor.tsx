@@ -5,33 +5,33 @@ import { Button } from '~/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import {
   findUnknownVariablesInEditorValue,
-  pluginEditorSchema,
-  type PluginEditorValue,
-} from '~/validators/plugin-editor';
+  recipeEditorSchema,
+  type RecipeEditorValue,
+} from '~/validators/recipe-editor';
 import { ConfigurationTab } from './tab-configuration';
 import { ProcessTab } from './tab-process';
 import { VariablesTab } from './tab-variables';
 import { InstallTab } from './tab-install';
 
 /**
- * Pelican-style plugin (egg) editor — one TanStack Form, 4 tabs:
+ * Pelican-style recipe (egg) editor — one TanStack Form, 4 tabs:
  * Configuration / Démarrage / Variables / Installation.
  * The page container (max-width) is owned by AppShell; routes only
  * provide the initial value and the submit handler.
  */
 
 /** Single editor form instance — typed once, shared by the tab components. */
-function usePluginForm(initial: PluginEditorValue, onSubmit: (value: PluginEditorValue) => void) {
+function useRecipeForm(initial: RecipeEditorValue, onSubmit: (value: RecipeEditorValue) => void) {
   return useForm({
     defaultValues: initial,
-    validators: { onChange: pluginEditorSchema },
+    validators: { onChange: recipeEditorSchema },
     onSubmit: ({ value }) => onSubmit(value),
   });
 }
 
-export type PluginForm = ReturnType<typeof usePluginForm>;
+export type RecipeForm = ReturnType<typeof useRecipeForm>;
 
-export function PluginEditor({
+export function RecipeEditor({
   title,
   initial,
   onSubmit,
@@ -40,15 +40,15 @@ export function PluginEditor({
   headerActions,
 }: {
   title: string;
-  initial: PluginEditorValue;
-  /** Receives the validated editor value (contract-valid plugin built by the caller). */
-  onSubmit: (value: PluginEditorValue) => void;
+  initial: RecipeEditorValue;
+  /** Receives the validated editor value (contract-valid recipe built by the caller). */
+  onSubmit: (value: RecipeEditorValue) => void;
   submitPending: boolean;
   submitError: string | null;
   /** Extra header actions (delete, export… — Pelican's EditEgg header). */
   headerActions?: ReactNode;
 }) {
-  const form = usePluginForm(initial, onSubmit);
+  const form = useRecipeForm(initial, onSubmit);
   const [attempted, setAttempted] = useState(false);
 
   const save = () => {
@@ -100,7 +100,7 @@ export function PluginEditor({
             if (entries.length === 0) return null;
             return (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                <p className="font-semibold">Le plugin contient des erreurs :</p>
+                <p className="font-semibold">La recette contient des erreurs :</p>
                 <ul className="mt-1 list-inside list-disc space-y-1">
                   {entries.slice(0, 20).map((entry) => (
                     <li key={`${entry.fieldName}-${entry.message}`}>

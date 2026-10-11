@@ -6,9 +6,9 @@ import {
   Account,
   Verification,
   Node,
-  Plugin,
+  Recipe,
   Server,
-  ServerAllocation,
+  Allocation,
 } from '~/db/entities';
 
 /**
@@ -21,7 +21,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
   beforeAll(async () => {
     orm = await MikroORM.init({
       dbName: ':memory:',
-      entities: [User, Session, Account, Verification, Node, Plugin, Server, ServerAllocation],
+      entities: [User, Session, Account, Verification, Node, Recipe, Server, Allocation],
     });
     await orm.schema.create();
   });
@@ -30,7 +30,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     await orm.close();
   });
 
-  it('crée toutes les tables', async () => {
+  it('creates all tables', async () => {
     const tables = await orm.em.getConnection().execute(
       "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
     );
@@ -40,12 +40,12 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(tableNames).toContain('account');
     expect(tableNames).toContain('verification');
     expect(tableNames).toContain('node');
-    expect(tableNames).toContain('plugin');
+    expect(tableNames).toContain('recipe');
     expect(tableNames).toContain('server');
-    expect(tableNames).toContain('server_allocation');
+    expect(tableNames).toContain('allocation');
   });
 
-  it('crée un User avec le rôle par défaut', async () => {
+  it('creates a User with the default role', async () => {
     const em = orm.em.fork();
     const user = em.create(User, {
       id: 'user-1',
@@ -64,7 +64,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(found?.role).toBe('admin');
   });
 
-  it('crée un Node', async () => {
+  it('creates a Node', async () => {
     const em = orm.em.fork();
     const node = em.create(Node, {
       id: 'node-1',
@@ -86,10 +86,10 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(found?.agentToken).toBe('secret-token-32-bytes-minimum');
   });
 
-  it('crée un Plugin avec du JSON', async () => {
+  it('creates a Recipe with JSON', async () => {
     const em = orm.em.fork();
-    const plugin = em.create(Plugin, {
-      id: 'plugin-1',
+    const recipe = em.create(Recipe, {
+      id: 'recipe-1',
       slug: 'minecraft-vanilla',
       name: 'Minecraft Vanilla',
       schemaVersion: 1,
@@ -97,20 +97,20 @@ describe('MikroORM entities (SQLite in-memory)', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    em.persist(plugin);
+    em.persist(recipe);
     await em.flush();
 
-    const found = await em.findOne(Plugin, { slug: 'minecraft-vanilla' });
+    const found = await em.findOne(Recipe, { slug: 'minecraft-vanilla' });
     expect(found?.json).toMatchObject({ id: 'minecraft-vanilla' });
   });
 
-  it('crée un Server avec variables JSON et statut par défaut', async () => {
+  it('creates a Server with JSON variables and the default status', async () => {
     const em = orm.em.fork();
     const server = em.create(Server, {
       id: 'server-1',
-      name: 'Mon serveur MC',
+      name: 'My MC server',
       nodeId: 'node-1',
-      pluginId: 'plugin-1',
+      recipeId: 'recipe-1',
       ownerId: 'user-1',
       status: 'stopped',
       variables: { ram_mb: 2048, motd: 'Hello' },
@@ -122,28 +122,39 @@ describe('MikroORM entities (SQLite in-memory)', () => {
 
     const found = await em.findOne(Server, { id: 'server-1' });
     expect(found?.status).toBe('stopped');
+    expect(found?.memoryMb).toBe(2048); // default
     expect(found?.variables).toMatchObject({ ram_mb: 2048 });
   });
 
-  it('crée une ServerAllocation', async () => {
+  it('creates a free Allocation then assigns it to a server', async () => {
     const em = orm.em.fork();
-    const alloc = em.create(ServerAllocation, {
+    const alloc = em.create(Allocation, {
       id: 'alloc-1',
-      serverId: 'server-1',
+      nodeId: 'node-1',
+      serverId: null,
+      ip: '0.0.0.0',
       port: 25565,
-      maxRamMb: 4096,
-      maxCpuPercent: 100,
+      alias: null,
+      primary: false,
       createdAt: new Date(),
     });
     em.persist(alloc);
     await em.flush();
 
-    const found = await em.findOne(ServerAllocation, { serverId: 'server-1' });
-    expect(found?.port).toBe(25565);
-    expect(found?.maxRamMb).toBe(4096);
+    const free = await em.findOne(Allocation, { id: 'alloc-1' });
+    expect(free?.port).toBe(25565);
+    expect(free?.serverId).toBeNull();
+    expect(free?.primary).toBe(false);
+
+    free!.serverId = 'server-1';
+    free!.primary = true;
+    await em.flush();
+
+    const assigned = await em.findOne(Allocation, { serverId: 'server-1' });
+    expect(assigned?.primary).toBe(true);
   });
 
-  it('crée une Session liée à un User', async () => {
+  it('creates a Session linked to a User', async () => {
     const em = orm.em.fork();
     const session = em.create(Session, {
       id: 'session-1',

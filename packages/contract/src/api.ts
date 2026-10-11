@@ -29,7 +29,7 @@ export type ServerAllocationPayload = z.infer<typeof serverAllocationSchema>;
 export const installServerRequestSchema = z.object({
   serverId: z.string().uuid(),
   name: z.string().min(1),
-  plugin: z.unknown(), // Plugin validated on the panel side, passed as-is
+  recipe: z.unknown(), // Recipe validated on the panel side, passed as-is
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   installDir: z.string().min(1),
   allocation: serverAllocationSchema,
@@ -39,13 +39,13 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
 
 /**
  * Reinstall — same semantics as Pelican: the agent stops the server (if
- * running), then re-runs the plugin's install script in place. The panel
- * sends the CURRENT plugin (an update may have changed the install script);
+ * running), then re-runs the recipe's install script in place. The panel
+ * sends the CURRENT recipe (an update may have changed the install script);
  * the agent keeps its stored installDir and allocation.
  */
 export const reinstallServerRequestSchema = z.object({
   serverId: z.string().uuid(),
-  plugin: z.unknown(), // Plugin validated by the agent, passed as-is
+  recipe: z.unknown(), // Recipe validated by the agent, passed as-is
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 
@@ -54,7 +54,7 @@ export type ReinstallServerRequest = z.infer<typeof reinstallServerRequestSchema
 /**
  * Variable update — the panel re-sends the server's FULL variable record
  * (all env → value entries, not only the edited ones). The agent validates
- * each value against the plugin's variable definitions, then updates its
+ * each value against the recipe's variable definitions, then updates its
  * stored entry: the new values are used on the NEXT start (a running
  * process keeps its original environment).
  */
@@ -65,6 +65,24 @@ export const updateServerVariablesRequestSchema = z.object({
 
 export type UpdateServerVariablesRequest = z.infer<
   typeof updateServerVariablesRequestSchema
+>;
+
+/**
+ * Primary allocation update (Pelican "set primary allocation" / port change).
+ * Same push semantics as the variable update: the agent refreshes its stored
+ * entry (source of SERVER_PORT / SERVER_IP at start). The new values apply
+ * on the NEXT start — a running process keeps its original environment.
+ */
+export const updateServerAllocationRequestSchema = z.object({
+  serverId: z.string().uuid(),
+  allocation: z.object({
+    port: z.number().int().positive(),
+    ip: z.string().min(1),
+  }),
+});
+
+export type UpdateServerAllocationRequest = z.infer<
+  typeof updateServerAllocationRequestSchema
 >;
 
 export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
@@ -383,7 +401,7 @@ export type HealthTokenResponse = z.infer<typeof healthTokenResponseSchema>;
  * Pelican parity: the panel PROXIES every file operation to the agent
  * (server-side fetch, panel token) — the browser never talks to the agent
  * directly for files. All paths are RELATIVE to the server's installDir,
- * POSIX-style (`plugins/config.yml`), and validated by the agent against
+ * POSIX-style (`recipes/config.yml`), and validated by the agent against
  * directory traversal (see the agent's resolveServerPath).
  */
 
@@ -467,7 +485,10 @@ export const AGENT_ROUTES = {
   command: 'POST /servers/:serverId/command',
   info: 'GET /servers/:serverId',
   installStatus: 'GET /servers/:serverId/install',
+  /** Incremental runtime logs (live console fallback, cursor-based). */
+  logs: 'GET /servers/:serverId/logs',
   variablesUpdate: 'POST /servers/:serverId/variables',
+  allocationUpdate: 'POST /servers/:serverId/allocation',
   list: 'GET /servers',
   delete: 'DELETE /servers/:serverId',
   /** File browser — every path is relative to the server's installDir. */
@@ -478,7 +499,7 @@ export const AGENT_ROUTES = {
   fileRename: 'POST /servers/:serverId/files/rename',
   fileDelete: 'POST /servers/:serverId/files/delete',
   fileUpload: 'POST /servers/:serverId/files/upload',
-  /** Browser-facing console socket — auth by console JWT (?token=), NOT the panel token. */
+  /** Browser-facing console socket — auth by console JWT sent as the first `auth` message, NOT the panel token. */
   consoleWs: 'GET /servers/:serverId/ws',
   /** Node system snapshot (panel token) — latency measurement + one-shot health. */
   stats: 'GET /stats',

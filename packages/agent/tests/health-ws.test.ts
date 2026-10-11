@@ -110,7 +110,7 @@ function closeQuietly(ws: WebSocket): Promise<void> {
 }
 
 describe('Health WS — origin gate', () => {
-  it('refuse l’upgrade sans Origin (403 avant le handshake)', async () => {
+  it('refuses the upgrade without Origin (403 before the handshake)', async () => {
     const { ws } = openHealth(null);
     const failure = await new Promise<string>((resolve) => {
       ws.on('error', (err) => resolve((err as Error).message));
@@ -119,7 +119,7 @@ describe('Health WS — origin gate', () => {
     expect(failure).toContain('403');
   }, 10000);
 
-  it('refuse une Origin inconnue', async () => {
+  it('refuses an unknown Origin', async () => {
     const { ws } = openHealth('https://evil.example.com');
     const failure = await new Promise<string>((resolve) => {
       ws.on('error', (err) => resolve((err as Error).message));
@@ -130,7 +130,7 @@ describe('Health WS — origin gate', () => {
 });
 
 describe('Health WS — handshake (auth message)', () => {
-  it('ferme 4001 avec un token invalide', async () => {
+  it('closes with 4001 on an invalid token', async () => {
     const { ws, messages } = openHealth();
     const closed = closeCode(ws);
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: 'garbage.token' })));
@@ -139,7 +139,7 @@ describe('Health WS — handshake (auth message)', () => {
     expect(await closed).toBe(4001);
   }, 10000);
 
-  it('ferme 4001 avec un token de scope console (scopes distincts)', async () => {
+  it('closes with 4001 on a console-scoped token (distinct scopes)', async () => {
     const now = Math.floor(Date.now() / 1000);
     const consoleScoped = signToken({
       iss: 'mojito-panel',
@@ -160,7 +160,7 @@ describe('Health WS — handshake (auth message)', () => {
     expect(await closed).toBe(4001);
   }, 10000);
 
-  it('rejette un message illisible (error invalid-message)', async () => {
+  it('rejects an unreadable message (error invalid-message)', async () => {
     const { ws, messages } = openHealth();
     ws.on('open', () => ws.send('not-json'));
     const error = await waitForMessage(
@@ -172,8 +172,8 @@ describe('Health WS — handshake (auth message)', () => {
   }, 10000);
 });
 
-describe('Health WS — flux de stats', () => {
-  it('pousse auth-ok puis des frames stats valides, à intervalle régulier', async () => {
+describe('Health WS — stats stream', () => {
+  it('pushes auth-ok then valid stats frames, at a regular interval', async () => {
     const { ws, messages } = openHealth();
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: healthToken() })));
     // Cast: waitForMessage returns the union, this call site wants the stats frame
@@ -196,7 +196,7 @@ describe('Health WS — flux de stats', () => {
     await closeQuietly(ws);
   }, 15000);
 
-  it('ferme 4001 quand le token expire en cours de connexion', async () => {
+  it('closes with 4001 when the token expires mid-connection', async () => {
     const { ws, messages } = openHealth();
     const closed = closeCode(ws);
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: healthToken(0) })));
@@ -205,7 +205,7 @@ describe('Health WS — flux de stats', () => {
     expect(await closed).toBe(4001);
   }, 15000);
 
-  it('rafraîchit le token sans reconnexion (re-auth → auth-ok seul)', async () => {
+  it('refreshes the token without reconnecting (re-auth → auth-ok only)', async () => {
     const { ws, messages } = openHealth();
     ws.on('open', () => ws.send(JSON.stringify({ type: 'auth', token: healthToken() })));
     await waitForMessage(messages, (m) => m.type === 'stats');
@@ -224,8 +224,8 @@ describe('Health WS — flux de stats', () => {
   }, 15000);
 });
 
-describe('REST /stats — snapshot panel (token panel)', () => {
-  it('renvoie un snapshot valide avec le token panel', async () => {
+describe('REST /stats — panel snapshot (panel token)', () => {
+  it('returns a valid snapshot with the panel token', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/stats',
@@ -237,7 +237,7 @@ describe('REST /stats — snapshot panel (token panel)', () => {
     expect(stats.version).toBe('0.1.0-test');
   });
 
-  it('rejette 401 sans token panel (le JWT health ne passe pas en REST)', async () => {
+  it('rejects with 401 without a panel token (the health JWT does not pass in REST)', async () => {
     const res = await app.inject({ method: 'GET', url: '/stats' });
     expect(res.statusCode).toBe(401);
   });

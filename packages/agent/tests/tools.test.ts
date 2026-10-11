@@ -9,17 +9,17 @@ import {
   JAVA_VERSION_ENV,
   STEAM_APP_ID_ENV,
   STEAM_MOD_ENV,
-  parsePlugin,
-  type PluginInput,
+  parseRecipe,
+  type RecipeInput,
 } from '@mojito/contract';
 import { resolveVariables, type SystemVariables } from '../src/server/templating';
 import { runInstall, type InstallEvent } from '../src/server/installer';
-import { ensureTool, toolInstallDir, type ResolvedPluginTool } from '../src/tools/registry';
+import { ensureTool, toolInstallDir, type ResolvedRecipeTool } from '../src/tools/registry';
 import {
   buildToolEnv,
   countToolSteps,
-  ensurePluginTools,
-  resolvePluginTools,
+  ensureRecipeTools,
+  resolveRecipeTools,
 } from '../src/tools';
 
 /**
@@ -40,12 +40,12 @@ const systemVars: SystemVariables = {
   SERVER_INSTALL_DIR: '',
 };
 
-function makePlugin(overrides: Partial<PluginInput> = {}) {
-  return parsePlugin({
+function makeRecipe(overrides: Partial<RecipeInput> = {}) {
+  return parseRecipe({
     schemaVersion: 2,
-    id: 'tool-plugin',
+    id: 'tool-recipe',
     name: 'Tools',
-    author: 'moi',
+    author: 'me',
     install: [],
     start: { command: 'echo ok' },
     ...overrides,
@@ -83,88 +83,88 @@ afterAll(async () => {
   await new Promise<void>((resolve) => httpServer.close(() => resolve()));
 });
 
-// ─── resolvePluginTools (features → tools, params from variables) ──────────
+// ─── resolveRecipeTools (features → tools, params from variables) ──────────
 
-describe('resolvePluginTools', () => {
-  it('feature java → JDK dont la version vient de JAVA_VERSION', () => {
-    const plugin = makePlugin({
+describe('resolveRecipeTools', () => {
+  it('feature java → JDK whose version comes from JAVA_VERSION', () => {
+    const recipe = makeRecipe({
       features: ['java'],
       variables: [
         { env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' },
       ],
     });
-    const vars = resolveVariables(plugin, {}, systemVars);
-    expect(resolvePluginTools(plugin, vars)).toEqual([
+    const vars = resolveVariables(recipe, {}, systemVars);
+    expect(resolveRecipeTools(recipe, vars)).toEqual([
       { name: 'java', key: '21', label: 'java 21' },
     ]);
   });
 
-  it('la valeur serveur surcharge la version (JAVA_VERSION = 17)', () => {
-    const plugin = makePlugin({
+  it('the server value overrides the version (JAVA_VERSION = 17)', () => {
+    const recipe = makeRecipe({
       features: ['java'],
       variables: [
         { env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' },
       ],
     });
-    const vars = resolveVariables(plugin, { [JAVA_VERSION_ENV]: '17' }, systemVars);
-    expect(resolvePluginTools(plugin, vars)[0].key).toBe('17');
+    const vars = resolveVariables(recipe, { [JAVA_VERSION_ENV]: '17' }, systemVars);
+    expect(resolveRecipeTools(recipe, vars)[0].key).toBe('17');
   });
 
-  it('feature java sans valeur JAVA_VERSION → erreur claire', () => {
-    const plugin = makePlugin({ features: ['java'] });
-    const vars = resolveVariables(plugin, {}, systemVars);
-    expect(() => resolvePluginTools(plugin, vars)).toThrow(JAVA_VERSION_ENV);
+  it('feature java without a JAVA_VERSION value → clear error', () => {
+    const recipe = makeRecipe({ features: ['java'] });
+    const vars = resolveVariables(recipe, {}, systemVars);
+    expect(() => resolveRecipeTools(recipe, vars)).toThrow(JAVA_VERSION_ENV);
   });
 
-  it('feature steamcmd avec STEAM_APP_ID et STEAM_MOD → content install paramétré', () => {
-    const plugin = makePlugin({
+  it('feature steamcmd with STEAM_APP_ID and STEAM_MOD → parametrized content install', () => {
+    const recipe = makeRecipe({
       features: ['steamcmd'],
       variables: [
         { env: STEAM_APP_ID_ENV, name: 'App', type: 'string', defaultValue: '90' },
         { env: STEAM_MOD_ENV, name: 'Mod', type: 'string', defaultValue: 'ricochet' },
       ],
     });
-    const vars = resolveVariables(plugin, {}, systemVars);
-    expect(resolvePluginTools(plugin, vars)).toEqual([
+    const vars = resolveVariables(recipe, {}, systemVars);
+    expect(resolveRecipeTools(recipe, vars)).toEqual([
       { name: 'steamcmd', key: '', label: 'steamcmd', steamcmd: { appId: '90', mod: 'ricochet' } },
     ]);
   });
 
-  it('feature steamcmd sans STEAM_APP_ID → binaire sur le PATH uniquement', () => {
-    const plugin = makePlugin({ features: ['steamcmd'] });
-    const vars = resolveVariables(plugin, {}, systemVars);
-    expect(resolvePluginTools(plugin, vars)).toEqual([
+  it('feature steamcmd without STEAM_APP_ID → binary on PATH only', () => {
+    const recipe = makeRecipe({ features: ['steamcmd'] });
+    const vars = resolveVariables(recipe, {}, systemVars);
+    expect(resolveRecipeTools(recipe, vars)).toEqual([
       { name: 'steamcmd', key: '', label: 'steamcmd', steamcmd: undefined },
     ]);
   });
 
-  it('aucune feature outil → aucun outil', () => {
-    const plugin = makePlugin({ features: ['eula'] });
-    const vars = resolveVariables(plugin, {}, systemVars);
-    expect(resolvePluginTools(plugin, vars)).toEqual([]);
+  it('no tool feature → no tools', () => {
+    const recipe = makeRecipe({ features: ['eula'] });
+    const vars = resolveVariables(recipe, {}, systemVars);
+    expect(resolveRecipeTools(recipe, vars)).toEqual([]);
   });
 });
 
 // ─── countToolSteps ──────────────────────────────────────────────────────────
 
 describe('countToolSteps', () => {
-  it('compte les étapes des features outils (ensure + 2 passes steamcmd)', () => {
-    const javaOnly = makePlugin({
+  it('counts tool feature steps (ensure + 2 steamcmd passes)', () => {
+    const javaOnly = makeRecipe({
       features: ['java'],
       variables: [{ env: JAVA_VERSION_ENV, name: 'v', type: 'string', defaultValue: '21' }],
     });
     expect(countToolSteps(javaOnly)).toBe(1);
 
-    const steamWithApp = makePlugin({
+    const steamWithApp = makeRecipe({
       features: ['steamcmd'],
       variables: [{ env: STEAM_APP_ID_ENV, name: 'app', type: 'string', defaultValue: '90' }],
     });
     expect(countToolSteps(steamWithApp)).toBe(3); // ensure + app_update + validate
 
-    const steamBare = makePlugin({ features: ['steamcmd'] });
+    const steamBare = makeRecipe({ features: ['steamcmd'] });
     expect(countToolSteps(steamBare)).toBe(1);
 
-    expect(countToolSteps(makePlugin())).toBe(0);
+    expect(countToolSteps(makeRecipe())).toBe(0);
   });
 });
 
@@ -175,7 +175,7 @@ const newServerDir = () => join(tmpRoot, `srv-${Math.random().toString(36).slice
 
 describe('ensureTool', () => {
   const installDir = newServerDir;
-  it('télécharge le JDK dans <installDir>/.bin/java (stripComponents, JAVA_HOME)', async () => {
+  it('downloads the JDK into <installDir>/.bin/java (stripComponents, JAVA_HOME)', async () => {
     if (process.platform !== 'win32') return;
     const dir = installDir();
     const result = await ensureTool(
@@ -188,21 +188,21 @@ describe('ensureTool', () => {
     await access(join(dir, '.bin', 'java', 'bin', 'java.exe'));
   });
 
-  it('est idempotent : marker présent → pas de re-téléchargement', async () => {
+  it('is idempotent: marker present → no re-download', async () => {
     if (process.platform !== 'win32') return;
     const dir = installDir();
-    const tool: ResolvedPluginTool = { name: 'java', key: '21', label: 'java 21' };
+    const tool: ResolvedRecipeTool = { name: 'java', key: '21', label: 'java 21' };
     const options = { installDir: dir, downloadUrl: `http://127.0.0.1:${httpPort}/jdk.zip` };
     expect((await ensureTool(tool, options)).installed).toBe(true);
     expect((await ensureTool(tool, options)).installed).toBe(false);
-    // Le marker enregistre la version
+    // The marker records the version
     const marker = JSON.parse(
       await readFile(join(toolInstallDir(dir, tool), '.mojito-tool.json'), 'utf-8'),
     );
     expect(marker.key).toBe('21');
   });
 
-  it('re-télécharge quand la version déclarée change (JAVA_VERSION 21 → 17)', async () => {
+  it('re-downloads when the declared version changes (JAVA_VERSION 21 → 17)', async () => {
     if (process.platform !== 'win32') return;
     const dir = installDir();
     const options = { installDir: dir, downloadUrl: `http://127.0.0.1:${httpPort}/jdk.zip` };
@@ -215,7 +215,7 @@ describe('ensureTool', () => {
     expect(marker.key).toBe('17');
   });
 
-  it('télécharge steamcmd dans <installDir>/.bin/steamcmd (warmup désactivé en test)', async () => {
+  it('downloads steamcmd into <installDir>/.bin/steamcmd (warmup disabled in tests)', async () => {
     if (process.platform !== 'win32') return;
     const dir = installDir();
     const result = await ensureTool(
@@ -235,7 +235,7 @@ describe('ensureTool', () => {
 // ─── buildToolEnv (PATH + JAVA_HOME) ──────────────────────────────────────────
 
 describe('buildToolEnv', () => {
-  it('prépare les bin dirs en tête de PATH et expose JAVA_HOME', () => {
+  it('puts bin dirs at the head of PATH and exposes JAVA_HOME', () => {
     const env = buildToolEnv([
       { binDir: 'C:\\tools\\java\\bin', env: { JAVA_HOME: 'C:\\tools\\java' } },
       { binDir: 'C:\\tools\\steamcmd', env: {} },
@@ -244,19 +244,19 @@ describe('buildToolEnv', () => {
     expect(env.JAVA_HOME).toBe('C:\\tools\\java');
   });
 
-  it('aucun outil → env vide (PATH inchangé)', () => {
+  it('no tools → empty env (PATH unchanged)', () => {
     expect(buildToolEnv([])).toEqual({});
   });
 });
 
-// ─── runInstall intégration : PATH injecté dans les commandes ────────────────
+// ─── runInstall integration: PATH injected into commands ─────────────────────
 
-describe('runInstall avec feature java', () => {
-  it('le .bin/java du serveur est utilisé par les commandes (PATH + JAVA_HOME)', async () => {
+describe('runInstall with java feature', () => {
+  it('the server .bin/java is used by commands (PATH + JAVA_HOME)', async () => {
     if (process.platform !== 'win32') return;
 
     const installDir = join(tmpRoot, 'srv-path');
-    // Outil "pré-installé" : marker + faux java (java.cmd) dans .bin/java/bin
+    // "Pre-installed" tool: marker + fake java (java.cmd) in .bin/java/bin
     await mkdir(join(installDir, '.bin', 'java', 'bin'), { recursive: true });
     await writeFile(join(installDir, '.bin', 'java', 'bin', 'java.cmd'), '@echo fake-java\r\n');
     await writeFile(
@@ -265,7 +265,7 @@ describe('runInstall avec feature java', () => {
       'utf-8',
     );
 
-    const plugin = makePlugin({
+    const recipe = makeRecipe({
       features: ['java'],
       variables: [
         { env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' },
@@ -273,8 +273,8 @@ describe('runInstall avec feature java', () => {
       install: [
         {
           action: 'command',
-          // Passe par le PATH : .bin/java/bin précède le PATH de l'hôte —
-          // le faux java.cmd doit gagner contre tout java installé sur l'hôte
+          // Goes through PATH: .bin/java/bin precedes the host PATH —
+          // the fake java.cmd must win against any java installed on the host
           command: 'java',
         },
         { action: 'command', command: 'echo %JAVA_HOME%' },
@@ -283,7 +283,7 @@ describe('runInstall avec feature java', () => {
 
     const events: InstallEvent[] = [];
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: { ...systemVars, SERVER_INSTALL_DIR: installDir },
       installDir,
@@ -295,7 +295,7 @@ describe('runInstall avec feature java', () => {
     expect(outputs).toContain('fake-java');
     expect(outputs.some((text) => text.includes(join('.bin', 'java')))).toBe(true);
 
-    // Étape 0 = outil java (déjà installé, pas de téléchargement), actions ensuite
+    // Step 0 = java tool (already installed, no download), actions after
     const step0Done = events.find(
       (e): e is Extract<InstallEvent, { type: 'step-done' }> =>
         e.type === 'step-done' && e.step === 0,
@@ -303,11 +303,11 @@ describe('runInstall avec feature java', () => {
     expect(step0Done?.message).toBe('déjà installé');
   });
 
-  it('échoue proprement si la feature java n’a pas de JAVA_VERSION résolue', async () => {
-    // Le panel valide en amont (findToolFeatureErrors) — l'agent reste défensif
-    const plugin = makePlugin({ features: ['java'] });
+  it('fails cleanly when the java feature has no resolved JAVA_VERSION', async () => {
+    // The panel validates upstream (findToolFeatureErrors) — the agent stays defensive
+    const recipe = makeRecipe({ features: ['java'] });
     const result = await runInstall({
-      plugin,
+      recipe,
       variables: {},
       systemVariables: systemVars,
       installDir: join(tmpRoot, 'srv-missing-var'),
@@ -317,13 +317,13 @@ describe('runInstall avec feature java', () => {
   });
 });
 
-// ─── ensurePluginTools (orchestration) ───────────────────────────────────────
+// ─── ensureRecipeTools (orchestration) ───────────────────────────────────────
 
-describe('ensurePluginTools', () => {
-  it('assure chaque outil dans le .bin du serveur, dans l ordre', async () => {
+describe('ensureRecipeTools', () => {
+  it('ensures each tool in the server .bin, in order', async () => {
     if (process.platform !== 'win32') return;
     const dir = newServerDir();
-    // Outils déjà provisionnés (markers) — aucun réseau dans ce test
+    // Already provisioned tools (markers) — no network in this test
     for (const tool of [
       { name: 'java', key: '21', dir: join(dir, '.bin', 'java') },
       { name: 'steamcmd', key: '', dir: join(dir, '.bin', 'steamcmd') },
@@ -336,7 +336,7 @@ describe('ensurePluginTools', () => {
       );
     }
 
-    const runtimes = await ensurePluginTools(
+    const runtimes = await ensureRecipeTools(
       [
         { name: 'java', key: '21', label: 'java 21' },
         { name: 'steamcmd', key: '', label: 'steamcmd', steamcmd: undefined },

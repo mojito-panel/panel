@@ -9,7 +9,7 @@ const SECRET = 'symmetry-secret-0123456789abcdef012345';
 const USER_ID = 'admin_sym';
 
 describe('Panel sign ↔ agent verify — health JWT (symmetry)', () => {
-  it('un token health signé par le panel est accepté par l’agent', () => {
+  it('a health token signed by the panel is accepted by the agent', () => {
     const { token, expiresAt } = signHealthToken({ userId: USER_ID }, SECRET);
     const payload = verifyHealthToken(token, SECRET);
     expect(payload.sub).toBe(USER_ID);
@@ -17,19 +17,19 @@ describe('Panel sign ↔ agent verify — health JWT (symmetry)', () => {
     expect(expiresAt).toBeGreaterThan(Date.now());
   });
 
-  it('le TTL du health token est court (5 min)', () => {
+  it('the health token TTL is short (5 min)', () => {
     // now aligned on a whole second — signHealthToken floors to seconds
     const now = Math.floor(Date.now() / 1000) * 1000;
     const { expiresAt } = signHealthToken({ userId: USER_ID, now }, SECRET);
     expect(expiresAt - now).toBe(HEALTH_TOKEN_TTL_SECONDS * 1000);
   });
 
-  it('l’agent rejette un secret différent', () => {
+  it('the agent rejects a different secret', () => {
     const { token } = signHealthToken({ userId: USER_ID }, SECRET);
     expect(() => verifyHealthToken(token, 'other-secret-0123456789abcdef')).toThrow();
   });
 
-  it('l’agent rejette un token health expiré', () => {
+  it('the agent rejects an expired health token', () => {
     const past = Math.floor(Date.now() / 1000) - 3600;
     const { token } = signHealthToken({ userId: USER_ID, now: past * 1000 }, SECRET);
     expect(() => verifyHealthToken(token, SECRET)).toThrow(/expired/);

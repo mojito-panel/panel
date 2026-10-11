@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { makeUpdateServerVariablesSchema } from '../src/validators/server';
-import type { PluginVariable } from '@mojito/contract';
+import type { RecipeVariable } from '@mojito/contract';
 
-/** Builds a plugin variable definition with sensible defaults. */
-const variable = (overrides: Partial<PluginVariable> = {}): PluginVariable => ({
+/** Builds a recipe variable definition with sensible defaults. */
+const variable = (overrides: Partial<RecipeVariable> = {}): RecipeVariable => ({
   env: 'TEST_VAR',
   name: 'Test',
   type: 'string',

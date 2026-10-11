@@ -17,14 +17,15 @@ import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminApiRouteImport } from './routes/admin/api'
 import { Route as AdminHealthRouteImport } from './routes/admin/health'
-import { Route as AdminNodesRouteImport } from './routes/admin/nodes'
 import { Route as AdminServersRouteImport } from './routes/admin/servers'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as ServersServerIdRouteRouteImport } from './routes/servers/$serverId/route'
 import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
 import { Route as AppServersNewRouteImport } from './routes/_app/servers/new'
-import { Route as AdminPluginsIndexRouteImport } from './routes/admin/plugins/index'
+import { Route as AdminNodesIndexRouteImport } from './routes/admin/nodes/index'
+import { Route as AdminNodesNodeIdRouteImport } from './routes/admin/nodes/$nodeId'
+import { Route as AdminRecipesIndexRouteImport } from './routes/admin/recipes/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ServersServerIdIndexRouteImport } from './routes/servers/$serverId/index'
 import { Route as ServersServerIdActivityRouteImport } from './routes/servers/$serverId/activity'
@@ -36,8 +37,8 @@ import { Route as ServersServerIdSchedulesRouteImport } from './routes/servers/$
 import { Route as ServersServerIdSettingsRouteImport } from './routes/servers/$serverId/settings'
 import { Route as ServersServerIdUsersRouteImport } from './routes/servers/$serverId/users'
 import { Route as ServersServerIdVariablesRouteImport } from './routes/servers/$serverId/variables'
-import { Route as AdminPluginsPluginIdIndexRouteImport } from './routes/admin/plugins/$pluginId/index'
-import { Route as AdminPluginsNewIndexRouteImport } from './routes/admin/plugins/new/index'
+import { Route as AdminRecipesRecipeIdIndexRouteImport } from './routes/admin/recipes/$recipeId/index'
+import { Route as AdminRecipesNewIndexRouteImport } from './routes/admin/recipes/new/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,11 +79,6 @@ const AdminHealthRoute = AdminHealthRouteImport.update({
   path: '/health',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminNodesRoute = AdminNodesRouteImport.update({
-  id: '/nodes',
-  path: '/nodes',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
 const AdminServersRoute = AdminServersRouteImport.update({
   id: '/servers',
   path: '/servers',
@@ -113,9 +109,19 @@ const AppServersNewRoute = AppServersNewRouteImport.update({
   path: '/servers/new',
   getParentRoute: () => AppRoute,
 } as any)
-const AdminPluginsIndexRoute = AdminPluginsIndexRouteImport.update({
-  id: '/plugins/',
-  path: '/plugins/',
+const AdminNodesIndexRoute = AdminNodesIndexRouteImport.update({
+  id: '/nodes/',
+  path: '/nodes/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminNodesNodeIdRoute = AdminNodesNodeIdRouteImport.update({
+  id: '/nodes/$nodeId',
+  path: '/nodes/$nodeId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminRecipesIndexRoute = AdminRecipesIndexRouteImport.update({
+  id: '/recipes/',
+  path: '/recipes/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -175,15 +181,15 @@ const ServersServerIdVariablesRoute =
     path: '/variables',
     getParentRoute: () => ServersServerIdRouteRoute,
   } as any)
-const AdminPluginsPluginIdIndexRoute =
-  AdminPluginsPluginIdIndexRouteImport.update({
-    id: '/plugins/$pluginId/',
-    path: '/plugins/$pluginId/',
+const AdminRecipesRecipeIdIndexRoute =
+  AdminRecipesRecipeIdIndexRouteImport.update({
+    id: '/recipes/$recipeId/',
+    path: '/recipes/$recipeId/',
     getParentRoute: () => AdminRouteRoute,
   } as any)
-const AdminPluginsNewIndexRoute = AdminPluginsNewIndexRouteImport.update({
-  id: '/plugins/new/',
-  path: '/plugins/new/',
+const AdminRecipesNewIndexRoute = AdminRecipesNewIndexRouteImport.update({
+  id: '/recipes/new/',
+  path: '/recipes/new/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 
@@ -195,12 +201,12 @@ export interface FileRoutesByFullPath {
   '/register': typeof AuthRegisterRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
-  '/admin/nodes': typeof AdminNodesRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/': typeof AdminIndexRoute
   '/servers/new': typeof AppServersNewRoute
+  '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/servers/$serverId/activity': typeof ServersServerIdActivityRoute
   '/servers/$serverId/backups': typeof ServersServerIdBackupsRoute
@@ -212,10 +218,11 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers/': typeof AppServersIndexRoute
-  '/admin/plugins/': typeof AdminPluginsIndexRoute
+  '/admin/nodes/': typeof AdminNodesIndexRoute
+  '/admin/recipes/': typeof AdminRecipesIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
-  '/admin/plugins/$pluginId/': typeof AdminPluginsPluginIdIndexRoute
-  '/admin/plugins/new/': typeof AdminPluginsNewIndexRoute
+  '/admin/recipes/$recipeId/': typeof AdminRecipesRecipeIdIndexRoute
+  '/admin/recipes/new/': typeof AdminRecipesNewIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -223,12 +230,12 @@ export interface FileRoutesByTo {
   '/register': typeof AuthRegisterRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
-  '/admin/nodes': typeof AdminNodesRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin': typeof AdminIndexRoute
   '/servers/new': typeof AppServersNewRoute
+  '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/servers/$serverId/activity': typeof ServersServerIdActivityRoute
   '/servers/$serverId/backups': typeof ServersServerIdBackupsRoute
@@ -240,10 +247,11 @@ export interface FileRoutesByTo {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers': typeof AppServersIndexRoute
-  '/admin/plugins': typeof AdminPluginsIndexRoute
+  '/admin/nodes': typeof AdminNodesIndexRoute
+  '/admin/recipes': typeof AdminRecipesIndexRoute
   '/servers/$serverId': typeof ServersServerIdIndexRoute
-  '/admin/plugins/$pluginId': typeof AdminPluginsPluginIdIndexRoute
-  '/admin/plugins/new': typeof AdminPluginsNewIndexRoute
+  '/admin/recipes/$recipeId': typeof AdminRecipesRecipeIdIndexRoute
+  '/admin/recipes/new': typeof AdminRecipesNewIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -255,12 +263,12 @@ export interface FileRoutesById {
   '/_auth/register': typeof AuthRegisterRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
-  '/admin/nodes': typeof AdminNodesRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/': typeof AdminIndexRoute
   '/_app/servers/new': typeof AppServersNewRoute
+  '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/servers/$serverId/activity': typeof ServersServerIdActivityRoute
   '/servers/$serverId/backups': typeof ServersServerIdBackupsRoute
@@ -272,10 +280,11 @@ export interface FileRoutesById {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/_app/servers/': typeof AppServersIndexRoute
-  '/admin/plugins/': typeof AdminPluginsIndexRoute
+  '/admin/nodes/': typeof AdminNodesIndexRoute
+  '/admin/recipes/': typeof AdminRecipesIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
-  '/admin/plugins/$pluginId/': typeof AdminPluginsPluginIdIndexRoute
-  '/admin/plugins/new/': typeof AdminPluginsNewIndexRoute
+  '/admin/recipes/$recipeId/': typeof AdminRecipesRecipeIdIndexRoute
+  '/admin/recipes/new/': typeof AdminRecipesNewIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -287,12 +296,12 @@ export interface FileRouteTypes {
     | '/register'
     | '/admin/api'
     | '/admin/health'
-    | '/admin/nodes'
     | '/admin/servers'
     | '/admin/settings'
     | '/admin/users'
     | '/admin/'
     | '/servers/new'
+    | '/admin/nodes/$nodeId'
     | '/api/auth/$'
     | '/servers/$serverId/activity'
     | '/servers/$serverId/backups'
@@ -304,10 +313,11 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/servers/'
-    | '/admin/plugins/'
+    | '/admin/nodes/'
+    | '/admin/recipes/'
     | '/servers/$serverId/'
-    | '/admin/plugins/$pluginId/'
-    | '/admin/plugins/new/'
+    | '/admin/recipes/$recipeId/'
+    | '/admin/recipes/new/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -315,12 +325,12 @@ export interface FileRouteTypes {
     | '/register'
     | '/admin/api'
     | '/admin/health'
-    | '/admin/nodes'
     | '/admin/servers'
     | '/admin/settings'
     | '/admin/users'
     | '/admin'
     | '/servers/new'
+    | '/admin/nodes/$nodeId'
     | '/api/auth/$'
     | '/servers/$serverId/activity'
     | '/servers/$serverId/backups'
@@ -332,10 +342,11 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/servers'
-    | '/admin/plugins'
+    | '/admin/nodes'
+    | '/admin/recipes'
     | '/servers/$serverId'
-    | '/admin/plugins/$pluginId'
-    | '/admin/plugins/new'
+    | '/admin/recipes/$recipeId'
+    | '/admin/recipes/new'
   id:
     | '__root__'
     | '/'
@@ -346,12 +357,12 @@ export interface FileRouteTypes {
     | '/_auth/register'
     | '/admin/api'
     | '/admin/health'
-    | '/admin/nodes'
     | '/admin/servers'
     | '/admin/settings'
     | '/admin/users'
     | '/admin/'
     | '/_app/servers/new'
+    | '/admin/nodes/$nodeId'
     | '/api/auth/$'
     | '/servers/$serverId/activity'
     | '/servers/$serverId/backups'
@@ -363,10 +374,11 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/_app/servers/'
-    | '/admin/plugins/'
+    | '/admin/nodes/'
+    | '/admin/recipes/'
     | '/servers/$serverId/'
-    | '/admin/plugins/$pluginId/'
-    | '/admin/plugins/new/'
+    | '/admin/recipes/$recipeId/'
+    | '/admin/recipes/new/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -437,13 +449,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminHealthRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/nodes': {
-      id: '/admin/nodes'
-      path: '/nodes'
-      fullPath: '/admin/nodes'
-      preLoaderRoute: typeof AdminNodesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
     '/admin/servers': {
       id: '/admin/servers'
       path: '/servers'
@@ -486,11 +491,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppServersNewRouteImport
       parentRoute: typeof AppRoute
     }
-    '/admin/plugins/': {
-      id: '/admin/plugins/'
-      path: '/plugins'
-      fullPath: '/admin/plugins/'
-      preLoaderRoute: typeof AdminPluginsIndexRouteImport
+    '/admin/nodes/': {
+      id: '/admin/nodes/'
+      path: '/nodes'
+      fullPath: '/admin/nodes/'
+      preLoaderRoute: typeof AdminNodesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/nodes/$nodeId': {
+      id: '/admin/nodes/$nodeId'
+      path: '/nodes/$nodeId'
+      fullPath: '/admin/nodes/$nodeId'
+      preLoaderRoute: typeof AdminNodesNodeIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/recipes/': {
+      id: '/admin/recipes/'
+      path: '/recipes'
+      fullPath: '/admin/recipes/'
+      preLoaderRoute: typeof AdminRecipesIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/api/auth/$': {
@@ -570,18 +589,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdVariablesRouteImport
       parentRoute: typeof ServersServerIdRouteRoute
     }
-    '/admin/plugins/$pluginId/': {
-      id: '/admin/plugins/$pluginId/'
-      path: '/plugins/$pluginId'
-      fullPath: '/admin/plugins/$pluginId/'
-      preLoaderRoute: typeof AdminPluginsPluginIdIndexRouteImport
+    '/admin/recipes/$recipeId/': {
+      id: '/admin/recipes/$recipeId/'
+      path: '/recipes/$recipeId'
+      fullPath: '/admin/recipes/$recipeId/'
+      preLoaderRoute: typeof AdminRecipesRecipeIdIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/plugins/new/': {
-      id: '/admin/plugins/new/'
-      path: '/plugins/new'
-      fullPath: '/admin/plugins/new/'
-      preLoaderRoute: typeof AdminPluginsNewIndexRouteImport
+    '/admin/recipes/new/': {
+      id: '/admin/recipes/new/'
+      path: '/recipes/new'
+      fullPath: '/admin/recipes/new/'
+      preLoaderRoute: typeof AdminRecipesNewIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
   }
@@ -590,27 +609,29 @@ declare module '@tanstack/react-router' {
 interface AdminRouteRouteChildren {
   AdminApiRoute: typeof AdminApiRoute
   AdminHealthRoute: typeof AdminHealthRoute
-  AdminNodesRoute: typeof AdminNodesRoute
   AdminServersRoute: typeof AdminServersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
-  AdminPluginsIndexRoute: typeof AdminPluginsIndexRoute
-  AdminPluginsPluginIdIndexRoute: typeof AdminPluginsPluginIdIndexRoute
-  AdminPluginsNewIndexRoute: typeof AdminPluginsNewIndexRoute
+  AdminNodesNodeIdRoute: typeof AdminNodesNodeIdRoute
+  AdminNodesIndexRoute: typeof AdminNodesIndexRoute
+  AdminRecipesIndexRoute: typeof AdminRecipesIndexRoute
+  AdminRecipesRecipeIdIndexRoute: typeof AdminRecipesRecipeIdIndexRoute
+  AdminRecipesNewIndexRoute: typeof AdminRecipesNewIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminApiRoute: AdminApiRoute,
   AdminHealthRoute: AdminHealthRoute,
-  AdminNodesRoute: AdminNodesRoute,
   AdminServersRoute: AdminServersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
-  AdminPluginsIndexRoute: AdminPluginsIndexRoute,
-  AdminPluginsPluginIdIndexRoute: AdminPluginsPluginIdIndexRoute,
-  AdminPluginsNewIndexRoute: AdminPluginsNewIndexRoute,
+  AdminNodesNodeIdRoute: AdminNodesNodeIdRoute,
+  AdminNodesIndexRoute: AdminNodesIndexRoute,
+  AdminRecipesIndexRoute: AdminRecipesIndexRoute,
+  AdminRecipesRecipeIdIndexRoute: AdminRecipesRecipeIdIndexRoute,
+  AdminRecipesNewIndexRoute: AdminRecipesNewIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(

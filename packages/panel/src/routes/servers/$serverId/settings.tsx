@@ -93,7 +93,7 @@ function ServerSettingsPage() {
         <CardContent className="divide-y">
           <InfoRow label="Nom" value={server?.name ?? '…'} />
           <InfoRow label="Identifiant (UUID)" value={server?.id ?? '…'} />
-          <InfoRow label="Plugin" value={server?.plugin.name ?? '…'} />
+          <InfoRow label="Recette" value={server?.recipe.name ?? '…'} />
           <InfoRow label="Node" value={server?.node.name ?? '…'} />
           <InfoRow
             label="Port"

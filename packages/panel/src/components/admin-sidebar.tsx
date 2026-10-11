@@ -31,7 +31,7 @@ const adminItems = [
   { title: 'Vue d’ensemble', url: '/admin', icon: LayoutDashboard, soon: false },
   { title: 'Serveurs', url: '/admin/servers', icon: Server, soon: true },
   { title: 'Nodes', url: '/admin/nodes', icon: Network, soon: false },
-  { title: 'Plugins', url: '/admin/plugins', icon: Puzzle, soon: false },
+  { title: 'Recettes', url: '/admin/recipes', icon: Puzzle, soon: false },
   { title: 'Utilisateurs', url: '/admin/users', icon: Users, soon: true },
   { title: 'API', url: '/admin/api', icon: KeyRound, soon: true },
   { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: true },

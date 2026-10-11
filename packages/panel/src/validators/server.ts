@@ -1,15 +1,12 @@
 import { z } from 'zod';
-import { validateVariableValue, type PluginVariable } from '@mojito/contract';
+import { validateVariableValue, type RecipeVariable } from '@mojito/contract';
 
 export const createServerSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   nodeId: z.string().min(1, 'Choisis un node'),
-  pluginId: z.string().min(1, 'Choisis un plugin'),
-  port: z
-    .number()
-    .int()
-    .min(1024, 'Le port doit être >= 1024')
-    .max(65535),
+  recipeId: z.string().min(1, 'Choisis une recette'),
+  /** Free allocation claimed from the node's pool (Pelican semantics). */
+  allocationId: z.string().min(1, 'Choisis une allocation'),
   memoryMb: z
     .number()
     .int()
@@ -19,6 +16,17 @@ export const createServerSchema = z.object({
 });
 
 export type CreateServerDto = z.infer<typeof createServerSchema>;
+
+/**
+ * Allocation action on the server's Network page: claim a free allocation
+ * from the node pool, release a non-primary one, or set the primary.
+ */
+export const serverAllocationActionSchema = z.object({
+  serverId: z.string().min(1),
+  allocationId: z.string().min(1),
+});
+
+export type ServerAllocationActionDto = z.infer<typeof serverAllocationActionSchema>;
 
 export const serverActionInputSchema = z.object({
   serverId: z.string().min(1),
@@ -38,12 +46,12 @@ export const serverLogsQuerySchema = z.object({
 });
 
 /**
- * Variable update — built dynamically from the plugin's variable definitions
+ * Variable update — built dynamically from the recipe's variable definitions
  * so the form gets per-variable validation (type, min/max, pattern, options,
  * required) reusing the contract's own rules. Non-editable variables are
  * forced back to their current value by the server function.
  */
-export function makeUpdateServerVariablesSchema(pluginVariables: PluginVariable[]) {
+export function makeUpdateServerVariablesSchema(recipeVariables: RecipeVariable[]) {
   const valueSchema = z.union([z.string(), z.number(), z.boolean()]);
 
   return z.object({
@@ -53,7 +61,7 @@ export function makeUpdateServerVariablesSchema(pluginVariables: PluginVariable[
     // exactly what TanStack Form needs to map the error onto the
     // `variables.ENV` field.
     variables: z.record(z.string(), valueSchema).superRefine((record, ctx) => {
-      for (const variable of pluginVariables) {
+      for (const variable of recipeVariables) {
         const value = record[variable.env];
         // The full record is sent back — a missing key means the field was
         // emptied out: only required variables are rejected

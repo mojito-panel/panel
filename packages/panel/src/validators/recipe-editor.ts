@@ -2,18 +2,18 @@ import { z } from 'zod';
 import {
   RESERVED_ENV_NAMES,
   findToolFeatureErrors,
-  safeParsePlugin,
-  type Plugin,
+  safeParseRecipe,
+  type Recipe,
   type RunnerActionInput,
 } from '@mojito/contract';
 
 /**
- * Form value + Zod schema for the plugin editor (Pelican-style egg editor).
+ * Form value + Zod schema for the recipe editor (Pelican-style egg editor).
  *
  * The editor value is a "fully populated" shape: every optional contract field
  * exists in the form (empty string / null / [] = absent) so that TanStack Form
- * field names are stable. `pluginEditorValueToPlugin` strips the empties and
- * produces the final plugin JSON; the server revalidates it with `parsePlugin`.
+ * field names are stable. `recipeEditorValueToRecipe` strips the empties and
+ * produces the final recipe JSON; the server revalidates it with `parseRecipe`.
  *
  * No `z.default()`/`z.coerce()` — required by the TanStack Form Standard
  * Schema typing (see AGENTS.md).
@@ -32,7 +32,7 @@ export type KvPair = z.infer<typeof kvPairSchema>;
 
 export const variableTypeSchema = z.enum(['string', 'number', 'boolean']);
 
-export const pluginVariableValueSchema = z.object({
+export const recipeVariableValueSchema = z.object({
   name: z.string().min(1, 'Nom requis'),
   env: z
     .string()
@@ -58,9 +58,9 @@ export const pluginVariableValueSchema = z.object({
   options: z.array(z.string()),
 });
 
-export type PluginVariableValue = z.infer<typeof pluginVariableValueSchema>;
+export type RecipeVariableValue = z.infer<typeof recipeVariableValueSchema>;
 
-export function newVariableValue(sort: number): PluginVariableValue {
+export function newVariableValue(sort: number): RecipeVariableValue {
   return {
     name: '',
     env: '',
@@ -275,7 +275,7 @@ export type RequirementsValue = z.infer<typeof requirementsValueSchema>;
 
 // ─── Full editor value ───────────────────────────────────────────────────────
 
-export const pluginEditorSchema = z
+export const recipeEditorSchema = z
   .object({
     id: z
       .string()
@@ -290,7 +290,7 @@ export const pluginEditorSchema = z
     requirements: requirementsValueSchema,
     runtime: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
-    variables: z.array(pluginVariableValueSchema),
+    variables: z.array(recipeVariableValueSchema),
     install: z.array(actionValueSchema),
     start: z.object({
       command: z.string().min(1, 'Commande de démarrage requise'),
@@ -301,7 +301,7 @@ export const pluginEditorSchema = z
     logs: logsValueSchema,
   })
   .superRefine((value, ctx) => {
-    // Duplicate plugin variable envs → error on each duplicate item
+    // Duplicate recipe variable envs → error on each duplicate item
     const seen = new Map<string, number>();
     value.variables.forEach((variable, index) => {
       if (!variable.env) return;
@@ -362,11 +362,11 @@ export const pluginEditorSchema = z
     }
   });
 
-export type PluginEditorValue = z.infer<typeof pluginEditorSchema>;
+export type RecipeEditorValue = z.infer<typeof recipeEditorSchema>;
 
 // ─── Defaults (create) ────────────────────────────────────────────────────────
 
-export function emptyPluginEditorValue(): PluginEditorValue {
+export function emptyRecipeEditorValue(): RecipeEditorValue {
   return {
     id: '',
     name: '',
@@ -396,25 +396,25 @@ function toPairs(record: Record<string, string> | undefined): KvPair[] {
   return Object.entries(record ?? {}).map(([key, value]) => ({ key, value }));
 }
 
-/** Parsed plugin (contract output — defaults applied) → editor value. */
-export function pluginToEditorValue(plugin: Plugin): PluginEditorValue {
+/** Parsed recipe (contract output — defaults applied) → editor value. */
+export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
   return {
-    id: plugin.id,
-    name: plugin.name,
-    author: plugin.author,
-    description: plugin.description ?? '',
-    tags: plugin.tags ?? [],
-    features: plugin.features ?? [],
-    updateUrl: plugin.updateUrl ?? '',
+    id: recipe.id,
+    name: recipe.name,
+    author: recipe.author,
+    description: recipe.description ?? '',
+    tags: recipe.tags ?? [],
+    features: recipe.features ?? [],
+    updateUrl: recipe.updateUrl ?? '',
     requirements: {
-      minRamMb: plugin.requirements?.minRamMb ?? 0,
-      minDiskMb: plugin.requirements?.minDiskMb ?? 0,
-      minCpuPercent: plugin.requirements?.minCpuPercent ?? 0,
-      requiredCommands: plugin.requirements?.requiredCommands ?? [],
+      minRamMb: recipe.requirements?.minRamMb ?? 0,
+      minDiskMb: recipe.requirements?.minDiskMb ?? 0,
+      minCpuPercent: recipe.requirements?.minCpuPercent ?? 0,
+      requiredCommands: recipe.requirements?.requiredCommands ?? [],
     },
-    runtime: toPairs(plugin.runtime),
-    env: toPairs(plugin.env),
-    variables: plugin.variables.map((variable) => ({
+    runtime: toPairs(recipe.runtime),
+    env: toPairs(recipe.env),
+    variables: recipe.variables.map((variable) => ({
       name: variable.name,
       env: variable.env,
       description: variable.description ?? '',
@@ -429,7 +429,7 @@ export function pluginToEditorValue(plugin: Plugin): PluginEditorValue {
       pattern: variable.pattern ?? '',
       options: variable.options ?? [],
     })),
-    install: plugin.install.map((action): ActionValue => {
+    install: recipe.install.map((action): ActionValue => {
       const base = newActionValue(action.action);
       switch (action.action) {
         case 'download':
@@ -496,23 +496,23 @@ export function pluginToEditorValue(plugin: Plugin): PluginEditorValue {
       }
     }),
     start: {
-      command: plugin.start.command,
-      stop: plugin.start.stop
+      command: recipe.start.command,
+      stop: recipe.start.stop
         ? {
-            type: plugin.start.stop.type,
-            value: plugin.start.stop.value,
-            timeoutMs: plugin.start.stop.timeoutMs,
+            type: recipe.start.stop.type,
+            value: recipe.start.stop.value,
+            timeoutMs: recipe.start.stop.timeoutMs,
           }
         : null,
-      ready: plugin.start.ready
-        ? { pattern: plugin.start.ready.pattern, strip: plugin.start.ready.strip ?? '' }
+      ready: recipe.start.ready
+        ? { pattern: recipe.start.ready.pattern, strip: recipe.start.ready.strip ?? '' }
         : null,
-      workingDirectory: plugin.start.workingDirectory ?? '',
+      workingDirectory: recipe.start.workingDirectory ?? '',
     },
     logs: {
-      mode: plugin.logs?.mode ?? 'stdout',
-      file: plugin.logs?.file ?? '',
-      stripAnsi: plugin.logs?.stripAnsi ?? false,
+      mode: recipe.logs?.mode ?? 'stdout',
+      file: recipe.logs?.file ?? '',
+      stripAnsi: recipe.logs?.stripAnsi ?? false,
     },
   };
 }
@@ -526,12 +526,12 @@ function pairsToRecord(pairs: KvPair[]): Record<string, string> | undefined {
 }
 
 /**
- * Editor value → plugin JSON (contract input shape, empties stripped).
- * Returns `{ plugin }` on success, or `{ issues }` when the contract
+ * Editor value → recipe JSON (contract input shape, empties stripped).
+ * Returns `{ recipe }` on success, or `{ issues }` when the contract
  * schema rejects the value (final validation before send).
  */
-export function pluginEditorValueToPlugin(value: PluginEditorValue): {
-  plugin?: Plugin;
+export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
+  recipe?: Recipe;
   issues?: string[];
 } {
   const variables = value.variables
@@ -615,7 +615,7 @@ export function pluginEditorValueToPlugin(value: PluginEditorValue): {
     }
   });
 
-  const plugin = {
+  const recipe = {
     schemaVersion: 2,
     id: value.id,
     name: value.name,
@@ -667,28 +667,28 @@ export function pluginEditorValueToPlugin(value: PluginEditorValue): {
     },
   };
 
-  const parsed = safeParsePlugin(plugin);
+  const parsed = safeParseRecipe(recipe);
   if (parsed.success) {
     // Tool features (java, steamcmd) — same upfront check the agent runs at install
     const toolErrors = findToolFeatureErrors(parsed.data);
     if (toolErrors.length > 0) {
       return { issues: toolErrors };
     }
-    return { plugin: parsed.data };
+    return { recipe: parsed.data };
   }
   return {
     issues: parsed.error.issues.map(
-      (issue) => `${issue.path.join('.') || 'plugin'} : ${issue.message}`,
+      (issue) => `${issue.path.join('.') || 'recipe'} : ${issue.message}`,
     ),
   };
 }
 
 /**
  * List of `{{VAR}}` template variables used but not declared
- * (plugin variables, system variables, or fixed env). Live helper
+ * (recipe variables, system variables, or fixed env). Live helper
  * for the editor's warning banner — mirrors the install-time check.
  */
-export function findUnknownVariablesInEditorValue(value: PluginEditorValue): string[] {
+export function findUnknownVariablesInEditorValue(value: RecipeEditorValue): string[] {
   const fixedEnv = new Set(value.env.filter((pair) => pair.key).map((pair) => pair.key));
   const declared = new Set<string>([
     ...value.variables.filter((v) => v.env).map((v) => v.env),

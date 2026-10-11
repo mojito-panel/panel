@@ -48,7 +48,7 @@ function ServersPage() {
                 <Link to="/admin/nodes">Nodes</Link>
               </Button>
               <Button variant="outline" asChild>
-                <Link to="/admin/plugins">Plugins</Link>
+                <Link to="/admin/recipes">Recettes</Link>
               </Button>
             </>
           )}
@@ -93,7 +93,7 @@ function ServersPage() {
                 {server.name}
               </Link>
               <p className="truncate text-sm text-muted-foreground">
-                {server.pluginName} · {server.nodeName}
+                {server.recipeName} · {server.nodeName}
               </p>
             </div>
             <div className="flex items-center gap-3">

@@ -5,9 +5,9 @@ import type {
   Account,
   Verification,
   Node,
-  Plugin,
+  Recipe,
   Server,
-  ServerAllocation,
+  Allocation,
 } from './entities';
 
 // ─── Types inferred from MikroORM entities ───────────────────────────────────────
@@ -17,9 +17,9 @@ export interface ISession extends InferEntity<typeof Session> {}
 export interface IAccount extends InferEntity<typeof Account> {}
 export interface IVerification extends InferEntity<typeof Verification> {}
 export interface INode extends InferEntity<typeof Node> {}
-export interface IPlugin extends InferEntity<typeof Plugin> {}
+export interface IRecipe extends InferEntity<typeof Recipe> {}
 export interface IServer extends InferEntity<typeof Server> {}
-export interface IServerAllocation extends InferEntity<typeof ServerAllocation> {}
+export interface IAllocation extends InferEntity<typeof Allocation> {}
 
 export type NodeStatus = INode['status'];
 export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';

@@ -3,13 +3,13 @@ import {
   JAVA_VERSION_ENV,
   STEAM_APP_ID_ENV,
   STEAM_MOD_ENV,
-  type Plugin,
+  type Recipe,
 } from '@mojito/contract';
 import type { ResolvedVariables } from '../server/templating';
 import {
   ensureTool,
   type EnsureToolResult,
-  type ResolvedPluginTool,
+  type ResolvedRecipeTool,
   type ToolRuntime,
 } from './registry';
 import type { ExecOptions } from '../server/installer/actions/exec';
@@ -21,8 +21,8 @@ import type { ExecOptions } from '../server/installer/actions/exec';
  * AND start.
  *
  * - `java`     → JDK in `.bin/java`, version from the JAVA_VERSION variable
- *                (declared by the plugin, overridable per server)
- * - `steamcmd` → SteamCMD in `.bin/steamcmd`; when the plugin declares
+ *                (declared by the recipe, overridable per server)
+ * - `steamcmd` → SteamCMD in `.bin/steamcmd`; when the recipe declares
  *                STEAM_APP_ID, the agent runs the content install itself
  *                (+app_update, then a validate pass), with an optional
  *                STEAM_MOD variable (+app_set_config … mod <mod>)
@@ -32,18 +32,18 @@ export { ensureTool, toolInstallDir } from './registry';
 export type {
   EnsureToolOptions,
   EnsureToolResult,
-  ResolvedPluginTool,
+  ResolvedRecipeTool,
   ToolRuntime,
 } from './registry';
 export { runSteamcmdContentInstall } from './steamcmd';
 
-/** Resolves the plugin's tool features (parameters from resolved variables). */
-export function resolvePluginTools(
-  plugin: Plugin,
+/** Resolves the recipe's tool features (parameters from resolved variables). */
+export function resolveRecipeTools(
+  recipe: Recipe,
   vars: ResolvedVariables,
-): ResolvedPluginTool[] {
-  const tools: ResolvedPluginTool[] = [];
-  const hasFeature = (name: string) => plugin.features.includes(name);
+): ResolvedRecipeTool[] {
+  const tools: ResolvedRecipeTool[] = [];
+  const hasFeature = (name: string) => recipe.features.includes(name);
 
   if (hasFeature('java')) {
     const version = vars.get(JAVA_VERSION_ENV);
@@ -69,19 +69,19 @@ export function resolvePluginTools(
  * Install steps contributed by the tool features:
  * ensure + (steamcmd content install: 2 passes when STEAM_APP_ID is declared).
  */
-export function countToolSteps(plugin: Plugin): number {
+export function countToolSteps(recipe: Recipe): number {
   let steps = 0;
-  if (plugin.features.includes('java')) steps += 1;
-  if (plugin.features.includes('steamcmd')) {
+  if (recipe.features.includes('java')) steps += 1;
+  if (recipe.features.includes('steamcmd')) {
     steps += 1;
-    if (plugin.variables.some((v) => v.env === STEAM_APP_ID_ENV)) steps += 2;
+    if (recipe.variables.some((v) => v.env === STEAM_APP_ID_ENV)) steps += 2;
   }
   return steps;
 }
 
 /** Ensures every resolved tool is in the server's `.bin/`, in declaration order. */
-export async function ensurePluginTools(
-  tools: ResolvedPluginTool[],
+export async function ensureRecipeTools(
+  tools: ResolvedRecipeTool[],
   installDir: string,
   onLine?: ExecOptions['onLine'],
 ): Promise<EnsureToolResult[]> {

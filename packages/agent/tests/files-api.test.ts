@@ -23,11 +23,11 @@ const OTHER_ID = '660e8400-e29b-41d4-a716-446655440000';
 
 const auth = { authorization: `Bearer ${TEST_TOKEN}` };
 
-const validPlugin = {
+const validRecipe = {
   schemaVersion: 2,
-  id: 'test-plugin',
+  id: 'test-recipe',
   name: 'Test',
-  author: 'moi',
+  author: 'me',
   variables: [{ env: 'RAM_MB', name: 'RAM', type: 'number', defaultValue: 1024 }],
   install: [{ action: 'write', file: 'marker.txt', content: 'port={{SERVER_PORT}}' }],
   start: { command: 'echo {{SERVER_PORT}}' },
@@ -47,7 +47,7 @@ async function waitForInstall(app: FastifyInstance, serverId: string, timeoutMs 
       if (body.status === 'installed' || body.status === 'failed') return body;
     }
     if (Date.now() - startedAt > timeoutMs) {
-      throw new Error(`L'installation de ${serverId} n'a pas terminé à temps`);
+      throw new Error(`The install for ${serverId} did not finish in time`);
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -69,8 +69,8 @@ describe('Agent API — files browser', () => {
       headers: auth,
       payload: {
         serverId: SERVER_ID,
-        name: 'mon-serveur',
-        plugin: validPlugin,
+        name: 'my-server',
+        recipe: validRecipe,
         variables: {},
         installDir: join(tmpDir, 'srv'),
         allocation: { port: 25565, memoryMb: 2048 },
@@ -87,12 +87,12 @@ describe('Agent API — files browser', () => {
 
   // ─── Auth & unknown server ─────────────────────────────────────────────────
 
-  it('exige le token panel (401 sans)', async () => {
+  it('requires the panel token (401 without it)', async () => {
     const res = await app.inject({ method: 'GET', url: `/servers/${SERVER_ID}/files` });
     expect(res.statusCode).toBe(401);
   });
 
-  it('retourne 404 pour un serveur inconnu', async () => {
+  it('returns 404 for an unknown server', async () => {
     const res = await app.inject({
       method: 'GET',
       url: `/servers/${OTHER_ID}/files`,
@@ -104,7 +104,7 @@ describe('Agent API — files browser', () => {
 
   // ─── Listing ────────────────────────────────────────────────────────────────
 
-  it('liste la racine (dossiers avant fichiers, avec taille)', async () => {
+  it('lists the root (folders before files, with size)', async () => {
     // Prepare: a folder with a file inside, plus a root-level file
     await app.inject({
       method: 'POST',
@@ -138,7 +138,7 @@ describe('Agent API — files browser', () => {
     expect(marker.modifiedAt).toEqual(expect.any(String));
   });
 
-  it('liste un sous-dossier et 404 pour un dossier manquant', async () => {
+  it('lists a subfolder and returns 404 for a missing folder', async () => {
     const ok = await app.inject({
       method: 'GET',
       url: `/servers/${SERVER_ID}/files?path=plugins`,
@@ -149,7 +149,7 @@ describe('Agent API — files browser', () => {
 
     const missing = await app.inject({
       method: 'GET',
-      url: `/servers/${SERVER_ID}/files?path=inconnu`,
+      url: `/servers/${SERVER_ID}/files?path=unknown`,
       headers: auth,
     });
     expect(missing.statusCode).toBe(404);
@@ -158,7 +158,7 @@ describe('Agent API — files browser', () => {
 
   // ─── Read / write ──────────────────────────────────────────────────────────
 
-  it('lit le contenu texte d’un fichier', async () => {
+  it('reads the text content of a file', async () => {
     const res = await app.inject({
       method: 'GET',
       url: `/servers/${SERVER_ID}/files/content?path=marker.txt`,
@@ -168,7 +168,7 @@ describe('Agent API — files browser', () => {
     expect(res.json()).toEqual({ path: 'marker.txt', content: 'port=25565', size: 10 });
   });
 
-  it('lit 404 (manquant), 400 (dossier), 400 (chemin manquant)', async () => {
+  it('reads 404 (missing), 400 (folder), 400 (missing path)', async () => {
     const missing = await app.inject({
       method: 'GET',
       url: `/servers/${SERVER_ID}/files/content?path=nope.txt`,
@@ -192,12 +192,12 @@ describe('Agent API — files browser', () => {
     expect(noPath.statusCode).toBe(400);
   });
 
-  it('écrit un fichier (création + mise à jour), refuse d’écraser un dossier', async () => {
+  it('writes a file (create + update), refuses to overwrite a folder', async () => {
     const write = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/content`,
       headers: auth,
-      payload: { path: 'config/motd.txt', content: 'Bienvenue !' },
+      payload: { path: 'config/motd.txt', content: 'Welcome!' },
     });
     expect(write.statusCode).toBe(204);
 
@@ -208,13 +208,13 @@ describe('Agent API — files browser', () => {
       headers: auth,
     });
     expect(read.statusCode).toBe(200);
-    expect(read.json().content).toBe('Bienvenue !');
+    expect(read.json().content).toBe('Welcome!');
 
     const update = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/content`,
       headers: auth,
-      payload: { path: 'config/motd.txt', content: 'Salut !' },
+      payload: { path: 'config/motd.txt', content: 'Hi!' },
     });
     expect(update.statusCode).toBe(204);
 
@@ -228,7 +228,7 @@ describe('Agent API — files browser', () => {
     expect(overDir.json().code).toBe('wrong_type');
   });
 
-  it('refuse les fichiers trop volumineux en lecture et écriture (413)', async () => {
+  it('refuses oversized files in read and write (413)', async () => {
     const big = 'x'.repeat(1024 * 1024 + 1);
     const write = await app.inject({
       method: 'POST',
@@ -242,7 +242,7 @@ describe('Agent API — files browser', () => {
 
   // ─── Create / rename / delete ──────────────────────────────────────────────
 
-  it('crée fichier et dossier, 409 si l’entrée existe déjà', async () => {
+  it('creates file and folder, 409 if the entry already exists', async () => {
     const dir = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/create`,
@@ -277,7 +277,7 @@ describe('Agent API — files browser', () => {
     expect(dupDir.statusCode).toBe(409);
   });
 
-  it('renomme (404 source manquante, 409 cible existante)', async () => {
+  it('renames (404 missing source, 409 existing target)', async () => {
     const rename = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/rename`,
@@ -310,12 +310,12 @@ describe('Agent API — files browser', () => {
     expect(conflict.statusCode).toBe(409);
   });
 
-  it('supprime fichiers et dossiers (récursif), tolère les entrées déjà parties', async () => {
+  it('deletes files and folders (recursive), tolerates already-gone entries', async () => {
     const del = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/delete`,
       headers: auth,
-      payload: { paths: ['world', 'config/motd.txt', 'déjà-absent.txt'] },
+      payload: { paths: ['world', 'config/motd.txt', 'already-gone.txt'] },
     });
     expect(del.statusCode).toBe(204);
 
@@ -338,7 +338,7 @@ describe('Agent API — files browser', () => {
 
   // ─── Upload (base64) ───────────────────────────────────────────────────────
 
-  it('upload un fichier (base64), refuse un dossier comme cible', async () => {
+  it('uploads a file (base64), refuses a folder as target', async () => {
     const upload = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/upload`,
@@ -364,9 +364,9 @@ describe('Agent API — files browser', () => {
     expect(overDir.statusCode).toBe(400);
   });
 
-  // ─── Sécurité : traversée de dossier ───────────────────────────────────────
+  // ─── Security: path traversal ───────────────────────────────────────────────
 
-  it('rejette les chemins de traversée (..) sur toutes les routes', async () => {
+  it('rejects traversal paths (..) on every route', async () => {
     const list = await app.inject({
       method: 'GET',
       url: `/servers/${SERVER_ID}/files?path=../`,
@@ -415,7 +415,7 @@ describe('Agent API — files browser', () => {
     expect(create.statusCode).toBe(400);
   });
 
-  it('rejette les chemins absolus / lecteurs Windows et les backslashes normalisés restent sûrs', async () => {
+  it('rejects absolute paths / Windows drives, normalized backslashes stay safe', async () => {
     const drive = await app.inject({
       method: 'GET',
       url: `/servers/${SERVER_ID}/files?path=${encodeURIComponent('C:/Windows')}`,
@@ -448,7 +448,7 @@ describe('Agent API — files browser', () => {
     expect(read.statusCode).toBe(200);
   });
 
-  it('refuse une requête delete vide ou invalide (400)', async () => {
+  it('refuses an empty or invalid delete request (400)', async () => {
     const empty = await app.inject({
       method: 'POST',
       url: `/servers/${SERVER_ID}/files/delete`,

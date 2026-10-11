@@ -12,8 +12,8 @@ import {
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
 import { CollapseCard, FieldShell, ItemActions, TagsInput } from './fields';
-import type { PluginForm } from './plugin-editor';
-import { newVariableValue, type PluginVariableValue } from '~/validators/plugin-editor';
+import type { RecipeForm } from './recipe-editor';
+import { newVariableValue, type RecipeVariableValue } from '~/validators/recipe-editor';
 
 /**
  * Tab « Variables » — Pelican's Egg Variables tab: collapsible cards
@@ -58,14 +58,14 @@ function deriveEnv(name: string): string {
 /** defaultValue type conversion when the variable type changes. */
 function convertDefault(
   current: string | number | boolean,
-  type: PluginVariableValue['type'],
+  type: RecipeVariableValue['type'],
 ): string | number | boolean {
   if (type === 'number') return Number(current) || 0;
   if (type === 'boolean') return current === true || current === 'true' || current === 1;
   return String(current);
 }
 
-export function VariablesTab({ form }: { form: PluginForm }) {
+export function VariablesTab({ form }: { form: RecipeForm }) {
   return (
     <form.Field name="variables">
       {(field) => (
@@ -106,7 +106,7 @@ function VariableCard({
   onMoveDown,
   onRemove,
 }: {
-  form: PluginForm;
+  form: RecipeForm;
   index: number;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -179,7 +179,7 @@ function VariableCard({
                   <Select
                     value={typeField.state.value}
                     onValueChange={(type) => {
-                      const nextType = type as PluginVariableValue['type'];
+                      const nextType = type as RecipeVariableValue['type'];
                       typeField.handleChange(nextType);
                       form.setFieldValue(
                         v.defaultValue,

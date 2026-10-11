@@ -1,4 +1,4 @@
-import type { PluginVariable } from '@mojito/contract';
+import type { RecipeVariable } from '@mojito/contract';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import {
@@ -9,11 +9,11 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 
-/** Type sent by the plugin vs value kept in the form state. */
+/** Type sent by the recipe vs value kept in the form state. */
 export type VariableValue = string | number | boolean;
 
 /**
- * Plugin variable input (shadcn-flavored): boolean → Activé/Désactivé,
+ * Recipe variable input (shadcn-flavored): boolean → Activé/Désactivé,
  * options → dropdown, otherwise a text/number Input. Shared by the server
  * creation form and the "Variables" page.
  */
@@ -25,7 +25,7 @@ export function VariableField({
   error,
   disabled = false,
 }: {
-  variable: PluginVariable;
+  variable: RecipeVariable;
   value: VariableValue | undefined;
   onChange: (value: VariableValue) => void;
   onBlur?: () => void;

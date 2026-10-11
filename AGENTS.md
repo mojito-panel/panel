@@ -1,125 +1,126 @@
-# AGENTS.md — Conventions du projet Mojito Panel
+# AGENTS.md — Mojito Panel Project Conventions
 
-Panel d'hébergement de serveurs de jeux, natif Windows, sans Docker.
-Monorepo npm workspaces : `contract` (Zod), `panel` (TanStack Start), `agent` (Fastify).
+Game server hosting panel, native Windows, no Docker.
+npm workspaces monorepo: `contract` (Zod), `panel` (TanStack Start), `agent` (Fastify).
 
-## Commandes
+## Commands
 
 ```bash
-npm install                    # Dépendances (Node 24 requis)
-mise run setup:dev             # Docker Postgres + copie .env.default → .env
-npm run db:migrate -w @mojito/panel   # Génère une migration MikroORM (appliquée au boot par src/server.ts)
+npm install                    # Dependencies (Node 24 required)
+mise run setup:dev             # Docker Postgres + copy .env.default → .env
+npm run db:migrate -w @mojito/panel   # Generate a MikroORM migration (applied at boot by src/server.ts)
 npm run dev                    # Panel — http://localhost:5173 (strictPort)
-npm run dev:agent              # Agent Fastify
-npm test                       # Tous les tests (workspaces)
-npm run build                  # Build panel (vite, client + SSR)
+npm run dev:agent              # Fastify agent
+npm test                       # All tests (workspaces)
+npm run build                  # Panel build (vite, client + SSR)
 ```
 
 ## Architecture
 
-- Le panel ne touche JAMAIS directement aux serveurs de jeu — il parle à l'agent via API.
-- Le contrat panel ↔ agent est défini dans `@mojito/contract` (schémas Zod partagés).
-- L'agent est un daemon générique — rien de spécifique aux jeux dans son code.
+- The panel NEVER touches game servers directly — it talks to the agent via API.
+- The panel ↔ agent contract is defined in `@mojito/contract` (shared Zod schemas).
+- The agent is a generic daemon — nothing game-specific in its code.
 
-## Langue
+## Language
 
-- **Commentaires de code** : en ANGLAIS, dans tous les packages (`src/` comme `tests/`).
-- **Tests** : en ANGLAIS — descriptions, messages d'assertion, noms de variables dans les fixtures.
-- Les messages d'erreur runtime adressés à l'utilisateur final (ex : `PowerActionError('Serveur inconnu')`) restent en français.
+- **Code comments**: in ENGLISH, in all packages (`src/` and `tests/` alike).
+- **Tests**: in ENGLISH — descriptions, assertion messages, variable names in fixtures.
+- **Docs**: in ENGLISH.
+- Runtime error messages addressed to the end user (e.g. `PowerActionError('Serveur inconnu')`) stay in French.
 
 ## Stack & versions
 
-| Techno | Contraintes |
+| Technology | Constraint |
 |---|---|
-| Node.js 24 | `pg` (Postgres) — PAS de better-sqlite3 (ne compile pas sur Windows) |
-| TypeScript | `erasableSyntaxOnly: true` partout — PAS de parameter properties, enums, namespaces |
-| Visibilité | Champs/méthodes privés avec `#` (syntaxe JS native) — JAMAIS `private`/`public`/`protected` |
-| React 19.3 | PAS de `useCallback`/`useMemo`/`forwardRef` — React Compiler activé |
-| MikroORM v7 | `defineEntity`/`p` (decorator-less) — PAS de EntitySchema ni de décorateurs |
-| better-auth | `pg` Pool + mapping snake_case (`user.fields` etc.), plugin `tanstackStartCookies` — tables gérées par MikroORM |
-| Zod 4 | Standard Schema — validateur natif de TanStack Form (pas d'adapter) |
+| Node.js 24 | `pg` (Postgres) — NO better-sqlite3 (does not compile on Windows) |
+| TypeScript | `erasableSyntaxOnly: true` everywhere — NO parameter properties, enums, namespaces |
+| Visibility | Private fields/methods with `#` (native JS syntax) — NEVER `private`/`public`/`protected` |
+| React 19.3 | NO `useCallback`/`useMemo`/`forwardRef` — React Compiler enabled |
+| MikroORM v7 | `defineEntity`/`p` (decorator-less) — NO EntitySchema, NO decorators |
+| better-auth | `pg` Pool + snake_case mapping (`user.fields` etc.), `tanstackStartCookies` plugin — tables managed by MikroORM |
+| Zod 4 | Standard Schema — TanStack Form's native validator (no adapter) |
 
-## Conventions panel (packages/panel)
+## Panel conventions (packages/panel)
 
 ### Structure
 
 ```
 src/
-├── routes/            # TanStack Router file-based, en DOSSIERS (pas de flat names)
-│   ├── __root.tsx     # createRootRouteWithContext + beforeLoad (session SSR)
-│   ├── index.tsx      # / → redirect (connecté → /servers, sinon /login)
-│   ├── _auth/         # pathless layout → /login, /register (PAS de sidebar)
-│   ├── _app.tsx       # layout protégé : SidebarProvider + AppSidebar + guard
-│   ├── _app/servers/  # /servers (liste), /servers/new (création)
-│   ├── servers/$serverId/  # layout PELICAN : sidebar propre + pages
-│   │   ├── route.tsx  # layout + guard + query ['server', serverId] partagée
+├── routes/            # TanStack Router file-based, as DIRECTORIES (no flat names)
+│   ├── __root.tsx     # createRootRouteWithContext + beforeLoad (SSR session)
+│   ├── index.tsx      # / → redirect (logged in → /servers, otherwise /login)
+│   ├── _auth/         # pathless layout → /login, /register (NO sidebar)
+│   ├── _app.tsx       # protected layout: SidebarProvider + AppSidebar + guard
+│   ├── _app/servers/  # /servers (list), /servers/new (creation)
+│   ├── servers/$serverId/  # PELICAN layout: dedicated sidebar + pages
+│   │   ├── route.tsx  # layout + guard + shared ['server', serverId] query
 │   │   ├── console.tsx / files.tsx / variables.tsx / settings.tsx
 │   │   └── backups.tsx / network.tsx / schedules.tsx / users.tsx / activity.tsx (placeholders)
-│   ├── admin/         # /admin/* (route.tsx guard admin + pages)
-│   └── api/auth/$.ts  # catch-all better-auth
-├── components/ui/     # shadcn/ui (généré par le CLI — ne pas éditer à la main)
-├── components/app-sidebar.tsx  # Sidebar de l'app (menu + footer user/logout)
-├── components/server-sidebar.tsx  # Sidebar d'un serveur (tabs Pelican)
-├── components/variable-field.tsx  # Champ variable de plugin (partagé new + Variables)
+│   ├── admin/         # /admin/* (route.tsx admin guard + pages)
+│   └── api/auth/$.ts  # better-auth catch-all
+├── components/ui/     # shadcn/ui (generated by the CLI — do not edit by hand)
+├── components/app-sidebar.tsx  # App sidebar (menu + user/logout footer)
+├── components/server-sidebar.tsx  # Server sidebar (Pelican tabs)
+├── components/variable-field.tsx  # Recipe variable field (shared by new + Variables)
 ├── contexts/          # React contexts (AuthProvider, useAuth)
 ├── lib/               # auth.ts (better-auth), auth-client.ts, utils.ts
 ├── db/
-│   ├── entities.ts    # TOUTES les entités MikroORM dans UN fichier
-│   ├── types.ts       # Types inférés : `interface IUser extends InferEntity<typeof User> {}`
-│   └── index.ts       # Config MikroORM + singleton (initOrm/getOrm)
-├── validators/        # Schémas Zod des formulaires (loginSchema, registerSchema, Dto)
-├── server/functions/  # Server functions TanStack Start (getSession, signOutFn, servers, admin, files)
+│   ├── entities.ts    # ALL MikroORM entities in ONE file
+│   ├── types.ts       # Inferred types: `interface IUser extends InferEntity<typeof User> {}`
+│   └── index.ts       # MikroORM config + singleton (initOrm/getOrm)
+├── validators/        # Zod schemas for forms (loginSchema, registerSchema, Dto)
+├── server/functions/  # TanStack Start server functions (getSession, signOutFn, servers, admin, files)
 └── router.tsx         # RouterContext { queryClient } + staleTime 60s
 ```
 
-### Règles
+### Rules
 
-- **Formulaires** : TanStack Form + Zod (`useForm` + `validators: { onChange: schema }`), mutations via `useMutation`. JAMAIS de `useState` pour les champs de formulaire. Schémas dans `src/validators/`, types `XxxDto = z.infer<...>`. Lecture réactive d'une valeur du form : `<form.Subscribe selector={(s) => s.values.x}>`, écriture : `form.setFieldValue`. Pas de `z.coerce`/`z.default()` dans les schémas de formulaires (incompatibles avec le typage Standard Schema de TanStack Form).
-- **Server functions** : dans `src/server/functions/`. Auth via `requireUser()`/`requireAdmin()` (`src/server/session.ts`), erreurs via `HttpError(status, message)`. Le client agent : `src/server/agent/client.ts` (fetch Bearer, erreurs `AgentError`). L'ORM s'obtient par `initOrm()` (lazy, sync le schéma métier au premier appel — ne touche JAMAIS les tables better-auth).
-- **Console** : xterm.js (`@xterm/xterm` + `@xterm/addon-fit`), imports dynamiques dans useEffect (SSR-safe), polling des logs incrémentaux de l'agent (cursor `after=N`).
-- **Feedback UI** : toasts via sonner (`toast.success`/`toast.error` du package `sonner`), PAS de messages de succès inline. Le `<Toaster richColors closeButton />` est monté dans `__root.tsx`. Confirmations destructives : `confirm()` natif.
-- **Selects** : TOUJOURS le composant shadcn (`components/ui/select.tsx`), JAMAIS de `<select>` natif. Champ variable de plugin (boolean/options/text/number) : composant partagé `components/variable-field.tsx`.
-- **Variables serveur** : la page `/servers/$serverId/variables` édite les variables du plugin avec un schéma Zod dynamique (`makeUpdateServerVariablesSchema` dans `validators/server.ts`, réutilise `validateVariableValue` du contract). La DB panel est la source de vérité ; la server function `updateServerVariablesFn` ne merge que les variables `userEditable` puis pousse la sync à l'agent (cache `servers.json`).
-- **Types** : inférés des entités via `InferEntity` dans `db/types.ts` (préfixe `I` : `IUser`, `ISession`). PAS de types dupliqués à la main.
-- **Entités** : toutes dans `db/entities.ts` avec `defineEntity` + `p`. Champs snake_case en DB via `.fieldName()`, camelCase en TS.
-- **Session** : fetchée en SSR dans `beforeLoad` de `__root.tsx` via `queryClient.fetchQuery({ queryKey: ['auth'] })`. Après login/register/signOut : `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
-- **Composants shadcn** : `ref` en prop (React 19), pas de `React.forwardRef`.
-- **Routes** : en dossiers. Une page = un dossier avec `index.tsx`. Regroupements via pathless layouts (`_auth/`).
-- **DB** : Postgres — MikroORM gère TOUTES les tables (y compris better-auth). Migrations au boot via `src/server.ts` (`orm.migrator.up()`). JAMAIS de `schema.update()` (MikroORM v7 drop les tables inconnues par défaut). Le mapping snake_case better-auth est dans `src/lib/auth.ts` (`user.fields` etc.).
-- **better-auth** : `baseURL: process.env.BETTER_AUTH_URL` — PAS de `trustedOrigins` custom. Le port du dev server est fixé dans `vite.config.ts` (`strictPort: true`).
+- **Forms**: TanStack Form + Zod (`useForm` + `validators: { onChange: schema }`), mutations via `useMutation`. NEVER `useState` for form fields. Schemas in `src/validators/`, types `XxxDto = z.infer<...>`. Reactive read of a form value: `<form.Subscribe selector={(s) => s.values.x}>`, write: `form.setFieldValue`. No `z.coerce`/`z.default()` in form schemas (incompatible with TanStack Form's Standard Schema typing).
+- **Server functions**: in `src/server/functions/`. Auth via `requireUser()`/`requireAdmin()` (`src/server/session.ts`), errors via `HttpError(status, message)`. The agent client: `src/server/agent/client.ts` (Bearer fetch, `AgentError` errors). The ORM is obtained via `initOrm()` (lazy, syncs the business schema on first call — NEVER touches better-auth tables).
+- **Console**: xterm.js (`@xterm/xterm` + `@xterm/addon-fit`), dynamic imports in useEffect (SSR-safe), incremental log polling from the agent (`after=N` cursor).
+- **UI feedback**: toasts via sonner (`toast.success`/`toast.error` from the `sonner` package), NO inline success messages. `<Toaster richColors closeButton />` is mounted in `__root.tsx`. Destructive confirmations: native `confirm()`.
+- **Selects**: ALWAYS the shadcn component (`components/ui/select.tsx`), NEVER a native `<select>`. Recipe variable field (boolean/options/text/number): shared component `components/variable-field.tsx`.
+- **Server variables**: the `/servers/$serverId/variables` page edits the recipe's variables with a dynamic Zod schema (`makeUpdateServerVariablesSchema` in `validators/server.ts`, reuses `validateVariableValue` from the contract). The panel DB is the source of truth; the `updateServerVariablesFn` server function only merges `userEditable` variables, then pushes the sync to the agent (`servers.json` cache).
+- **Types**: inferred from entities via `InferEntity` in `db/types.ts` (`I` prefix: `IUser`, `ISession`). NO hand-duplicated types.
+- **Entities**: all in `db/entities.ts` with `defineEntity` + `p`. snake_case DB columns via `.fieldName()`, camelCase in TS.
+- **Session**: fetched in SSR in `beforeLoad` of `__root.tsx` via `queryClient.fetchQuery({ queryKey: ['auth'] })`. After login/register/signOut: `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
+- **shadcn components**: `ref` as a prop (React 19), no `React.forwardRef`.
+- **Routes**: as directories. One page = one directory with `index.tsx`. Grouping via pathless layouts (`_auth/`).
+- **DB**: Postgres — MikroORM manages ALL tables (including better-auth). Migrations at boot via `src/server.ts` (`orm.migrator.up()`). NEVER `schema.update()` (MikroORM v7 drops unknown tables by default). The better-auth snake_case mapping is in `src/lib/auth.ts` (`user.fields` etc.).
+- **better-auth**: `baseURL: process.env.BETTER_AUTH_URL` — NO custom `trustedOrigins`. The dev server port is fixed in `vite.config.ts` (`strictPort: true`).
 
-## Conventions agent (packages/agent)
+## Agent conventions (packages/agent)
 
-- Fastify + Bearer token (hash SHA-256, comparaison `timingSafeEqual`).
-- `/health` public, tout le reste derrière l'auth.
-- Config Zod depuis les variables d'environnement (`AGENT_TOKEN` requis, 32+ caractères).
-- NE JAMAIS logger le token.
-- **Variables serveur** (≈ wings, mais en push) : la DB panel est la source de vérité ; l'agent ne garde dans `servers.json` qu'un **cache** utilisé au start (résolution du templating + env). Comme l'agent ne peut pas tirer la config du panel (pas de credentials), le panel pousse les mises à jour via `POST /servers/:serverId/variables` (fusion + re-validation `validateVariableValue` du contract, refus 409 pendant une install). Les nouvelles valeurs s'appliquent au **prochain start** — un process en cours garde son env d'origine.
-- **Redémarrage de l'agent** (≈ wings cmd/root.go) : état runtime + PID persistés dans `states.json` (dataDir, écrit à chaque transition d'état via `ServerManager`). Au boot, `restoreServers` (hook `onReady`) : état running/starting + PID vivant → « adopted » (marqué running SANS console live, le process n'est jamais tué juste pour plaire à l'agent) ; PID mort → start rejoué (`handlePowerAction('start')`). Un serveur adopté : `sendCommand` refuse, stop/kill → `taskkill /T /F` sur le PID, mort inattendue → détection de crash normale. PAS de persistance de l'historique console : le ring buffer repart vide à chaque boot de l'agent (l'historique figé serait perturbant). La suppression d'un serveur efface aussi son entrée `states.json`.
+- Fastify + Bearer token (SHA-256 hash, `timingSafeEqual` comparison).
+- `/health` public, everything else behind auth.
+- Zod config from environment variables (`AGENT_TOKEN` required, 32+ characters).
+- NEVER log the token.
+- **Server variables** (≈ wings, but push-based): the panel DB is the source of truth; the agent only keeps a **cache** in `servers.json`, used at start (templating resolution + env). Since the agent cannot pull the config from the panel (no credentials), the panel pushes updates via `POST /servers/:serverId/variables` (merge + re-validation with the contract's `validateVariableValue`, 409 refused during an install). New values apply on the **next start** — a running process keeps its original env.
+- **Agent restart** (≈ wings cmd/root.go): runtime state + PID persisted in `states.json` (dataDir, written on every state transition via `ServerManager`). At boot, `restoreServers` (`onReady` hook): running/starting state + live PID → "adopted" (marked running WITHOUT a live console; the process is never killed just to please the agent); dead PID → start replayed (`handlePowerAction('start')`). An adopted server: `sendCommand` refuses, stop/kill → `taskkill /T /F` on the PID, unexpected death → normal crash detection. NO console history persistence: the ring buffer starts empty at every agent boot (a frozen history would be confusing). Deleting a server also erases its `states.json` entry.
 
-## Conventions contract (packages/contract)
+## Contract conventions (packages/contract)
 
-- **Plugin format v2** — à parité de features avec les eggs Pelican (PTDL_v2), mais déclaratif et Windows-first (pas de Docker, pas de script bash obligatoire).
-- **Variables** : `env` UPPERCASE (`MINECRAFT_VERSION`) + templating `{{ENV_VAR}}` partout. Champs : `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (validation regex, équivalent des `rules` Laravel de Pelican), `options`.
-- **Variables système réservées** (fournies par l'agent, non déclarables) : `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`.
-- **Actions runner** : `download`, `extract`, `write`, `replace`, `configFile` (parsers `properties`/`ini`/`yaml`/`json` — équivalent `config.files` Pelican), `command`, `script` (fallback ouvert : shell `bash`/`powershell`/`cmd`).
-- **Codes de sortie** : une action `command` peut déclarer `successCodes` (codes de sortie acceptés comme succès, défaut `[0]`). Ex : steamcmd sort avec 7 après son auto-update alors que le job a réussi.
-- **Progression en direct** : une action `command` peut déclarer `tail` (`file`, `filter` regex optionnel, `intervalMs`) — l'agent suit le fichier et streame les nouvelles lignes pendant l'exécution. Requis pour les outils console (steamcmd) qui n'impriment leur progression que sur un vrai terminal, jamais sur un pipe.
-- **Features outils** (interprétées par l'agent, les autres features restent des flags descriptifs) : `java` → JDK Microsoft Build of OpenJDK préchargé par l'agent dans le `.bin/` DU SERVEUR (isolé par serveur), version depuis la variable `JAVA_VERSION` (requise, surchargeable par serveur) ; `steamcmd` → SteamCMD préchargé dans `.bin/steamcmd` +, si la variable `STEAM_APP_ID` est déclarée, installation automatique du contenu (`+login anonymous`, `+app_update` puis passe `validate`, `STEAM_MOD` optionnel pour `+app_set_config`). Les bin dirs sont injectés en tête du `PATH` (`JAVA_HOME` inclus) pour les actions d'installation ET au spawn. Validation amont : `findToolFeatureErrors` (contract) — feature sans variable requise = erreur avant installation.
-- **start** : `command`, `stop` (command/signal + `timeoutMs` → kill), `ready` (`pattern` + `strip` — équivalent `config.startup` Pelican), `workingDirectory`.
-- **Autres** : `logs` (mode stdout/file + stripAnsi), `runtime` (contraintes hôte, remplace `docker_images`, ex: `{ "java": ">=21" }`), `features` (flags Pelican-style ; `java` et `steamcmd` sont interprétés — voir ci-dessus), `updateUrl`.
-- Résolution du templating : variables système > variables du serveur > defaults du plugin > env fixe.
-- Variable inconnue dans un template = erreur à l'installation (`findUnknownVariables`).
-- Schémas Zod pour : requêtes/réponses API panel ↔ agent, messages WS.
-- `schemaVersion` obligatoire dans chaque plugin JSON (v2 uniquement).
+- **Recipe format v2** — feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first (no Docker, no mandatory bash script).
+- **Variables**: `env` UPPERCASE (`MINECRAFT_VERSION`) + `{{ENV_VAR}}` templating everywhere. Fields: `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (regex validation, equivalent of Pelican's Laravel `rules`), `options`.
+- **Reserved system variables** (provided by the agent, not declarable): `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`.
+- **Runner actions**: `download`, `extract`, `write`, `replace`, `configFile` (`properties`/`ini`/`yaml`/`json` parsers — equivalent of Pelican's `config.files`), `command`, `script` (open fallback: `bash`/`powershell`/`cmd` shell).
+- **Exit codes**: a `command` action can declare `successCodes` (exit codes accepted as success, default `[0]`). E.g.: steamcmd exits with 7 after its self-update even though the job succeeded.
+- **Live progress**: a `command` action can declare `tail` (`file`, optional regex `filter`, `intervalMs`) — the agent follows the file and streams new lines during execution. Required for console tools (steamcmd) that only print their progress to a real terminal, never to a pipe.
+- **Tool features** (interpreted by the agent; other features remain descriptive flags): `java` → Microsoft Build of OpenJDK JDK preloaded by the agent into the server's own `.bin/` (isolated per server), version from the `JAVA_VERSION` variable (required, overridable per server); `steamcmd` → SteamCMD preloaded into `.bin/steamcmd` +, if the `STEAM_APP_ID` variable is declared, automatic content install (`+login anonymous`, `+app_update` then `validate` pass, optional `STEAM_MOD` for `+app_set_config`). The bin dirs are injected at the head of `PATH` (including `JAVA_HOME`) for install actions AND at spawn. Upstream validation: `findToolFeatureErrors` (contract) — a feature without its required variable = error before install.
+- **start**: `command`, `stop` (command/signal + `timeoutMs` → kill), `ready` (`pattern` + `strip` — equivalent of Pelican's `config.startup`), `workingDirectory`.
+- **Others**: `logs` (stdout/file mode + stripAnsi), `runtime` (host constraints, replaces `docker_images`, e.g. `{ "java": ">=21" }`), `features` (Pelican-style flags; `java` and `steamcmd` are interpreted — see above), `updateUrl`.
+- Templating resolution: system variables > server variables > recipe defaults > fixed env.
+- Unknown variable in a template = install-time error (`findUnknownVariables`).
+- Zod schemas for: panel ↔ agent API requests/responses, WS messages.
+- `schemaVersion` mandatory in every recipe JSON (v2 only).
 
 ## Tests
 
-- Vitest dans chaque package (`tests/` à côté de `src/`).
-- Après tout changement : `npm test` doit passer (332 tests actuellement).
+- Vitest in each package (`tests/` next to `src/`).
+- After any change: `npm test` must pass (currently 332 tests).
 
-## V2 reporté (ne PAS faire en V1)
+## Deferred to V2 (do NOT do in V1)
 
-- Job Objects Windows (bridage RAM/CPU)
-- Users Windows locaux + ACL NTFS (isolation FS)
-- SEA packaging de l'agent
+- Windows Job Objects (RAM/CPU throttling)
+- Local Windows users + NTFS ACLs (FS isolation)
+- Agent SEA packaging

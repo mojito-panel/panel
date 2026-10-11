@@ -4,9 +4,9 @@ import { InstallRegistry } from '../src/server/installer/registry';
 const SERVER_ID = '550e8400-e29b-41d4-a716-446655440000';
 
 describe('InstallRegistry (logs)', () => {
-  it('fusionne les lignes identiques consécutives (steamcmd: "[----] Installing update...")', () => {
+  it('merges consecutive identical lines (steamcmd: "[----] Installing update...")', () => {
     const registry = new InstallRegistry();
-    registry.start(SERVER_ID, 'démarrée');
+    registry.start(SERVER_ID, 'started');
     registry.log(SERVER_ID, 'info', '[----] Installing update...');
     registry.log(SERVER_ID, 'info', '[----] Installing update...');
     registry.log(SERVER_ID, 'info', '[----] Installing update...');
@@ -15,38 +15,38 @@ describe('InstallRegistry (logs)', () => {
 
     const messages = registry.get(SERVER_ID)!.logs.map((l) => l.message);
     expect(messages).toEqual([
-      'démarrée',
+      'started',
       '[----] Installing update...',
       '[----] Cleaning up...',
       '[----] Installing update...',
     ]);
   });
 
-  it('remplace la ligne de rewrite \\r en place (progress steamcmd)', () => {
+  it('replaces the \r rewrite line in place (steamcmd progress)', () => {
     const registry = new InstallRegistry();
-    registry.start(SERVER_ID, 'démarrée');
+    registry.start(SERVER_ID, 'started');
     registry.log(SERVER_ID, 'info', 'Downloading…');
     registry.log(SERVER_ID, 'info', 'progress 10%', { rewrite: true });
     registry.log(SERVER_ID, 'info', 'progress 55%', { rewrite: true });
     registry.log(SERVER_ID, 'info', 'progress 98%', { rewrite: true });
 
     const state = registry.get(SERVER_ID)!;
-    expect(state.logs.map((l) => l.message)).toEqual(['démarrée', 'Downloading…', 'progress 98%']);
+    expect(state.logs.map((l) => l.message)).toEqual(['started', 'Downloading…', 'progress 98%']);
   });
 
-  it('append un rewrite isolé sans écraser la sortie précédente', () => {
+  it('appends an isolated rewrite without overwriting the previous output', () => {
     const registry = new InstallRegistry();
-    registry.start(SERVER_ID, 'démarrée');
+    registry.start(SERVER_ID, 'started');
     registry.log(SERVER_ID, 'info', 'Connecting anonymously to Steam Public...OK');
-    // Premier rewrite après une vraie ligne : nouvelle ligne, pas de remplacement
+    // First rewrite after a real line: new line, no replacement
     registry.log(SERVER_ID, 'info', ' Update state (0x61) downloading : progress 12.34', { rewrite: true });
-    // Un vrai log ensuite → le rewrite suivant repart d’une nouvelle ligne
+    // A real log afterwards → the next rewrite starts on a new line
     registry.log(SERVER_ID, 'info', 'Success! App \'90\' fully installed.');
     registry.log(SERVER_ID, 'info', 'progress 5.00', { rewrite: true });
 
     const messages = registry.get(SERVER_ID)!.logs.map((l) => l.message);
     expect(messages).toEqual([
-      'démarrée',
+      'started',
       'Connecting anonymously to Steam Public...OK',
       ' Update state (0x61) downloading : progress 12.34',
       'Success! App \'90\' fully installed.',
@@ -54,15 +54,15 @@ describe('InstallRegistry (logs)', () => {
     ]);
   });
 
-  it('reset le rewrite en cours au démarrage d’une nouvelle installation', () => {
+  it('resets the in-progress rewrite when a new install starts', () => {
     const registry = new InstallRegistry();
-    registry.start(SERVER_ID, 'démarrée');
+    registry.start(SERVER_ID, 'started');
     registry.log(SERVER_ID, 'info', 'progress 42%', { rewrite: true });
-    registry.start(SERVER_ID, 'relance');
+    registry.start(SERVER_ID, 'restarted');
     registry.log(SERVER_ID, 'info', 'progress 1%', { rewrite: true });
 
-    // Le nouveau rewrite ne remplace pas la ligne de l’installation précédente
+    // The new rewrite does not replace the previous install's line
     const messages = registry.get(SERVER_ID)!.logs.map((l) => l.message);
-    expect(messages).toEqual(['relance', 'progress 1%']);
+    expect(messages).toEqual(['restarted', 'progress 1%']);
   });
 });

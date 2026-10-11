@@ -98,7 +98,7 @@ function AdminOverviewPage() {
         />
         <StatCard icon={Network} label="Nodes" value={data?.counts.nodes ?? '…'} />
         <StatCard icon={Users} label="Utilisateurs" value={data?.counts.users ?? '…'} />
-        <StatCard icon={Puzzle} label="Plugins" value={data?.counts.plugins ?? '…'} />
+        <StatCard icon={Puzzle} label="Recettes" value={data?.counts.recipes ?? '…'} />
       </div>
 
       {/* ─── Nodes health (live agent ping) ─── */}
@@ -156,7 +156,7 @@ function AdminOverviewPage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium">{server.name}</p>
                   <p className="truncate text-sm text-muted-foreground">
-                    {server.pluginName} · {server.nodeName} · {server.ownerEmail}
+                    {server.recipeName} · {server.nodeName} · {server.ownerEmail}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

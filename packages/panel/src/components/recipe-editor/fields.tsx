@@ -3,10 +3,10 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import type { KvPair } from '~/validators/plugin-editor';
+import type { KvPair } from '~/validators/recipe-editor';
 
 /**
- * Presentational building blocks for the plugin editor (Pelican-style).
+ * Presentational building blocks for the recipe editor (Pelican-style).
  * All form wiring (TanStack Form fields) lives in the tab components —
  * these only render from props.
  */

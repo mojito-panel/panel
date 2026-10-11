@@ -3,11 +3,12 @@ import { rm } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
 import {
   installServerRequestSchema,
-  pluginSchema,
+  recipeSchema,
   reinstallServerRequestSchema,
   serverActionRequestSchema,
   sendCommandRequestSchema,
   updateServerVariablesRequestSchema,
+  updateServerAllocationRequestSchema,
   validateVariableValue,
 } from '@mojito/contract';
 import type { AgentConfig } from '../config';
@@ -52,17 +53,17 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       });
     }
 
-    const pluginResult = pluginSchema.safeParse(parsed.data.plugin);
-    if (!pluginResult.success) {
+    const recipeResult = recipeSchema.safeParse(parsed.data.recipe);
+    if (!recipeResult.success) {
       return reply.code(400).send({
-        error: 'Plugin invalide',
-        details: pluginResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        error: 'Recette invalide',
+        details: recipeResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
       });
     }
 
     // Upfront validation (unknown variables, invalid values) — the panel
     // gets an immediate 422 instead of a delayed background failure
-    const validationError = validateInstall(pluginResult.data, parsed.data.variables);
+    const validationError = validateInstall(recipeResult.data, parsed.data.variables);
     if (validationError) {
       return reply.code(422).send({ error: validationError });
     }
@@ -83,7 +84,7 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       store,
       serverId: parsed.data.serverId,
       name: parsed.data.name,
-      plugin: pluginResult.data,
+      recipe: recipeResult.data,
       variables: parsed.data.variables,
       installDir,
       allocation: parsed.data.allocation,
@@ -142,16 +143,16 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
         });
       }
 
-      // Fresh plugin from the panel (an update may have changed the script)
-      const pluginResult = pluginSchema.safeParse(parsed.data.plugin);
-      if (!pluginResult.success) {
+      // Fresh recipe from the panel (an update may have changed the script)
+      const recipeResult = recipeSchema.safeParse(parsed.data.recipe);
+      if (!recipeResult.success) {
         return reply.code(400).send({
-          error: 'Plugin invalide',
-          details: pluginResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+          error: 'Recette invalide',
+          details: recipeResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
         });
       }
 
-      const validationError = validateInstall(pluginResult.data, parsed.data.variables);
+      const validationError = validateInstall(recipeResult.data, parsed.data.variables);
       if (validationError) {
         return reply.code(422).send({ error: validationError });
       }
@@ -170,14 +171,14 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
 
       // Background reinstall — Pelican semantics: stops the server first,
       // then re-runs the runner in the SAME directory with the STORED
-      // allocation but the LATEST plugin/variables. Follow along via
+      // allocation but the LATEST recipe/variables. Follow along via
       // GET /servers/:serverId/install.
       startTrackedInstall({
         registry,
         store,
         serverId: stored.serverId,
         name: stored.name,
-        plugin: pluginResult.data,
+        recipe: recipeResult.data,
         variables: parsed.data.variables,
         installDir: stored.installDir,
         allocation: stored.allocation,
@@ -285,7 +286,7 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
 
   // ─── Variable update (panel "Variables" page) ──────────────────────────
   // The panel sends the FULL variable record; values are validated against
-  // the stored plugin definitions. Only the stored entry changes — a
+  // the stored recipe definitions. Only the stored entry changes — a
   // running process keeps its original environment until the next start.
   app.post<{ Params: { serverId: string } }>(
     '/servers/:serverId/variables',
@@ -316,7 +317,7 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
       }
 
       const variables = { ...stored.variables, ...parsed.data.variables };
-      for (const variable of stored.plugin.variables) {
+      for (const variable of stored.recipe.variables) {
         const value = variables[variable.env];
         if (value !== undefined) {
           const error = validateVariableValue(variable, value);
@@ -328,6 +329,48 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
 
       await store.save({ ...stored, variables });
       return { serverId: stored.serverId, variables };
+    },
+  );
+
+  // ─── Primary allocation update (panel "Network" page) ────────────────────
+  // Same push semantics as the variable update: only the stored entry
+  // changes — SERVER_PORT / SERVER_IP are re-resolved at the NEXT start,
+  // a running process keeps its original environment.
+  app.post<{ Params: { serverId: string } }>(
+    '/servers/:serverId/allocation',
+    async (request, reply) => {
+      const parsed = updateServerAllocationRequestSchema.safeParse({
+        serverId: request.params.serverId,
+        ...(request.body as object),
+      });
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'Requête invalide',
+          details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+        });
+      }
+
+      const stored = await store.get(parsed.data.serverId);
+      if (!stored) {
+        return reply.code(404).send({ error: 'Serveur inconnu', code: 'not_found' });
+      }
+
+      // An install in flight resolves the allocation upfront — refuse
+      // instead of letting the runner and this update race
+      if (registry.isInstalling(parsed.data.serverId)) {
+        return reply.code(409).send({
+          error: 'Une installation est en cours',
+          code: 'already_installing',
+        });
+      }
+
+      const allocation = {
+        ...stored.allocation,
+        port: parsed.data.allocation.port,
+        ip: parsed.data.allocation.ip,
+      };
+      await store.save({ ...stored, allocation });
+      return { serverId: stored.serverId, allocation };
     },
   );
 

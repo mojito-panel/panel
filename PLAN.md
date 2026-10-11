@@ -1,64 +1,64 @@
-# Panel d'hébergement de serveurs de jeux — Plan complet
+# Game server hosting panel — Complete plan
 
-> Un panel type Pelican/Pterodactyl, natif Windows, sans Docker.
-> Architecture : **Panel** (TanStack Start) + **Agent** (Node pur, packagé SEA) + **Plugins JSON** (type eggs).
+> A Pelican/Pterodactyl-style panel, native Windows, no Docker.
+> Architecture: **Panel** (TanStack Start) + **Agent** (pure Node, SEA-packaged) + **JSON recipes** (egg-type).
 
 ---
 
-## Architecture globale
+## Overall architecture
 
 ```
-Panel (TanStack Start)  <--HTTPS + Bearer token / WS-->  Agent (Node + Fastify, 1 par machine)
+Panel (TanStack Start)  <--HTTPS + Bearer token / WS-->  Agent (Node + Fastify, 1 per machine)
        |                                                        |
-   better-auth                                           Runner d'étapes JSON
-   MikroORM v7 (Postgres)                                Pipes de process + ring buffer
-   TanStack Query                                        (V2: Job Objects, users Windows)
+   better-auth                                           JSON step runner
+   MikroORM v7 (Postgres)                                Process pipes + ring buffer
+   TanStack Query                                        (V2: Job Objects, Windows users)
 ```
 
-**Principes clés :**
-- Le **panel** ne touche JAMAIS directement aux serveurs de jeu. Il parle à l'agent via API.
-- L'**agent** est un daemon système générique : il ne sait rien des jeux, tout est dans les JSON.
-- Le **contract** panel ↔ agent est défini par des schémas Zod partagés (`@mojito/contract`).
+**Key principles:**
+- The **panel** NEVER touches game servers directly. It talks to the agent via API.
+- The **agent** is a generic system daemon: it knows nothing about games, everything lives in the JSONs.
+- The panel ↔ agent **contract** is defined by shared Zod schemas (`@mojito/contract`).
 
 ---
 
-## Stack technique (décisions verrouillées)
+## Tech stack (locked decisions)
 
-| Composant | Techno | Notes |
+| Component | Tech | Notes |
 |---|---|---|
 | Panel front | TanStack Start + shadcn/ui | TanStack Router + TanStack Query |
-| Auth panel | better-auth 1.7 | `pg` (Postgres), plugin `tanstackStartCookies` |
-| DB | MikroORM v7 (`defineEntity`) | Postgres 17 (docker dev) — MikroORM gère TOUTES les tables (y compris better-auth) |
-| Query cache | TanStack Query | `staleTime: 60s`, passé dans le RouterContext |
-| Agent | Node pur (Fastify + WS) | PAS de NestJS — c'est un daemon système |
-| Packaging agent | Node SEA | `.exe` unique + addons natifs en fichiers externes (V2) |
+| Panel auth | better-auth 1.7 | `pg` (Postgres), `tanstackStartCookies` plugin |
+| DB | MikroORM v7 (`defineEntity`) | Postgres 17 (docker dev) — MikroORM manages ALL tables (including better-auth) |
+| Query cache | TanStack Query | `staleTime: 60s`, passed in the RouterContext |
+| Agent | Pure Node (Fastify + WS) | NO NestJS — it's a system daemon |
+| Agent packaging | Node SEA | Single `.exe` + native addons as external files (V2) |
 | PTY / consoles | node-pty | Phase 1 |
-| Bridage RAM/CPU | Windows Job Objects | **V2** — pas en V1 |
-| Isolation FS | Users Windows locaux + ACL NTFS | **V2** — pas en V1 |
-| Auth panel ↔ agent | Token statique (32 bytes random) en HTTPS | mTLS/rotation plus tard |
-| Auth user → agent | JWT HS256 court (TTL ~5 min), signé avec le token du node (secret unique par node, comme Pelican) | Payload = serverId + scope + permissions ; transport = 1er message WS |
-| Logs live | WebSocket navigateur → agent (direct, type Pelican) | Remplace le polling de la phase 3 — cf. Phase 5 |
+| RAM/CPU throttling | Windows Job Objects | **V2** — not in V1 |
+| FS isolation | Local Windows users + NTFS ACLs | **V2** — not in V1 |
+| Panel ↔ agent auth | Static token (32 random bytes) over HTTPS | mTLS/rotation later |
+| User → agent auth | Short-lived HS256 JWT (TTL ~5 min), signed with the node token (unique secret per node, like Pelican) | Payload = serverId + scope + permissions; transport = 1st WS message |
+| Live logs | Browser → agent WebSocket (direct, Pelican-style) | Replaces phase 3 polling — see Phase 5 |
 
 ---
 
-## Structure du repo (monorepo npm workspaces)
+## Repo structure (npm workspaces monorepo)
 
 ```
 mojito-panel/
 ├── package.json              # npm workspaces (packages/*)
-├── mise.toml                 # Node 24 + npm 11, tâches setup:dev, migrate, dev, test
+├── mise.toml                 # Node 24 + npm 11, tasks setup:dev, migrate, dev, test
 ├── .nvmrc                    # 24
 ├── docker-compose.dev.yml    # Postgres 17 (dev)
-├── scripts/copy-env.mjs      # Copie .env.default → .env
+├── scripts/copy-env.mjs      # Copies .env.default → .env
 └── packages/
-    ├── contract/             # @mojito/contract — Schémas Zod partagés
+    ├── contract/             # @mojito/contract — Shared Zod schemas
     │   └── src/
-    │       ├── plugin-schema.ts  # Schéma JSON des plugins (eggs) + templating {{var}}
-    │       └── api.ts            # Routes, payloads WS panel ↔ agent
+    │       ├── recipe-schema.ts  # Recipe JSON schema (eggs) + {{var}} templating
+    │       └── api.ts            # Routes, panel ↔ agent WS payloads
     ├── panel/                # @mojito/panel — TanStack Start
     │   └── src/
-    │       ├── routes/           # TanStack Router (file-based, dossiers)
-    │       │   ├── __root.tsx    # createRootRouteWithContext + beforeLoad (session SSR)
+    │       ├── routes/           # TanStack Router (file-based, folders)
+    │       │   ├── __root.tsx    # createRootRouteWithContext + beforeLoad (SSR session)
     │       │   ├── index.tsx     # / (home)
     │       │   ├── _auth/        # pathless layout
     │       │   │   ├── login.tsx     # /login
@@ -73,43 +73,43 @@ mojito-panel/
     │       │   └── use-auth.tsx  # AuthProvider + useAuth (user, session, useSignOut)
     │       ├── lib/
     │       │   ├── auth.ts       # better-auth server (pg, tanstackStartCookies)
-    │       │   ├── auth-client.ts # better-auth client React
-    │       │   ├── auth.types.ts # Types User/Session partagés
+    │       │   ├── auth-client.ts # better-auth React client
+    │       │   ├── auth.types.ts # Shared User/Session types
     │       │   └── utils.ts      # cn() shadcn
     │       ├── db/               # MikroORM v7 (defineEntity)
     │       │   ├── entities/     # User, Session, Account, Verification (better-auth)
-    │       │   │                 # + Node, Plugin, Server, ServerAllocation (métier)
+    │       │   │                 # + Node, Recipe, Server, Allocation (business)
     │       │   └── index.ts      # initOrm / getOrm singleton
-    │       ├── server/functions/ # Server functions TanStack Start
+    │       ├── server/functions/ # TanStack Start server functions
     │       │   ├── auth.ts       # getSession (SSR), signOutFn
-    │       │   └── health.ts     # healthcheck DB
+    │       │   └── health.ts     # DB healthcheck
     │       └── router.tsx        # getRouter + RouterContext (queryClient, staleTime 60s)
-    └── agent/                # @mojito/agent — Fastify daemon (architecture alignée wings)
+    └── agent/                # @mojito/agent — Fastify daemon (architecture aligned with wings)
         └── src/
             ├── index.ts              # Entrypoint (≈ wings.go / cmd/)
-            ├── config/               # Config Zod (env vars)
-            ├── environment/          # Process environment (≈ environment/ : spawn, stdin, stop gracieux, états, events)
-            ├── server/               # Domaine serveur (≈ server/)
-            │   ├── server.ts          # ServerInstance : power lock, crash timestamp, listeners console
-            │   ├── manager.ts          # ServerManager : collection des instances + events wiring
-            │   ├── power.ts           # Actions start/stop/restart/kill (≈ power.go)
+            ├── config/               # Zod config (env vars)
+            ├── environment/          # Process environment (≈ environment/: spawn, stdin, graceful stop, states, events)
+            ├── server/               # Server domain (≈ server/)
+            │   ├── server.ts          # ServerInstance: power lock, crash timestamp, console listeners
+            │   ├── manager.ts          # ServerManager: instance collection + event wiring
+            │   ├── power.ts           # start/stop/restart/kill actions (≈ power.go)
             │   ├── crash.ts           # Crash detection + anti-crash-loop (≈ crash.go)
-            │   ├── variables.ts        # Variables système (SERVER_UUID…)
-            │   ├── templating.ts        # Résolution {{VAR}}
-            │   └── installer/          # Étapes d’install (≈ installer/) : actions download/write/configFile…
-            ├── parser/               # Parsers properties/ini/yaml/json (≈ parser/)
+            │   ├── variables.ts        # System variables (SERVER_UUID…)
+            │   ├── templating.ts        # {{VAR}} resolution
+            │   └── installer/          # Install steps (≈ installer/): download/write/configFile actions…
+            ├── parser/               # properties/ini/yaml/json parsers (≈ parser/)
             ├── router/               # HTTP + WS (≈ router/)
-            │   ├── middleware.ts       # Hook Bearer token (SHA-256, timing-safe)
+            │   ├── middleware.ts       # Bearer token hook (SHA-256, timing-safe)
             │   ├── router-system.ts   # /health
             │   ├── router-server.ts   # /servers/* (install, action, logs, delete, command)
-            │   ├── tokens/            # Vérification JWT console (≈ tokens/parser.go + websocket.go)
-            │   └── websocket/         # Socket console navigateur (≈ websocket/websocket.go)
-            └── internal/             # Persistance locale (server-store.json)
+            │   ├── tokens/            # Console JWT verification (≈ tokens/parser.go + websocket.go)
+            │   └── websocket/         # Browser console socket (≈ websocket/websocket.go)
+            └── internal/             # Local persistence (server-store.json)
 ```
 
 ---
 
-## Schéma des plugins JSON (V2 — à parité avec les eggs Pelican)
+## JSON recipe schema (V2 — feature parity with Pelican eggs)
 
 ```json
 {
@@ -169,288 +169,288 @@ mojito-panel/
 }
 ```
 
-**Actions du runner :** `download`, `extract`, `write`, `replace`, `configFile` (parsers properties/ini/yaml/json), `command`, `script` (fallback shell bash/powershell/cmd — pour tout le reste)
+**Runner actions:** `download`, `extract`, `write`, `replace`, `configFile` (properties/ini/yaml/json parsers), `command`, `script` (bash/powershell/cmd shell fallback — for everything else)
 
-**Variables système** fournies par l'agent : `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`
+**System variables** provided by the agent: `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`
 
-**Templating `{{ENV_VAR}}`** (UPPERCASE) appliqué partout. Résolution : variables système > variables du serveur > defaults du plugin > env fixe. Variable inconnue = erreur à l'installation.
+**`{{ENV_VAR}}` templating** (UPPERCASE) applied everywhere. Resolution: system variables > server variables > recipe defaults > fixed env. Unknown variable = error at install.
 
-> Format à parité de features avec les eggs Pelican (PTDL_v2) : variables env + user_viewable/user_editable + validation, config files avec parsers, ready detection avec strip, logs config, features flags, update_url. Différence clé : déclaratif et Windows-first (pas de Docker, pas de script bash obligatoire — l'action `script` sert de soupape).
+> Format at feature parity with Pelican eggs (PTDL_v2): env variables + user_viewable/user_editable + validation, config files with parsers, ready detection with strip, logs config, features flags, update_url. Key difference: declarative and Windows-first (no Docker, no mandatory bash script — the `script` action acts as an escape hatch).
 ---
 
-## Entités MikroORM (v7, defineEntity)
+## MikroORM entities (v7, defineEntity)
 
-- **User** (better-auth) : id, email, name, role (`admin` | `user`)
-- **Session / Account / Verification** (better-auth, migrations gérées par `@better-auth/cli`)
-- **Node** : id, name, fqdn, agentTokenHash, lastSeenAt, status
-- **Plugin** : id, slug, name, schemaVersion, json (raw)
-- **Server** : id, name, nodeId, pluginId, ownerId, status, variables (JSON)
-- **ServerAllocation** : port, maxRamMb, maxCpuPercent
+- **User** (better-auth): id, email, name, role (`admin` | `user`)
+- **Session / Account / Verification** (better-auth, migrations managed by `@better-auth/cli`)
+- **Node**: id, name, fqdn, agentTokenHash, lastSeenAt, status
+- **Recipe**: id, slug, name, schemaVersion, json (raw)
+- **Server**: id, name, nodeId, recipeId, ownerId, status, memoryMb, variables (JSON)
+- **Allocation**: nodeId, ip, port, alias, serverId (nullable = free in the node pool), isPrimary
 
-> **Note** : better-auth et MikroORM partagent la même base Postgres ; MikroORM gère toutes les tables (mapping snake_case better-auth dans `src/lib/auth.ts`), migrations appliquées au boot (`src/server.ts`).
+> **Note**: better-auth and MikroORM share the same Postgres database; MikroORM manages all tables (better-auth snake_case mapping in `src/lib/auth.ts`), migrations applied at boot (`src/server.ts`).
 
 ---
 
-## Auth & sécurité
+## Auth & security
 
 ### Panel (better-auth)
 
-- Email/mot de passe V1
-- `pg` (Postgres) — pas de better-sqlite3 (ne compile pas sur Windows)
-- Plugin `tanstackStartCookies` pour forward les cookies dans TanStack Start
-- **TanStack Query dans le RouterContext** : `staleTime: 60s`, session fetchée en SSR via `beforeLoad`
-- **AuthProvider** : `useAuth()` expose `user`, `session`, `useSignOut()`
-- Rôles : `admin` (gère nodes, plugins, users) / `user` (gère ses serveurs)
+- Email/password in V1
+- `pg` (Postgres) — no better-sqlite3 (doesn't compile on Windows)
+- `tanstackStartCookies` plugin to forward cookies in TanStack Start
+- **TanStack Query in the RouterContext**: `staleTime: 60s`, session fetched in SSR via `beforeLoad`
+- **AuthProvider**: `useAuth()` exposes `user`, `session`, `useSignOut()`
+- Roles: `admin` (manages nodes, recipes, users) / `user` (manages their own servers)
 
 ### Panel ↔ Agent
 
-- Token généré côté panel : `crypto.randomBytes(32).toString('hex')`
-- Panel stocke le **hash** (SHA-256), l'agent stocke le plaintext
-- Toutes les requêtes en HTTPS (`Authorization: Bearer <token>`), comparaison en temps constant (`timingSafeEqual`)
-- Ne JAMAIS logger le token
+- Token generated panel-side: `crypto.randomBytes(32).toString('hex')`
+- The panel stores the **hash** (SHA-256), the agent stores the plaintext
+- All requests over HTTPS (`Authorization: Bearer <token>`), constant-time comparison (`timingSafeEqual`)
+- NEVER log the token
 
-### User ↔ Agent (JWT, type Pelican)
+### User ↔ Agent (JWT, Pelican-style)
 
-- Le navigateur parle **directement** à l'agent (WS console) — le panel ne relaie plus les logs.
-- Le panel émet un **JWT HS256 court** (TTL ~5 min), signé avec le **token agent du node** —
-  le même que le Bearer panel ↔ agent (secret unique par node, comme le daemon_token de Pelican).
-  Pas de secret JWT séparé. Le token agent est chiffré au repos dans la DB panel (AES-256-GCM,
-  clé dérivée de `BETTER_AUTH_SECRET`) car il devient aussi une clé de signature. Jamais loggé.
-- Payload validé par l'agent à CHAQUE requête/message : `aud: 'mojito-agent'`, `serverId`,
+- The browser talks **directly** to the agent (console WS) — the panel no longer relays logs.
+- The panel issues a **short-lived HS256 JWT** (TTL ~5 min), signed with the **node's agent token** —
+  the same one as the panel ↔ agent Bearer (unique secret per node, like Pelican's daemon_token).
+  No separate JWT secret. The agent token is encrypted at rest in the panel DB (AES-256-GCM,
+  key derived from `BETTER_AUTH_SECRET`) because it also becomes a signing key. Never logged.
+- Payload validated by the agent on EVERY request/message: `aud: 'mojito-agent'`, `serverId`,
   `sub` (userId), `permissions[]`, `exp`, `jti`.
-- L'agent vérifie : signature, `aud`, `exp`, `serverId` du token === paramètre de la route,
-  puis les **permissions** exigées par l'action (`console.write` pour une commande, etc.).
-- Permissions V1 : liste fermée dans le contract — `console.read`, `console.write`,
+- The agent checks: signature, `aud`, `exp`, token's `serverId` === route parameter,
+  then the **permissions** required by the action (`console.write` for a command, etc.).
+- V1 permissions: closed list in the contract — `console.read`, `console.write`,
   `power.start`, `power.stop`, `power.restart`, `power.kill`, `variables.read`, `variables.write`.
-- Pas d'invitations/sub-owners en V1 : tout owner (et l'admin) reçoit **toutes** les permissions
-  par défaut. La liste fermée existe déjà côté agent pour être prêt.
-- Révocation : TTL court + déconnexion WS. Blacklist `jti` = V2.
+- No invitations/sub-owners in V1: every owner (and the admin) receives **all** permissions
+  by default. The closed list already exists agent-side to be ready.
+- Revocation: short TTL + WS disconnect. `jti` blacklist = V2.
 
 ---
 
-## Roadmap par phases
+## Roadmap by phases
 
-### Phase 0 — Squelette ✅ TERMINÉE
+### Phase 0 — Skeleton ✅ DONE
 
-- [x] Monorepo npm workspaces, packages `contract`, `panel`, `agent`
-- [x] Panel : TanStack Start + shadcn + MikroORM v7 + better-auth branchés et testés ensemble
-- [x] TanStack Query dans le RouterContext (staleTime 60s) + AuthProvider/useAuth
-- [x] Session SSR via `beforeLoad` + `queryClient.fetchQuery(['auth'])`
-- [x] Pages login/register avec formulaires fonctionnels
-- [x] Schéma Zod du plugin JSON (`plugin-schema.ts`) + contrat API (`api.ts`)
-- [x] Agent : Fastify qui démarre + auth token (timing-safe) + healthcheck
-- [x] Tests vitest : 54 tests (contract 36, panel 7, agent 11)
-- [x] `mise.toml` (Node 24, tâches setup:dev/migrate/dev/test)
-- [x] `docker-compose.dev.yml` (Postgres, optionnel)
+- [x] npm workspaces monorepo, `contract`, `panel`, `agent` packages
+- [x] Panel: TanStack Start + shadcn + MikroORM v7 + better-auth wired and tested together
+- [x] TanStack Query in the RouterContext (staleTime 60s) + AuthProvider/useAuth
+- [x] SSR session via `beforeLoad` + `queryClient.fetchQuery(['auth'])`
+- [x] Login/register pages with working forms
+- [x] Zod schema of the recipe JSON (`recipe-schema.ts`) + API contract (`api.ts`)
+- [x] Agent: Fastify that boots + token auth (timing-safe) + healthcheck
+- [x] Vitest tests: 54 tests (contract 36, panel 7, agent 11)
+- [x] `mise.toml` (Node 24, setup:dev/migrate/dev/test tasks)
+- [x] `docker-compose.dev.yml` (Postgres, optional)
 - [x] `.env.default` + `scripts/copy-env.mjs`
 - [x] README.md
 
-### Phase 1 — Cœur de l'agent (2–4 semaines)
+### Phase 1 — Agent core (2–4 weeks)
 
-- [x] Runner d'étapes : `download`, `write`, `extract`, `command`, `replace`, `configFile`, `script` + templating `{{ENV_VAR}}`
-- [x] Route `POST /servers/install` (API agent) branchée sur le runner
-- [x] Process manager + registry (spec alignée wings)
-- [x] Console : envoi de commandes, buffer de logs (ring buffer)
-- [x] Stop gracieux (command/signal + timeout → poll → kill)
-- [x] Crash detection minimale + anti-crash-loop
-- [x] Cleanup : suppression dossier à la suppression du serveur (`DELETE /servers/:serverId`)
+- [x] Step runner: `download`, `write`, `extract`, `command`, `replace`, `configFile`, `script` + `{{ENV_VAR}}` templating
+- [x] `POST /servers/install` route (agent API) wired to the runner
+- [x] Process manager + registry (spec aligned with wings)
+- [x] Console: command sending, log buffer (ring buffer)
+- [x] Graceful stop (command/signal + timeout → poll → kill)
+- [x] Minimal crash detection + anti-crash-loop
+- [x] Cleanup: folder deletion when a server is deleted (`DELETE /servers/:serverId`)
 
-#### Spec process manager (alignée sur wings — server/power.go, environment/docker/power.go)
+#### Process manager spec (aligned with wings — server/power.go, environment/docker/power.go)
 
-- **Power actions** : `start` / `stop` / `restart` / `kill` (identique `serverActionSchema`).
-- **Power lock par serveur** : file d'actions séquentielle par serverId (pas de double start, pas de restart pendant un stop). `kill` force-passe le verrou (un process coincé doit toujours être tuable). Refus si `installing`.
-- **États runtime** (dans l'agent, distincts des états panel) : `offline` / `starting` / `running` / `stopping`.
-  - `starting` → `running` dès le spawn (comme wings — le `ready.pattern` émet un event `ready` séparé, utilisé pour la progression d'install).
-  - Passer par `stopping` AVANT `offline` lors d'un stop → ne pas déclencher la crash detection.
-- **Séquence stop** (comme wings) :
-  1. état → `stopping`
-  2. `command` → écrit sur stdin du process ; `signal` → kill direct
-  3. attente de sortie pendant `stop.timeoutMs` (défaut 30s ; wings attend jusqu'à 10 min)
-  4. toujours vivant → kill forcé (kill de l'arbre de process sous Windows : `taskkill /T /F`)
-- **Crash detection minimale** (comme wings crash.go) : exit code non-nul ET état ≠ `stopping` → `crashed`. Anti-crash-loop : si dernier crash < N secondes (défaut 60s), pas de restart auto. Restart auto → repasse par le power lock.
-- **Sortie console** : stdout/stderr pipés → ring buffer en mémoire (limite ~1000 lignes) + callbacks pour le streaming WS (phase 3).
-- **Persistance locale** : registre JSON dans `AGENT_DATA_DIR` (serverId → plugin, variables, installDir, allocation) rempli à l'install — le start n'a besoin que du serverId.
-- **Note écart wings** : wings re-applique `config.files` à chaque boot (`UpdateConfigurationFiles` dans onBeforeStart). Chez nous les actions `configFile` sont install-only : **l'édition des variables existe** (page Variables — change la valeur + env au prochain start) mais NE réécrit pas les fichiers de config déjà générés (ex : changer le port dans la page ne met pas à jour `server.properties`). Parité complète = réécrire les `configFile` au start ou à la sauvegarde des variables — restant à décider.
+- **Power actions**: `start` / `stop` / `restart` / `kill` (same as `serverActionSchema`).
+- **Power lock per server**: sequential action queue per serverId (no double start, no restart during a stop). `kill` bypasses the lock (a stuck process must always be killable). Refused if `installing`.
+- **Runtime states** (in the agent, distinct from panel states): `offline` / `starting` / `running` / `stopping`.
+  - `starting` → `running` right at spawn (like wings — `ready.pattern` emits a separate `ready` event, used for install progress).
+  - Go through `stopping` BEFORE `offline` on a stop → don't trigger crash detection.
+- **Stop sequence** (like wings):
+  1. state → `stopping`
+  2. `command` → written to the process stdin; `signal` → direct kill
+  3. wait for exit during `stop.timeoutMs` (default 30s; wings waits up to 10 min)
+  4. still alive → forced kill (process-tree kill on Windows: `taskkill /T /F`)
+- **Minimal crash detection** (like wings crash.go): non-zero exit code AND state ≠ `stopping` → `crashed`. Anti-crash-loop: if last crash < N seconds (default 60s), no auto restart. Auto restart → goes through the power lock again.
+- **Console output**: stdout/stderr piped → in-memory ring buffer (~1000-line limit) + callbacks for WS streaming (phase 3).
+- **Local persistence**: JSON registry in `AGENT_DATA_DIR` (serverId → recipe, variables, installDir, allocation) filled at install — start only needs the serverId.
+- **Divergence note vs wings**: wings re-applies `config.files` on every boot (`UpdateConfigurationFiles` in onBeforeStart). For us the `configFile` actions are install-only: **variable editing exists** (Variables page — changes the value + env at next start) but does NOT rewrite already-generated config files (e.g.: changing the port on the page does not update `server.properties`). Full parity = re-running the `configFile` actions at start or on variable save — still to be decided.
 
-### Phase 2 — Bridage (V2 — pas en V1)
+### Phase 2 — Throttling (V2 — not in V1)
 
-- [ ] Bindings Job Objects (RAM + CPU rate)
-- [ ] Assignation au spawn (avant les enfants !)
-- [ ] Métriques : lecture conso RAM/CPU par serveur
-- [ ] Crash detection + auto-restart configurable
+- [ ] Job Object bindings (RAM + CPU rate)
+- [ ] Assignment at spawn (before the children!)
+- [ ] Metrics: per-server RAM/CPU usage reading
+- [ ] Crash detection + configurable auto-restart
 
-### Phase 3 — Panel & liaison ✅ (V1)
+### Phase 3 — Panel & wiring ✅ (V1)
 
-- [x] CRUD nodes (génération token, affiché une seule fois à la création)
-- [x] CRUD plugins (import JSON validé par `parsePlugin` v2, refus si serveurs actifs)
-- [x] CRUD serveurs (création → install agent → DB ; suppression → agent + DB)
-- [x] Installation d'un serveur : panel → agent (`installDir` relatif au dataDir de l'agent)
-  — ⚠️ V1 synchrone sans progression live (WS : plus tard si besoin)
-- [x] Console live : **xterm.js** alimenté par polling des logs incrémentaux de l'agent
-  (`GET /servers/:id/logs?after=N`, toutes les 2 s) + envoi de commandes stdin
-  — (remplace le WS + react-virtual initialement prévus ; le WS direct arrive en Phase 5,
-  le polling restera en fallback)
-- [x] Start/stop/restart/kill + envoi de commandes
-- [x] Gestion des variables par serveur : formulaires auto-générés depuis les
-  définitions du plugin (type number/boolean/options → champ adapté)
-- [x] Édition post-install des variables (page `/servers/$serverId/variables`,
-  ex-« Démarrage ») : validation en 3 couches (formulaire / server function / agent)
-  réutilisant les règles du contract (required, min/max, pattern, options), variables
-  `userEditable` seules modifiables, commande de démarrage résolue en lecture seule.
-  DB panel = source de vérité ; sync de l'agent par push (`POST /servers/:serverId/variables`,
-  cf. docs/communications.md §6) — appliqué au prochain start (starts WS inclus).
-  Toasts sonner (richColors) pour les retours de mutations.
-- [x] Migrations au boot (`src/server.ts` → `orm.migrator.up()`) — MikroORM gère
-  toutes les tables (y compris better-auth) ; JAMAIS de `schema.update()`
-  (v7 drop les tables inconnues par défaut)
+- [x] Node CRUD (token generation, shown only once at creation)
+- [x] Recipe CRUD (JSON import validated by `parseRecipe` v2, refused if active servers exist)
+- [x] Server CRUD (creation → agent install → DB; deletion → agent + DB)
+- [x] Server installation: panel → agent (`installDir` relative to the agent's dataDir)
+  — ⚠️ V1 synchronous without live progress (WS: later if needed)
+- [x] Live console: **xterm.js** fed by polling the agent's incremental logs
+  (`GET /servers/:id/logs?after=N`, every 2 s) + stdin command sending
+  — (replaces the initially planned WS + react-virtual; the direct WS arrives in Phase 5,
+  polling stays as a fallback)
+- [x] Start/stop/restart/kill + command sending
+- [x] Per-server variable management: forms auto-generated from the
+  recipe definitions (number/boolean/options type → adapted field)
+- [x] Post-install variable editing (`/servers/$serverId/variables` page,
+  formerly "Startup"): 3-layer validation (form / server function / agent)
+  reusing the contract rules (required, min/max, pattern, options), only
+  `userEditable` variables modifiable, startup command resolved read-only.
+  Panel DB = source of truth; agent sync via push (`POST /servers/:serverId/variables`,
+  see docs/communications.md §6) — applied at next start (WS starts included).
+  sonner toasts (richColors) for mutation feedback.
+- [x] Boot migrations (`src/server.ts` → `orm.migrator.up()`) — MikroORM manages
+  all tables (including better-auth); NEVER `schema.update()`
+  (v7 drops unknown tables by default)
 
-Notes d'implémentation :
-- Le token agent est stocké **chiffré au repos** dans la table node (AES-256-GCM, clé
-  dérivée de `BETTER_AUTH_SECRET` — le token est aussi la clé de signature des JWT console).
-- Statut serveur : sync DB ← statut runtime de l'agent à chaque consultation.
-- Ownership : un user voit/gère ses serveurs ; l'admin voit tout et gère nodes/plugins.
+Implementation notes:
+- The agent token is stored **encrypted at rest** in the node table (AES-256-GCM, key
+  derived from `BETTER_AUTH_SECRET` — the token is also the signing key for console JWTs).
+- Server status: DB sync ← agent runtime status on every consultation.
+- Ownership: a user sees/manages their own servers; the admin sees everything and manages nodes/recipes.
 
-### Phase 4 — SEA & distribution (1–2 semaines)
+### Phase 4 — SEA & distribution (1–2 weeks)
 
-- [ ] Build SEA de l'agent + addons externes
-- [ ] Installeur Windows (service auto)
-- [ ] Docs d'installation pour un utilisateur final
+- [ ] Agent SEA build + external addons
+- [ ] Windows installer (auto service)
+- [ ] Installation docs for an end user
 
-### Phase 5 — Console WS directe user ↔ agent + JWT + permissions ✅ TERMINÉE (V1)
+### Phase 5 — Direct user ↔ agent WS console + JWT + permissions ✅ DONE (V1)
 
-> Grosse mutation : le navigateur stream les logs directement depuis l'agent (type Pelican),
-> authentifié par un JWT court émis par le panel. Découpée en edits indépendants,
-> chacun testable/mergeable seul. Ordre = dépendances.
+> Big change: the browser streams logs directly from the agent (Pelican-style),
+> authenticated with a short-lived JWT issued by the panel. Split into independent edits,
+> each testable/mergeable on its own. Order = dependencies.
 
-#### E1 — Contract : permissions, payload JWT, messages WS (`packages/contract/src/api.ts` + tests)
+#### E1 — Contract: permissions, JWT payload, WS messages (`packages/contract/src/api.ts` + tests)
 
-- [x] `permissionSchema` : enum fermé `console.read`, `console.write`, `power.start`,
+- [x] `permissionSchema`: closed enum `console.read`, `console.write`, `power.start`,
   `power.stop`, `power.restart`, `power.kill`, `variables.read`, `variables.write`
-  (subset Pelican ; files/backups = V2+)
-- [x] `consoleTokenPayloadSchema` : `{ iss: 'mojito-panel', aud: 'mojito-agent', sub, serverId, permissions, iat, exp, jti }`
-- [x] `consoleTokenResponseSchema` (panel → navigateur) : `{ token, wsUrl }`
-- [x] Messages WS : navigateur → agent `{ type: 'command', command } | { type: 'power', action }` ;
-  agent → navigateur `{ type: 'auth-ok' } | { type: 'log', lines[] } | { type: 'status', status } | { type: 'error', code }`
-- [x] Tests contract (enum refusée hors liste, payload obligatoire)
+  (Pelican subset; files/backups = V2+)
+- [x] `consoleTokenPayloadSchema`: `{ iss: 'mojito-panel', aud: 'mojito-agent', sub, serverId, permissions, iat, exp, jti }`
+- [x] `consoleTokenResponseSchema` (panel → browser): `{ token, wsUrl }`
+- [x] WS messages: browser → agent `{ type: 'command', command } | { type: 'power', action }`;
+  agent → browser `{ type: 'auth-ok' } | { type: 'log', lines[] } | { type: 'status', status } | { type: 'error', code }`
+- [x] Contract tests (enum rejected outside the list, required payload)
 
-#### E2 — Agent : secret JWT dans la config (`packages/agent/src/config.ts` + tests)
+#### E2 — Agent: JWT secret in the config (`packages/agent/src/config.ts` + tests)
 
-- [x] ~~`AGENT_JWT_SECRET` requis~~ — **supersédé** : l’agent vérifie avec son propre `AGENT_TOKEN`
-- [x] Ne JAMAIS le logger (logger redacted comme pour le token)
+- [x] ~~`AGENT_JWT_SECRET` required~~ — **superseded**: the agent verifies with its own `AGENT_TOKEN`
+- [x] NEVER log it (redacted logger, like for the token)
 
-#### E3 — Agent : vérification JWT (`packages/agent/src/api/jwt.ts` + tests)
+#### E3 — Agent: JWT verification (`packages/agent/src/api/jwt.ts` + tests)
 
-- [x] HS256 via `node:crypto` (HMAC-SHA256 + base64url, SANS dépendance jwt/jsonwebtoken)
-- [x] Vérifie signature, `aud === 'mojito-agent'`, `exp` (marge d'horloge 5 s)
-- [x] Retourne le payload typé ; erreurs distinctes : `invalid`/`expired` (→ 401) vs
-  permissions insuffisantes (→ 403, check à part, par action)
+- [x] HS256 via `node:crypto` (HMAC-SHA256 + base64url, WITHOUT a jwt/jsonwebtoken dependency)
+- [x] Checks signature, `aud === 'mojito-agent'`, `exp` (5 s clock skew margin)
+- [x] Returns the typed payload; distinct errors: `invalid`/`expired` (→ 401) vs
+  insufficient permissions (→ 403, separate check, per action)
 
-#### E4 — Agent : endpoint WS console (`packages/agent/src/api/index.ts`, `process/registry.ts`)
+#### E4 — Agent: console WS endpoint (`packages/agent/src/api/index.ts`, `process/registry.ts`)
 
-- [x] Dépendance `@fastify/websocket` + `ws`
-- [x] `GET /servers/:serverId/ws` — socket NON authentifié, JWT en 1er message WS (`auth`, jamais en query string).
-- [x] Handshake : vérif JWT + `serverId` du token === paramètre de route → `auth-ok`,
-  batch initial du ring buffer, statut courant ; refus → close code 4001/4003 (pas de leak)
-- [x] Streaming : subscribe au callback de logs du registry (déjà en place pour le polling)
-- [x] Messages entrants : `command` gate `console.write`, `power` gate `power.<action>`
-- [x] Unsubscribe propre à la déconnexion ; plusieurs sockets par serveur OK (pas de broadcast à faire, chacun s'abonne)
-- [x] Le token est validé à la connexion ; les permissions re-validées à CHAQUE message entrant (payload en mémoire, pas re-signé)
+- [x] `@fastify/websocket` + `ws` dependency
+- [x] `GET /servers/:serverId/ws` — UNauthenticated socket, JWT in the 1st WS message (`auth`, never in a query string).
+- [x] Handshake: JWT check + token's `serverId` === route parameter → `auth-ok`,
+  initial ring buffer batch, current status; refusal → close code 4001/4003 (no leak)
+- [x] Streaming: subscribe to the registry log callback (already in place for polling)
+- [x] Incoming messages: `command` gated on `console.write`, `power` gated on `power.<action>`
+- [x] Clean unsubscribe on disconnect; multiple sockets per server OK (no broadcast needed, each one subscribes)
+- [x] The token is validated at connection; permissions re-validated on EVERY incoming message (payload in memory, not re-signed)
 
-#### E5 — Panel : émission du JWT (`packages/panel/src/server/functions/servers.ts` + `.env.default` + tests)
+#### E5 — Panel: JWT issuance (`packages/panel/src/server/functions/servers.ts` + `.env.default` + tests)
 
-- [x] ~~`PANEL_JWT_SECRET`~~ — **supersédé par l’alignement Pelican** : le JWT est signé avec le token du node (chiffré au repos via `BETTER_AUTH_SECRET`)
-- [x] Server function `createConsoleToken(serverId)` : `requireUser()` + check ownership
-  (ou admin), puis signe HS256 (`node:crypto`, même code de base que E3 partagé via une
-  petite fonction `signJwt` — pas de dépendance)
-- [x] TTL 5 min, permissions = **toutes** en V1 (pas d'invitations ; défaut = full owner)
-- [x] Retourne `{ token, wsUrl }` (fqdn/agentPort du node) — validé par le contract E1
-- [x] Ne JAMAIS logger le token
+- [x] ~~`PANEL_JWT_SECRET`~~ — **superseded by the Pelican alignment**: the JWT is signed with the node's token (encrypted at rest via `BETTER_AUTH_SECRET`)
+- [x] `createConsoleToken(serverId)` server function: `requireUser()` + ownership check
+  (or admin), then HS256 sign (`node:crypto`, same base code as E3 shared via a
+  small `signJwt` function — no dependency)
+- [x] 5 min TTL, permissions = **all** in V1 (no invitations; default = full owner)
+- [x] Returns `{ token, wsUrl }` (node fqdn/agentPort) — validated by the E1 contract
+- [x] NEVER log the token
 
-#### E6 — Panel : console front en WS (`packages/panel/src/routes/_app/servers/$serverId.tsx`)
+#### E6 — Panel: WS console front (`packages/panel/src/routes/_app/servers/$serverId.tsx`)
 
-- [x] Appel `createConsoleToken` → ouverture WS natif dans useEffect (SSR-safe, xterm déjà dynamique)
-- [x] Reconnexion avec backoff → ré-émettre un token frais à chaque tentative (TTL court)
-- [x] `command`/`power` envoyés via WS quand connecté ; sinon 401 → refresh token
-- [x] Fallback polling conservé : si le WS échoue à l'ouverture (proxy sans WS, agent vieux),
-  retomber sur le polling `GET /logs?after=N` existant — dégradation, pas d'erreur
-- [x] Supprimer le polling une fois le WS stable ? Non en V1 : garder les deux (fallback documenté)
+- [x] `createConsoleToken` call → native WS opened in useEffect (SSR-safe, xterm already dynamic)
+- [x] Reconnection with backoff → re-issue a fresh token on every attempt (short TTL)
+- [x] `command`/`power` sent over WS when connected; otherwise 401 → refresh token
+- [x] Polling fallback kept: if the WS fails to open (proxy without WS, old agent),
+  fall back to the existing `GET /logs?after=N` polling — graceful degradation, not an error
+- [x] Remove polling once the WS is stable? Not in V1: keep both (documented fallback)
 
-#### E7 — Hardening sécurité
+#### E7 — Security hardening
 
-- [x] TTL 5 min max, `jti` présent (prêt pour blacklist V2)
-- [x] Rate-limit basique des `command` par socket (mémoire, ex. 10/s) anti-flood console
-- [x] Close immédiate sans détail si JWT invalide (pas de distinction d'erreur côté client)
+- [x] 5 min max TTL, `jti` present (ready for a V2 blacklist)
+- [x] Basic rate limiting of `command` per socket (in-memory, e.g. 10/s) against console flooding
+- [x] Immediate close without details if the JWT is invalid (no error distinction client-side)
 
-#### E8 — Tests de bout en bout + docs
+#### E8 — End-to-end tests + docs
 
-- [x] Agent : WS auth OK/ko, token expiré, `serverId` mismatch, permissions refusées
-  (`console.write` absente → commande rejetée), streaming reçu, unsubscribe
-- [x] Panel : payload conforme au contract + symétrie sign/verify avec l'agent (test croisé) — ⚠️ le refus non-owner passe par loadOwnedServer partagé, pas de test dédié (nécessiterait une infra session/DB)
-- [x] `npm test` vert (54 tests + les nouveaux)
-- [x] README (schéma du flux JWT) + mise à jour de ce plan (cocher les cases)
+- [x] Agent: WS auth success/failure, expired token, `serverId` mismatch, refused permissions
+  (missing `console.write` → command rejected), streaming received, unsubscribe
+- [x] Panel: payload conforms to the contract + sign/verify symmetry with the agent (cross test) — ⚠️ the non-owner refusal goes through the shared loadOwnedServer, no dedicated test (would require session/DB infra)
+- [x] `npm test` green (54 tests + the new ones)
+- [x] README (JWT flow diagram) + update of this plan (check the boxes)
 
-#### Alignement Pelican (post-E8, appliqué)
+#### Pelican alignment (post-E8, applied)
 
-Après lecture du code réel de pelican/panel + pelican/wings, alignement sur leur modèle :
-- Secret unique par node : le JWT console est signé/vérifié avec le token agent (leur `daemon_token`) — plus de `PANEL_JWT_SECRET`/`AGENT_JWT_SECRET`.
-- Token chiffré au repos côté panel (AES-256-GCM depuis `BETTER_AUTH_SECRET`, leur équivalent = cast `encrypted`).
-- Handshake : le socket s’ouvre NON authentifié, le JWT voyage en 1er message WS (`auth`) — jamais en query string. Re-`auth` = refresh sans reconnexion.
-- Origin check avant l’upgrade (leur `CheckOrigin`) : `PANEL_URL` + `AGENT_ALLOWED_ORIGINS`.
-- Claim `scope: websocket` vérifié en plus des permissions (leurs scopes node JWT).
-- Expiry re-vérifiée à CHAQUE message entrant (leur `TokenValid`).
-- Écart assumé : pas de denylist JTI/déauthorize panel→agent en V1 (TTL 5 min + refresh en place suffisent).
+After reading the actual pelican/panel + pelican/wings code, alignment with their model:
+- Unique secret per node: the console JWT is signed/verified with the agent token (their `daemon_token`) — no more `PANEL_JWT_SECRET`/`AGENT_JWT_SECRET`.
+- Token encrypted at rest on the panel side (AES-256-GCM from `BETTER_AUTH_SECRET`, their equivalent = cast `encrypted`).
+- Handshake: the socket opens UNauthenticated, the JWT travels in the 1st WS message (`auth`) — never in a query string. Re-`auth` = refresh without reconnecting.
+- Origin check before the upgrade (their `CheckOrigin`): `PANEL_URL` + `AGENT_ALLOWED_ORIGINS`.
+- `scope: websocket` claim checked in addition to permissions (their node JWT scopes).
+- Expiry re-checked on EVERY incoming message (their `TokenValid`).
+- Assumed divergence: no JTI denylist / panel→agent deauthorize in V1 (5 min TTL + refresh in place suffice).
 
-#### Flux cible
+#### Target flow
 
 ```
-Navigateur ──POST createConsoleToken──▶ Panel (requireUser + ownership)
-Navigateur ◀──{ token, wsUrl }────────── Panel (JWT HS256, TTL 5 min, permissions: all en V1)
-Navigateur ──WS wsUrl (sans token)────▶ Agent (origin check + message auth = 1er message WS)
-Navigateur ◀──auth-ok + logs stream───── Agent (chaque message entrant re-validé par permissions)
+Browser ──POST createConsoleToken──▶ Panel (requireUser + ownership)
+Browser ◀──{ token, wsUrl }────────── Panel (HS256 JWT, TTL 5 min, permissions: all in V1)
+Browser ──WS wsUrl (without token)────▶ Agent (origin check + auth message = 1st WS message)
+Browser ◀──auth-ok + logs stream───── Agent (every incoming message re-validated against permissions)
 ```
 
-#### Écarts assumés vs Pelican/wings
+#### Assumed divergences vs Pelican/wings
 
-- Pelican a des permissions par sub-user + invitations → V2 chez nous (liste fermée prête en E1)
-- wings revalide le token auprès du panel en interne → non : nous faisons confiance au JWT
-  signé (secret partagé), pas de call panel par message
-- Pas de events SENTRY/apteryx (stats) en V1 — le WS ne transporte que logs/commandes/statut
+- Pelican has per-sub-user permissions + invitations → V2 for us (closed list ready in E1)
+- wings revalidates the token with the panel internally → no: we trust the signed JWT
+  (shared secret), no panel call per message
+- No SENTRY/apteryx events (stats) in V1 — the WS only carries logs/commands/status
 
-### V2+ (idées, ne PAS faire en V1)
+### V2+ (ideas, do NOT do in V1)
 
-- mTLS ou rotation de tokens panel ↔ agent
-- Quotas disque (fsutil, Windows Server)
-- SFTP/file manager dans le panel
-- Backups planifiés
-- AppContainer / isolation réseau
-- Multi-nodes avec scheduler de placement
-- Facturation/quotas par user
-- **Cache de runtimes partagé** : .bin global (java, steamcmd…) — extension du contract (nouvelle action `runtime` + var système `{{AGENT_BIN_DIR}}`) ; V1 = .bin par serveur (plugin minecraft déjà fait)
-- **Users Windows locaux + ACL NTFS** (isolation FS par serveur)
+- mTLS or panel ↔ agent token rotation
+- Disk quotas (fsutil, Windows Server)
+- SFTP/file manager in the panel
+- Scheduled backups
+- AppContainer / network isolation
+- Multi-node with a placement scheduler
+- Per-user billing/quotas
+- **Shared runtime cache**: global .bin (java, steamcmd…) — contract extension (new `runtime` action + system var `{{AGENT_BIN_DIR}}`); V1 = per-server .bin (minecraft recipe already done)
+- **Local Windows users + NTFS ACLs** (per-server FS isolation)
 
 ---
 
-## Pièges à ne pas oublier (checklist)
+## Pitfalls not to forget (checklist)
 
-- [ ] Job Object assigné AVANT les process enfants (évasion) — V2
-- [ ] Addons natifs jamais bundle-és dans le SEA → fichiers à côté — V2
-- [ ] SEA = CommonJS (build esbuild si code ESM) — V2
-- [ ] Users locaux : jamais Administrateurs, groupe `PanelServers` dédié — V2
-- [x] better-auth et MikroORM : même base Postgres, toutes les tables gérées par MikroORM, migrations au boot
-- [x] `schemaVersion` dans chaque JSON de plugin
-- [x] Variables inconnues = erreur à l'installation, pas au runtime
-- [ ] Timeout de stop gracieux avant kill forcé
-- [ ] Console de logs : virtualisation obligatoire (Minecraft spamme)
-- [ ] SteamCmd en cache global, pas par serveur
-- [x] JWT console : jamais dans l’URL ni les logs — transport = 1er message WS (`auth`) ; origin check sur l’upgrade
-- [x] WS console : permissions du JWT re-validées à CHAQUE message, pas seulement à l'ouverture
+- [ ] Job Object assigned BEFORE child processes (escape) — V2
+- [ ] Native addons never bundled in the SEA → files alongside — V2
+- [ ] SEA = CommonJS (esbuild build if ESM code) — V2
+- [ ] Local users: never Administrators, dedicated `PanelServers` group — V2
+- [x] better-auth and MikroORM: same Postgres DB, all tables managed by MikroORM, migrations at boot
+- [x] `schemaVersion` in every recipe JSON
+- [x] Unknown variables = error at install, not at runtime
+- [ ] Graceful stop timeout before forced kill
+- [ ] Log console: virtualization mandatory (Minecraft spams)
+- [ ] SteamCmd in a global cache, not per server
+- [x] Console JWT: never in the URL or logs — transport = 1st WS message (`auth`); origin check on the upgrade
+- [x] Console WS: JWT permissions re-validated on EVERY message, not just at opening
 
 ---
 
-## Critères de réussite V1
+## V1 success criteria
 
-1. Installer un serveur Minecraft Vanilla depuis le panel, en 3 clics, sur une machine Windows fraîche
-2. Le serveur est bridé à la RAM configurée (vérifiable : `java -Xmx` + Job Object) — V2
-3. Impossible (via ACL) d'accéder au dossier d'un autre serveur — V2
-4. Console live + `stop` gracieux depuis le panel
-5. Suppression propre : dossier, process, tout part
+1. Install a Vanilla Minecraft server from the panel, in 3 clicks, on a fresh Windows machine
+2. The server is throttled to the configured RAM (verifiable: `java -Xmx` + Job Object) — V2
+3. Impossible (via ACL) to access another server's folder — V2
+4. Live console + graceful `stop` from the panel
+5. Clean deletion: folder, process, everything goes away

@@ -6,7 +6,7 @@ import { createFileTail, execProcess, type ExecOptions } from '../server/install
  *
  * SteamCMD never prints its progress on a pipe — it writes it to
  * `logs/content_log.txt` in its own directory. The agent tails that file
- * and streams matching lines live (same trick as the plugin `tail` action).
+ * and streams matching lines live (same trick as the recipe `tail` action).
  *
  * Exit code 7 = benign self-update relaunch ("Update complete, launching…")
  * — tolerated everywhere SteamCMD runs.

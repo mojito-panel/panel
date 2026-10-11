@@ -112,7 +112,7 @@ export async function agentInstallServer(
   body: {
     serverId: string;
     name: string;
-    plugin: unknown;
+    recipe: unknown;
     variables: Record<string, string | number | boolean>;
     installDir: string;
     allocation: { port: number; memoryMb: number; ip?: string };
@@ -140,20 +140,20 @@ export interface AgentReinstallResponse {
 }
 
 /**
- * Reinstall — the agent stops the server then re-runs the plugin's install
- * script (in place). The panel sends the CURRENT plugin + variables.
+ * Reinstall — the agent stops the server then re-runs the recipe's install
+ * script (in place). The panel sends the CURRENT recipe + variables.
  */
 export async function agentReinstallServer(
   node: INode,
   serverId: string,
   body: {
-    plugin: unknown;
+    recipe: unknown;
     variables: Record<string, string | number | boolean>;
   },
 ): Promise<AgentReinstallResponse> {
   return agentCall(node, `/servers/${serverId}/reinstall`, {
     method: 'POST',
-    body: { plugin: body.plugin, variables: body.variables },
+    body: { recipe: body.recipe, variables: body.variables },
   });
 }
 
@@ -180,6 +180,22 @@ export async function agentUpdateServerVariables(
   return agentCall(node, `/servers/${serverId}/variables`, {
     method: 'POST',
     body: { variables },
+  });
+}
+
+/**
+ * Pushes the server's PRIMARY allocation (Pelican "Network" page) to the
+ * agent's cache — the new port/ip apply at the NEXT start, a running process
+ * keeps its original environment (same semantics as the variable push).
+ */
+export async function agentUpdateAllocation(
+  node: INode,
+  serverId: string,
+  allocation: { port: number; ip: string },
+): Promise<{ serverId: string; allocation: { port: number; memoryMb: number; ip: string } }> {
+  return agentCall(node, `/servers/${serverId}/allocation`, {
+    method: 'POST',
+    body: { allocation },
   });
 }
 

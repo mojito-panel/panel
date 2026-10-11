@@ -11,14 +11,14 @@ import {
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
 import { CollapseCard, FieldShell, ItemActions, KvRows, TagsInput } from './fields';
-import type { PluginForm } from './plugin-editor';
+import type { RecipeForm } from './recipe-editor';
 import { pairErrors } from './tab-configuration';
 import {
   actionLabel,
   newActionValue,
   type ActionType,
   type ActionValue,
-} from '~/validators/plugin-editor';
+} from '~/validators/recipe-editor';
 
 /**
  * Tab « Installation » — the declarative equivalent of Pelican's install
@@ -69,7 +69,7 @@ function actionNames(index: number) {
 
 type ActionNames = ReturnType<typeof actionNames>;
 
-export function InstallTab({ form }: { form: PluginForm }) {
+export function InstallTab({ form }: { form: RecipeForm }) {
   return (
     <form.Field name="install">
       {(field) => (
@@ -115,7 +115,7 @@ function ActionCard({
   onMoveDown,
   onRemove,
 }: {
-  form: PluginForm;
+  form: RecipeForm;
   index: number;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -644,7 +644,7 @@ function TailSection({
   names,
   index,
 }: {
-  form: PluginForm;
+  form: RecipeForm;
   names: ActionNames;
   index: number;
 }) {
@@ -742,7 +742,7 @@ function KvSection({
   valuePlaceholder,
   addLabel,
 }: {
-  form: PluginForm;
+  form: RecipeForm;
   name: `install[${number}].headers` | `install[${number}].configFind` | `install[${number}].env`;
   label: string;
   keyPlaceholder: string;

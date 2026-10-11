@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  pluginSchema,
-  parsePlugin,
-  safeParsePlugin,
+  recipeSchema,
+  parseRecipe,
+  safeParseRecipe,
   extractTemplateVars,
   findUnknownVariables,
   findToolFeatureErrors,
@@ -11,15 +11,15 @@ import {
   JAVA_VERSION_ENV,
   STEAM_APP_ID_ENV,
   STEAM_MOD_ENV,
-  type Plugin,
-} from '../src/plugin-schema';
+  type Recipe,
+} from '../src/recipe-schema';
 
 /**
  * Paper-style egg — covers all v2 features:
  * UPPERCASE env variables, system variables, configFile parser,
  * ready detection with strip, logs, runtime, fixed env.
  */
-const validPaperPlugin = {
+const validPaperRecipe = {
   schemaVersion: 2 as const,
   id: 'minecraft-paper',
   name: 'Paper',
@@ -85,49 +85,49 @@ const validPaperPlugin = {
   env: { JAVA_OPTS: '-XX:+UseG1GC' },
 };
 
-describe('pluginSchema v2', () => {
-  it('valide un egg Paper complet', () => {
-    const result = pluginSchema.safeParse(validPaperPlugin);
+describe('recipeSchema v2', () => {
+  it('validates a complete Paper egg', () => {
+    const result = recipeSchema.safeParse(validPaperRecipe);
     expect(result.success).toBe(true);
   });
 
-  it('rejette un schemaVersion incorrect', () => {
-    const result = pluginSchema.safeParse({ ...validPaperPlugin, schemaVersion: 1 });
+  it('rejects an incorrect schemaVersion', () => {
+    const result = recipeSchema.safeParse({ ...validPaperRecipe, schemaVersion: 1 });
     expect(result.success).toBe(false);
   });
 
-  it('rejette un id avec des caracteres invalides', () => {
-    const result = pluginSchema.safeParse({ ...validPaperPlugin, id: 'Minecraft Paper!' });
+  it('rejects an id with invalid characters', () => {
+    const result = recipeSchema.safeParse({ ...validPaperRecipe, id: 'Minecraft Paper!' });
     expect(result.success).toBe(false);
   });
 
-  it('rejette une variable avec un nom env en lowercase', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
+  it('rejects a variable with a lowercase env name', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
       variables: [{ env: 'version', name: 'Version', type: 'string', defaultValue: 'latest' }],
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejette une variable utilisant un nom systeme reserve', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
+  it('rejects a variable using a reserved system name', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
       variables: [{ env: 'SERVER_MEMORY', name: 'RAM', type: 'number', defaultValue: 1024 }],
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejette une action inconnue', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
+  it('rejects an unknown action', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
       install: [{ action: 'delete', file: 'x' }],
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejette une variable avec un env duplique', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
+  it('rejects a variable with a duplicated env', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
       variables: [
         { env: 'MINECRAFT_VERSION', name: 'V1', type: 'string', defaultValue: 'a' },
         { env: 'MINECRAFT_VERSION', name: 'V2', type: 'string', defaultValue: 'b' },
@@ -137,15 +137,15 @@ describe('pluginSchema v2', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepte un plugin minimal (sans install, sans variables)', () => {
+  it('accepts a minimal recipe (no install, no variables)', () => {
     const minimal = {
       schemaVersion: 2 as const,
       id: 'test',
       name: 'Test',
-      author: 'moi',
+      author: 'me',
       start: { command: 'echo hello' },
     };
-    const result = pluginSchema.safeParse(minimal);
+    const result = recipeSchema.safeParse(minimal);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.variables).toEqual([]);
@@ -155,9 +155,9 @@ describe('pluginSchema v2', () => {
     }
   });
 
-  it('valide une action script (fallback ouvert)', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
+  it('validates a script action (open fallback)', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
       install: [
         { action: 'script', shell: 'powershell', content: 'Invoke-WebRequest -Uri x -OutFile y' },
       ],
@@ -165,17 +165,17 @@ describe('pluginSchema v2', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejette un stop avec un type invalide', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
-      start: { ...validPaperPlugin.start, stop: { type: 'event', value: 'x' } },
+  it('rejects a stop with an invalid type', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
+      start: { ...validPaperRecipe.start, stop: { type: 'event', value: 'x' } },
     });
     expect(result.success).toBe(false);
   });
 
-  it('applique les defaults Pelican-style sur les variables', () => {
-    const result = pluginSchema.safeParse({
-      ...validPaperPlugin,
+  it('applies Pelican-style defaults to variables', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
       variables: [{ env: 'SIMPLE', name: 'Simple', type: 'string', defaultValue: 'x' }],
     });
     expect(result.success).toBe(true);
@@ -189,115 +189,115 @@ describe('pluginSchema v2', () => {
   });
 });
 
-describe('parsePlugin / safeParsePlugin', () => {
-  it('parsePlugin lance sur donnees invalides', () => {
-    expect(() => parsePlugin({ foo: 'bar' })).toThrow();
+describe('parseRecipe / safeParseRecipe', () => {
+  it('parseRecipe throws on invalid data', () => {
+    expect(() => parseRecipe({ foo: 'bar' })).toThrow();
   });
 
-  it('safeParsePlugin retourne success=false sans lancer', () => {
-    const result = safeParsePlugin({ foo: 'bar' });
+  it('safeParseRecipe returns success=false without throwing', () => {
+    const result = safeParseRecipe({ foo: 'bar' });
     expect(result.success).toBe(false);
   });
 });
 
 describe('extractTemplateVars', () => {
-  it('extrait les variables UPPERCASE', () => {
+  it('extracts UPPERCASE variables', () => {
     expect(extractTemplateVars('java -Xmx{{SERVER_MEMORY}}M {{MINECRAFT_VERSION}}')).toEqual([
       'SERVER_MEMORY',
       'MINECRAFT_VERSION',
     ]);
   });
 
-  it('deduplique les variables', () => {
+  it('deduplicates variables', () => {
     expect(extractTemplateVars('{{A}} {{A}} {{B}}')).toEqual(['A', 'B']);
   });
 
-  it('ignore les templates lowercase', () => {
+  it('ignores lowercase templates', () => {
     expect(extractTemplateVars('{{lowercase_var}}')).toEqual([]);
   });
 
-  it('retourne un tableau vide sans variables', () => {
+  it('returns an empty array when no variables', () => {
     expect(extractTemplateVars('plain text')).toEqual([]);
   });
 });
 
 describe('findUnknownVariables', () => {
-  it('retourne vide quand toutes les variables sont declarees (plugin + systeme + env fixe)', () => {
-    const plugin = parsePlugin(validPaperPlugin);
-    expect(findUnknownVariables(plugin)).toEqual([]);
+  it('returns empty when all variables are declared (recipe + system + fixed env)', () => {
+    const recipe = parseRecipe(validPaperRecipe);
+    expect(findUnknownVariables(recipe)).toEqual([]);
   });
 
-  it('detecte une variable utilisee mais non declaree', () => {
-    const plugin = parsePlugin({
-      ...validPaperPlugin,
-      start: { ...validPaperPlugin.start, command: 'java -Dmotd={{UNKNOWN_VAR}} -jar x' },
+  it('detects a used but undeclared variable', () => {
+    const recipe = parseRecipe({
+      ...validPaperRecipe,
+      start: { ...validPaperRecipe.start, command: 'java -Dmotd={{UNKNOWN_VAR}} -jar x' },
     });
-    expect(findUnknownVariables(plugin)).toEqual(['UNKNOWN_VAR']);
+    expect(findUnknownVariables(recipe)).toEqual(['UNKNOWN_VAR']);
   });
 
-  it('accepte les variables systeme reservees sans declaration', () => {
-    const plugin = parsePlugin({
-      ...validPaperPlugin,
-      start: { ...validPaperPlugin.start, command: 'echo {{SERVER_UUID}} {{SERVER_PORT}}' },
+  it('accepts reserved system variables without declaration', () => {
+    const recipe = parseRecipe({
+      ...validPaperRecipe,
+      start: { ...validPaperRecipe.start, command: 'echo {{SERVER_UUID}} {{SERVER_PORT}}' },
     });
-    expect(findUnknownVariables(plugin)).toEqual([]);
+    expect(findUnknownVariables(recipe)).toEqual([]);
   });
 
-  it('accepte les cles du env fixe comme variables de templating', () => {
-    const plugin = parsePlugin({
-      ...validPaperPlugin,
+  it('accepts fixed env keys as templating variables', () => {
+    const recipe = parseRecipe({
+      ...validPaperRecipe,
       env: { CUSTOM_FLAG: 'yes' },
-      start: { ...validPaperPlugin.start, command: 'echo {{CUSTOM_FLAG}}' },
+      start: { ...validPaperRecipe.start, command: 'echo {{CUSTOM_FLAG}}' },
     });
-    expect(findUnknownVariables(plugin)).toEqual([]);
+    expect(findUnknownVariables(recipe)).toEqual([]);
   });
 
-  it('detecte les variables inconnues dans configFile', () => {
-    const plugin = parsePlugin({
-      ...validPaperPlugin,
+  it('detects unknown variables in configFile', () => {
+    const recipe = parseRecipe({
+      ...validPaperRecipe,
       install: [
         { action: 'configFile', file: 'x.ini', parser: 'ini', find: { key: '{{NOT_DECLARED}}' } },
       ],
     });
-    expect(findUnknownVariables(plugin)).toEqual(['NOT_DECLARED']);
+    expect(findUnknownVariables(recipe)).toEqual(['NOT_DECLARED']);
   });
 });
 
-describe('findToolFeatureErrors (features java/steamcmd interprétées par l’agent)', () => {
+describe('findToolFeatureErrors (java/steamcmd features interpreted by the agent)', () => {
   const base = {
     schemaVersion: 2 as const,
-    id: 'tool-plugin',
+    id: 'tool-recipe',
     name: 'Tools',
-    author: 'moi',
+    author: 'me',
     start: { command: 'java -jar app.jar' },
   };
 
-  it('accepte la feature java avec la variable JAVA_VERSION déclarée', () => {
-    const plugin = parsePlugin({
+  it('accepts the java feature with the JAVA_VERSION variable declared', () => {
+    const recipe = parseRecipe({
       ...base,
       features: ['java'],
       variables: [{ env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' }],
     });
-    expect(findToolFeatureErrors(plugin)).toEqual([]);
+    expect(findToolFeatureErrors(recipe)).toEqual([]);
   });
 
-  it('rejette la feature java sans variable JAVA_VERSION', () => {
-    const plugin = parsePlugin({ ...base, features: ['java'] });
-    const errors = findToolFeatureErrors(plugin);
+  it('rejects the java feature without the JAVA_VERSION variable', () => {
+    const recipe = parseRecipe({ ...base, features: ['java'] });
+    const errors = findToolFeatureErrors(recipe);
     expect(errors.length).toBe(1);
     expect(errors[0]).toContain(JAVA_VERSION_ENV);
   });
 
-  it('signale une variable JAVA_VERSION sans la feature java', () => {
-    const plugin = parsePlugin({
+  it('reports a JAVA_VERSION variable without the java feature', () => {
+    const recipe = parseRecipe({
       ...base,
       variables: [{ env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' }],
     });
-    expect(findToolFeatureErrors(plugin).length).toBe(1);
+    expect(findToolFeatureErrors(recipe).length).toBe(1);
   });
 
-  it('accepte la feature steamcmd avec STEAM_APP_ID et STEAM_MOD déclarées', () => {
-    const plugin = parsePlugin({
+  it('accepts the steamcmd feature with STEAM_APP_ID and STEAM_MOD declared', () => {
+    const recipe = parseRecipe({
       ...base,
       features: ['steamcmd'],
       variables: [
@@ -305,47 +305,47 @@ describe('findToolFeatureErrors (features java/steamcmd interprétées par l’a
         { env: STEAM_MOD_ENV, name: 'Mod', type: 'string', defaultValue: 'ricochet' },
       ],
     });
-    expect(findToolFeatureErrors(plugin)).toEqual([]);
+    expect(findToolFeatureErrors(recipe)).toEqual([]);
   });
 
-  it('accepte la feature steamcmd seule (binaire sur le PATH, sans auto-install)', () => {
-    const plugin = parsePlugin({ ...base, features: ['steamcmd'] });
-    expect(findToolFeatureErrors(plugin)).toEqual([]);
+  it('accepts the steamcmd feature alone (binary on PATH, no auto-install)', () => {
+    const recipe = parseRecipe({ ...base, features: ['steamcmd'] });
+    expect(findToolFeatureErrors(recipe)).toEqual([]);
   });
 
-  it('signale STEAM_APP_ID sans la feature steamcmd', () => {
-    const plugin = parsePlugin({
+  it('reports STEAM_APP_ID without the steamcmd feature', () => {
+    const recipe = parseRecipe({
       ...base,
       variables: [{ env: STEAM_APP_ID_ENV, name: 'App', type: 'string', defaultValue: '90' }],
     });
-    const errors = findToolFeatureErrors(plugin);
+    const errors = findToolFeatureErrors(recipe);
     expect(errors.length).toBe(1);
     expect(errors[0]).toContain('steamcmd');
   });
 
-  it('ne remonte rien pour un plugin sans features ni variables outils', () => {
-    const plugin = parsePlugin({ ...base, features: ['eula'] });
-    expect(findToolFeatureErrors(plugin)).toEqual([]);
+  it('reports nothing for a recipe without features or tool variables', () => {
+    const recipe = parseRecipe({ ...base, features: ['eula'] });
+    expect(findToolFeatureErrors(recipe)).toEqual([]);
   });
 });
 
-describe('validateVariableValue (equivalent rules Laravel)', () => {
+describe('validateVariableValue (Laravel rules equivalent)', () => {
   const base = { env: 'RAM_MB', name: 'RAM', type: 'number' as const, defaultValue: 1024 };
 
-  it('valide un nombre dans les bornes', () => {
+  it('validates a number within bounds', () => {
     expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 2048)).toBeNull();
   });
 
-  it('rejette un nombre hors bornes', () => {
+  it('rejects a number out of bounds', () => {
     expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 100)).toContain('512');
     expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 9999)).toContain('4096');
   });
 
-  it('rejette une valeur non numerique pour un type number', () => {
+  it('rejects a non-numeric value for a number type', () => {
     expect(validateVariableValue(base, 'abc')).toContain('nombre');
   });
 
-  it('valide une regex pattern', () => {
+  it('validates a regex pattern', () => {
     const varDef = {
       env: 'JAR',
       name: 'Jar',
@@ -357,10 +357,10 @@ describe('validateVariableValue (equivalent rules Laravel)', () => {
     expect(validateVariableValue(varDef, 'server.txt')).toContain('format');
   });
 
-  it('valide une liste d options', () => {
+  it('validates an options list', () => {
     const varDef = {
       env: 'DIFFICULTY',
-      name: 'Difficulte',
+      name: 'Difficulty',
       type: 'string' as const,
       defaultValue: 'normal',
       options: ['easy', 'normal', 'hard'],
@@ -371,7 +371,7 @@ describe('validateVariableValue (equivalent rules Laravel)', () => {
 });
 
 describe('RESERVED_ENV_NAMES', () => {
-  it('contient les variables systeme attendues', () => {
+  it('contains the expected system variables', () => {
     expect(RESERVED_ENV_NAMES).toContain('SERVER_MEMORY');
     expect(RESERVED_ENV_NAMES).toContain('SERVER_PORT');
     expect(RESERVED_ENV_NAMES).toContain('SERVER_UUID');

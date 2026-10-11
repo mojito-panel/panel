@@ -10,7 +10,7 @@ import type { ServerAction } from '@mojito/contract';
 import { ServerStore } from '../src/internal/server-store';
 import { StateStore } from '../src/internal/state-store';
 import { restoreServers } from '../src/server/restore';
-import { parsePlugin, type Plugin } from '@mojito/contract';
+import { parseRecipe, type Recipe } from '@mojito/contract';
 
 const NODE = process.execPath;
 
@@ -19,12 +19,12 @@ function nodeCommand(code: string): string {
   return `"${NODE}" -e ${JSON.stringify(code)}`;
 }
 
-function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
-  return parsePlugin({
+function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
+  return parseRecipe({
     schemaVersion: 2,
-    id: 'test-plugin',
+    id: 'test-recipe',
     name: 'Test',
-    author: 'moi',
+    author: 'me',
     install: [],
     start: { command: 'echo ok' },
     ...overrides,
@@ -168,7 +168,7 @@ describe('ServerManager state persistence', () => {
     await store.save({
       serverId,
       name: 'persist-test',
-      plugin: makePlugin({
+      recipe: makeRecipe({
         start: { command: nodeCommand("setTimeout(() => process.exit(0), 300);") },
       }),
       variables: {},
@@ -204,7 +204,7 @@ describe('restoreServers', () => {
     await store.save({
       serverId,
       name: 'restore-test',
-      plugin: makePlugin({ start: { command: startCommand } }),
+      recipe: makeRecipe({ start: { command: startCommand } }),
       variables: {},
       installDir: dataDir,
       allocation: { port: 25565, memoryMb: 2048, ip: '0.0.0.0' },
@@ -292,7 +292,7 @@ describe('restoreServers', () => {
     await store.save({
       serverId: badId,
       name: 'broken',
-      plugin: makePlugin({ start: { command: 'echo ok' } }),
+      recipe: makeRecipe({ start: { command: 'echo ok' } }),
       variables: {},
       installDir: dataDir,
       allocation: { port: 25566, memoryMb: 2048, ip: '0.0.0.0' },

@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { FieldShell, KvRows, TagsInput } from './fields';
-import type { PluginForm } from './plugin-editor';
+import type { RecipeForm } from './recipe-editor';
 
 /**
  * Tab « Configuration » — identity, features and host requirements.
@@ -24,29 +24,29 @@ export function pairErrors(
   return map;
 }
 
-export function ConfigurationTab({ form }: { form: PluginForm }) {
+export function ConfigurationTab({ form }: { form: RecipeForm }) {
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Identité</CardTitle>
-          <CardDescription>Nom, auteur et description du plugin.</CardDescription>
+          <CardDescription>Nom, auteur et description de la recette.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <form.Field name="id">
             {(field) => (
               <FieldShell
-                id="plugin-id"
+                id="recipe-id"
                 label="ID (slug)"
                 hint="Minuscules, chiffres et tirets — unique."
                 errors={field.state.meta.errors}
               >
                 <Input
-                  id="plugin-id"
+                  id="recipe-id"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  placeholder="mon-plugin"
+                  placeholder="ma-recette"
                 />
               </FieldShell>
             )}
@@ -54,13 +54,13 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
 
           <form.Field name="name">
             {(field) => (
-              <FieldShell id="plugin-name" label="Nom" errors={field.state.meta.errors}>
+              <FieldShell id="recipe-name" label="Nom" errors={field.state.meta.errors}>
                 <Input
-                  id="plugin-name"
+                  id="recipe-name"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  placeholder="Mon super plugin"
+                  placeholder="Ma super recette"
                 />
               </FieldShell>
             )}
@@ -68,9 +68,9 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
 
           <form.Field name="author">
             {(field) => (
-              <FieldShell id="plugin-author" label="Auteur" errors={field.state.meta.errors}>
+              <FieldShell id="recipe-author" label="Auteur" errors={field.state.meta.errors}>
                 <Input
-                  id="plugin-author"
+                  id="recipe-author"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -83,18 +83,18 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
           <form.Field name="updateUrl">
             {(field) => (
               <FieldShell
-                id="plugin-update-url"
+                id="recipe-update-url"
                 label="URL de mise à jour"
-                hint="Permet le re-import du plugin depuis le panel."
+                hint="Permet le re-import de la recette depuis le panel."
                 errors={field.state.meta.errors}
               >
                 <Input
-                  id="plugin-update-url"
+                  id="recipe-update-url"
                   type="url"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  placeholder="https://…/plugin.json"
+                  placeholder="https://…/recipe.json"
                 />
               </FieldShell>
             )}
@@ -104,12 +104,12 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
             <form.Field name="description">
               {(field) => (
                 <FieldShell
-                  id="plugin-description"
+                  id="recipe-description"
                   label="Description"
                   errors={field.state.meta.errors}
                 >
                   <Textarea
-                    id="plugin-description"
+                    id="recipe-description"
                     rows={2}
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -123,13 +123,13 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
           <form.Field name="tags">
             {(field) => (
               <FieldShell
-                id="plugin-tags"
+                id="recipe-tags"
                 label="Tags"
                 hint="Séparés par des virgules."
                 errors={field.state.meta.errors}
               >
                 <TagsInput
-                  id="plugin-tags"
+                  id="recipe-tags"
                   value={field.state.value}
                   onChange={field.handleChange}
                   onBlur={field.handleBlur}
@@ -142,13 +142,13 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
           <form.Field name="features">
             {(field) => (
               <FieldShell
-                id="plugin-features"
+                id="recipe-features"
                 label="Features"
                 hint="Flags à la Pelican (eula…). « java » et « steamcmd » sont interprétés par l'agent : outil préchargé dans le .bin du serveur, injecté dans le PATH (variables JAVA_VERSION / STEAM_APP_ID / STEAM_MOD)."
                 errors={field.state.meta.errors}
               >
                 <TagsInput
-                  id="plugin-features"
+                  id="recipe-features"
                   value={field.state.value}
                   onChange={field.handleChange}
                   onBlur={field.handleBlur}
@@ -172,7 +172,7 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
           <form.Field name="runtime">
             {(field) => (
               <FieldShell
-                id="plugin-runtime"
+                id="recipe-runtime"
                 label="Outils requis (outil → contrainte)"
                 hint="Ex : java → « >=21 ». Les outils embarqués (.bin/java) comptent aussi."
                 errors={field.state.meta.errors}
@@ -201,7 +201,7 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
           <form.Field name="env">
             {(field) => (
               <FieldShell
-                id="plugin-env"
+                id="recipe-env"
                 label="Environnement fixe"
                 hint="Variables injectées au spawn — utilisables dans les templates {{VAR}}."
                 errors={field.state.meta.errors}
@@ -239,9 +239,9 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
         <CardContent className="grid gap-4 md:grid-cols-2">
           <form.Field name="requirements.minRamMb">
             {(field) => (
-              <FieldShell id="plugin-min-ram" label="RAM minimale (Mo)" errors={field.state.meta.errors}>
+              <FieldShell id="recipe-min-ram" label="RAM minimale (Mo)" errors={field.state.meta.errors}>
                 <Input
-                  id="plugin-min-ram"
+                  id="recipe-min-ram"
                   type="number"
                   value={String(field.state.value)}
                   onChange={(e) => field.handleChange(Number(e.target.value))}
@@ -253,9 +253,9 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
 
           <form.Field name="requirements.minDiskMb">
             {(field) => (
-              <FieldShell id="plugin-min-disk" label="Disque minimal (Mo)" errors={field.state.meta.errors}>
+              <FieldShell id="recipe-min-disk" label="Disque minimal (Mo)" errors={field.state.meta.errors}>
                 <Input
-                  id="plugin-min-disk"
+                  id="recipe-min-disk"
                   type="number"
                   value={String(field.state.value)}
                   onChange={(e) => field.handleChange(Number(e.target.value))}
@@ -267,9 +267,9 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
 
           <form.Field name="requirements.minCpuPercent">
             {(field) => (
-              <FieldShell id="plugin-min-cpu" label="CPU minimal (%)" errors={field.state.meta.errors}>
+              <FieldShell id="recipe-min-cpu" label="CPU minimal (%)" errors={field.state.meta.errors}>
                 <Input
-                  id="plugin-min-cpu"
+                  id="recipe-min-cpu"
                   type="number"
                   value={String(field.state.value)}
                   onChange={(e) => field.handleChange(Number(e.target.value))}
@@ -282,13 +282,13 @@ export function ConfigurationTab({ form }: { form: PluginForm }) {
           <form.Field name="requirements.requiredCommands">
             {(field) => (
               <FieldShell
-                id="plugin-required-commands"
+                id="recipe-required-commands"
                 label="Commandes requises"
                 hint="Exécutables qui doivent exister sur l'hôte, séparés par des virgules."
                 errors={field.state.meta.errors}
               >
                 <TagsInput
-                  id="plugin-required-commands"
+                  id="recipe-required-commands"
                   value={field.state.value}
                   onChange={field.handleChange}
                   onBlur={field.handleBlur}
