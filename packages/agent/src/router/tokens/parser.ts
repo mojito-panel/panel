@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { ZodType } from 'zod';
 import {
+  backupDownloadTokenPayloadSchema,
   consoleTokenPayloadSchema,
   healthTokenPayloadSchema,
+  type BackupDownloadTokenPayload,
   type ConsoleTokenPayload,
   type HealthTokenPayload,
 } from '@mojito/contract';
@@ -131,4 +133,13 @@ export function verifyHealthToken(
   options: VerifyTokenOptions = {},
 ): HealthTokenPayload {
   return verifySignedToken(token, secret, healthTokenPayloadSchema, options);
+}
+
+/** Backup download JWT (scope `backup-download`) — `serverId` must match. */
+export function verifyBackupDownloadToken(
+  token: string,
+  secret: string,
+  options: VerifyTokenOptions = {},
+): BackupDownloadTokenPayload {
+  return verifySignedToken(token, secret, backupDownloadTokenPayloadSchema, options);
 }

@@ -7,6 +7,7 @@ import {
   findUnknownVariables,
   findToolFeatureErrors,
   validateVariableValue,
+  validateBackupIncludePattern,
   RESERVED_ENV_NAMES,
   JAVA_VERSION_ENV,
   STEAM_APP_ID_ENV,
@@ -375,5 +376,61 @@ describe('RESERVED_ENV_NAMES', () => {
     expect(RESERVED_ENV_NAMES).toContain('SERVER_MEMORY');
     expect(RESERVED_ENV_NAMES).toContain('SERVER_PORT');
     expect(RESERVED_ENV_NAMES).toContain('SERVER_UUID');
+  });
+});
+
+describe('backup config (recipe-declared archive contents)', () => {
+  const base = {
+    schemaVersion: 2 as const,
+    id: 'backup-recipe',
+    name: 'Backup',
+    author: 'me',
+    start: { command: 'java -jar app.jar' },
+  };
+
+  it('accepts a recipe without backup config (whole install dir)', () => {
+    const recipe = parseRecipe(base);
+    expect(recipe.backup).toBeUndefined();
+  });
+
+  it('accepts plain relative paths and glob metacharacters', () => {
+    const recipe = parseRecipe({
+      ...base,
+      backup: { include: ['world', 'plugins/*', '*.properties', 'config/**/*.{yml,yaml}'] },
+    });
+    expect(recipe.backup?.include).toHaveLength(4);
+  });
+
+  it('accepts dotfiles patterns', () => {
+    const recipe = parseRecipe({ ...base, backup: { include: ['.env', 'world/*'] } });
+    expect(recipe.backup?.include).toContain('.env');
+  });
+
+  it('rejects an empty include list', () => {
+    const result = safeParseRecipe({ ...base, backup: { include: [] } });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects escape patterns', () => {
+    for (const pattern of [
+      '/etc/passwd',
+      'C:/Windows/System32',
+      '../outside',
+      'world/../../..',
+      '!secret',
+      'a\\b',
+      'a|b',
+      'world//x',
+      'world/',
+    ]) {
+      const result = safeParseRecipe({ ...base, backup: { include: [pattern] } });
+      expect(result.success, `pattern "${pattern}" should be rejected`).toBe(false);
+    }
+  });
+
+  it('validateBackupIncludePattern returns a message or null', () => {
+    expect(validateBackupIncludePattern('world/**')).toBeNull();
+    expect(validateBackupIncludePattern('..')).not.toBeNull();
+    expect(validateBackupIncludePattern('')).not.toBeNull();
   });
 });

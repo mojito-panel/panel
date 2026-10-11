@@ -420,6 +420,13 @@ export function registerServerRoutes(app: FastifyInstance, options: ServerRoutes
         removed = true;
       }
 
+      // Backups live outside the install dir — wipe the server's whole
+      // archive dir (dataDir/backups/<serverId>) along with the server.
+      await rm(resolve(config.dataDir, 'backups', serverId), {
+        recursive: true,
+        force: true,
+      });
+
       return { serverId, removed, installDir: stored.installDir };
     },
   );

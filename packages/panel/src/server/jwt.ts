@@ -1,8 +1,10 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import {
   ALL_PERMISSIONS,
+  BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
   CONSOLE_TOKEN_TTL_SECONDS,
   HEALTH_TOKEN_TTL_SECONDS,
+  backupDownloadTokenPayloadSchema,
   consoleTokenPayloadSchema,
   healthTokenPayloadSchema,
   type Permission,
@@ -66,6 +68,26 @@ export function signHealthToken(
     scope: 'health',
     iat,
     exp: iat + HEALTH_TOKEN_TTL_SECONDS,
+    jti: randomUUID(),
+  });
+  return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };
+}
+
+/** Signs a backup download JWT for one archive (browser download link). */
+export function signBackupDownloadToken(
+  input: { userId: string; serverId: string; backupId: string; now?: number },
+  secret: string,
+): { token: string; expiresAt: number } {
+  const iat = Math.floor((input.now ?? Date.now()) / 1000);
+  const payload = backupDownloadTokenPayloadSchema.parse({
+    iss: 'mojito-panel',
+    aud: 'mojito-agent',
+    sub: input.userId,
+    serverId: input.serverId,
+    backupId: input.backupId,
+    scope: 'backup-download',
+    iat,
+    exp: iat + BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
     jti: randomUUID(),
   });
   return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };

@@ -299,6 +299,37 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
           </form.Field>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sauvegardes</CardTitle>
+          <CardDescription>
+            Motifs d'inclusion (globs relatifs à la racine du serveur) du
+            contenu des sauvegardes. Vide = tout le serveur ; le dossier .bin
+            de l'agent est toujours exclu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form.Field name="backup.include">
+            {(field) => (
+              <FieldShell
+                id="recipe-backup-include"
+                label="Contenu inclus"
+                hint="Ex : world, plugins/*, *.properties — pas de « .. », pas de chemin absolu."
+                errors={field.state.meta.errors}
+              >
+                <TagsInput
+                  id="recipe-backup-include"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  onBlur={field.handleBlur}
+                  placeholder="world, plugins, server.properties"
+                />
+              </FieldShell>
+            )}
+          </form.Field>
+        </CardContent>
+      </Card>
     </div>
   );
 }

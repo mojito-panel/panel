@@ -473,6 +473,89 @@ export const uploadFileRequestSchema = z.object({
 
 export type UploadFileRequest = z.infer<typeof uploadFileRequestSchema>;
 
+// ─── Backups (panel orchestrates, agent archives & restores) ──────────────────
+
+/**
+ * Pelican parity, push-based: the panel creates a `backup` row, POSTs the
+ * order to the agent, then POLLS the operation status (the agent has no
+ * credentials to call the panel back). Archives live on the agent under
+ * `dataDir/backups/<serverId>/<backupId>.tar.gz` — outside the install dir,
+ * so they never appear in the file browser nor in a restore-truncate.
+ */
+
+/** Operation tracked by the agent for one archive (creation or restoration). */
+export const backupOperationSchema = z.enum(['create', 'restore']);
+
+export type BackupOperation = z.infer<typeof backupOperationSchema>;
+
+/** Creates a backup — the agent archives async (202), the panel polls. */
+export const createBackupRequestSchema = z.object({
+  serverId: z.string().uuid(),
+  /** Panel-generated backup id — the archive file name on the agent. */
+  backupId: z.string().uuid(),
+  /** Overrides the recipe's include patterns for THIS backup (optional). */
+  include: z.array(z.string().min(1)).optional(),
+});
+
+export type CreateBackupRequest = z.infer<typeof createBackupRequestSchema>;
+
+/** Restores a backup onto the (stopped) server. */
+export const restoreBackupRequestSchema = z.object({
+  serverId: z.string().uuid(),
+  /**
+   * Wipe the install dir (except the agent's `.bin/`) before extracting —
+   * destructive: files absent from the archive are LOST. Default: merge.
+   */
+  truncate: z.boolean().default(false),
+});
+
+export type RestoreBackupRequest = z.infer<typeof restoreBackupRequestSchema>;
+
+/** Live status of a backup operation (create or restore), polled by the panel. */
+export const backupOperationStatusSchema = z.object({
+  serverId: z.string().uuid(),
+  backupId: z.string().uuid(),
+  operation: backupOperationSchema,
+  status: z.enum(['running', 'completed', 'failed']),
+  /** Archive size (0 until a create completes). */
+  sizeBytes: z.number().int().nonnegative().default(0),
+  /** SHA-256 of the archive (hex) — set when a create completes. */
+  checksum: z.string().nullable().default(null),
+  error: z.string().nullable().default(null),
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime().nullable().default(null),
+});
+
+export type BackupOperationStatus = z.infer<typeof backupOperationStatusSchema>;
+
+// ─── Backup download JWT (browser → agent, token issued by the panel) ────────
+
+/**
+ * TTL of a backup download JWT, in seconds — the browser downloads the
+ * archive directly from the agent with it (same single per-node secret as
+ * the console JWT, no presigned S3 machinery).
+ */
+export const BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS = 120;
+
+/**
+ * Payload of the backup download JWT (HS256, signed by the panel with the
+ * node's agent token). Scoped to ONE archive: `serverId` AND `backupId`
+ * must match the download route parameters.
+ */
+export const backupDownloadTokenPayloadSchema = z.object({
+  iss: z.literal('mojito-panel'),
+  aud: z.literal('mojito-agent'),
+  sub: z.string().min(1), // user id
+  serverId: z.string().uuid(),
+  backupId: z.string().uuid(),
+  scope: z.literal('backup-download'),
+  iat: z.number().int().nonnegative(),
+  exp: z.number().int().positive(),
+  jti: z.string().min(1),
+});
+
+export type BackupDownloadTokenPayload = z.infer<typeof backupDownloadTokenPayloadSchema>;
+
 // ─── HTTP routes (reference) ──────────────────────────────────────────────────
 
 /**
@@ -500,6 +583,13 @@ export const AGENT_ROUTES = {
   fileRename: 'POST /servers/:serverId/files/rename',
   fileDelete: 'POST /servers/:serverId/files/delete',
   fileUpload: 'POST /servers/:serverId/files/upload',
+  /** Backups — async archive create/restore, the panel polls the status. */
+  backupCreate: 'POST /servers/:serverId/backups',
+  backupStatus: 'GET /servers/:serverId/backups/:backupId',
+  /** Archive download — panel token OR backup download JWT (browser link). */
+  backupDownload: 'GET /servers/:serverId/backups/:backupId/download',
+  backupDelete: 'DELETE /servers/:serverId/backups/:backupId',
+  backupRestore: 'POST /servers/:serverId/backups/:backupId/restore',
   /** Browser-facing console socket — auth by console JWT sent as the first `auth` message, NOT the panel token. */
   consoleWs: 'GET /servers/:serverId/ws',
   /** Node system snapshot (panel token) — latency measurement + one-shot health. */

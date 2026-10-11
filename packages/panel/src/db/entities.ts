@@ -110,6 +110,8 @@ export const Server = defineEntity({
     status: p.string().default('stopped'),
     /** Memory limit (Mo) — source of SERVER_MEMORY, no host bridging in V1. */
     memoryMb: p.integer().fieldName('memory_mb').default(2048),
+    /** Max non-failed backups kept for this server (0 = backups disabled). */
+    backupLimit: p.integer().fieldName('backup_limit').default(5),
     variables: p.json<Record<string, string | number | boolean>>(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
@@ -169,6 +171,25 @@ export const PanelRole = defineEntity({
      * `~/lib/permissions` (never `server.*`: those are sub-user grants).
      */
     permissions: p.json<Record<string, string[]>>(),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+  },
+});
+
+export const Backup = defineEntity({
+  name: 'backup',
+  properties: {
+    /** UUID — also the archive file name on the agent. */
+    id: p.string().primary(),
+    serverId: p.text().fieldName('server_id'),
+    name: p.string().length(128),
+    /** pending → running → completed | failed (`restoring` while a restore runs). */
+    status: p.string().default('pending'),
+    sizeBytes: p.integer().fieldName('size_bytes').default(0),
+    /** SHA-256 of the archive (hex) — filled by the agent on completion. */
+    checksum: p.text().nullable(),
+    error: p.text().nullable(),
+    completedAt: p.datetime().fieldName('completed_at').nullable(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },

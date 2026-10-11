@@ -5,6 +5,7 @@ import type {
   NodeStats,
   ServerAction,
   FileObject,
+  BackupOperationStatus,
 } from '@mojito/contract';
 import { decryptSecret } from '../crypto';
 
@@ -308,4 +309,46 @@ export async function agentUploadFile(
     method: 'POST',
     body: { path, contentBase64 },
   });
+}
+
+// ─── Backups (panel orchestrates, agent archives & restores) ────────────────
+
+/** Starts an archive creation on the agent (202 — poll the status). */
+export async function agentCreateBackup(
+  node: INode,
+  serverId: string,
+  body: { backupId: string; include?: string[] },
+): Promise<BackupOperationStatus> {
+  return agentCall(node, `/servers/${serverId}/backups`, { method: 'POST', body });
+}
+
+/** Live status of a backup operation (create or restore) — 404 when unknown. */
+export async function agentGetBackupStatus(
+  node: INode,
+  serverId: string,
+  backupId: string,
+): Promise<BackupOperationStatus> {
+  return agentCall(node, `/servers/${serverId}/backups/${backupId}`);
+}
+
+/** Starts a restoration (the agent stops the server first) — poll the status. */
+export async function agentRestoreBackup(
+  node: INode,
+  serverId: string,
+  backupId: string,
+  body: { truncate: boolean },
+): Promise<BackupOperationStatus> {
+  return agentCall(node, `/servers/${serverId}/backups/${backupId}/restore`, {
+    method: 'POST',
+    body,
+  });
+}
+
+/** Removes the archive file from the node. */
+export async function agentDeleteBackup(
+  node: INode,
+  serverId: string,
+  backupId: string,
+): Promise<void> {
+  await agentCall(node, `/servers/${serverId}/backups/${backupId}`, { method: 'DELETE' });
 }

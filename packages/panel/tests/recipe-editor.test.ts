@@ -24,6 +24,7 @@ function fullEditorValue(): RecipeEditorValue {
     requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: ['java'] },
     runtime: [{ key: 'java', value: '>=21' }],
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],
+    backup: { include: ['world', 'plugins/*', 'server.properties'] },
     variables: [
       {
         ...newVariableValue(0),
@@ -172,6 +173,25 @@ describe('recipeEditorValueToRecipe', () => {
     const parsed = parseRecipe(recipe!);
     const back = recipeToEditorValue(parsed);
     expect(recipeEditorValueToRecipe(back).recipe).toEqual(recipe);
+  });
+
+  it('carries the backup include patterns to the recipe JSON', () => {
+    const { recipe } = recipeEditorValueToRecipe(fullEditorValue());
+    expect(recipe?.backup?.include).toEqual(['world', 'plugins/*', 'server.properties']);
+  });
+
+  it('drops the backup section when the include list is empty', () => {
+    const value = fullEditorValue();
+    value.backup = { include: [] };
+    const { recipe } = recipeEditorValueToRecipe(value);
+    expect(recipe?.backup).toBeUndefined();
+  });
+
+  it('rejects an escaping backup include pattern in the schema', () => {
+    const value = fullEditorValue();
+    value.backup = { include: ['../secrets'] };
+    const result = recipeEditorSchema.safeParse(value);
+    expect(result.success).toBe(false);
   });
 
   it('reports the java feature without a JAVA_VERSION variable (agent validation)', () => {

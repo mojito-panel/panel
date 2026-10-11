@@ -160,5 +160,18 @@
   "logs": {
     "mode": "stdout",
     "stripAnsi": true
+  },
+  "backup": {
+    "include": [
+      "world",
+      "world_nether",
+      "world_the_end",
+      "banned-ips.json",
+      "banned-players.json",
+      "ops.json",
+      "usercache.json",
+      "whitelist.json",
+      "server.properties"
+    ]
   }
 }

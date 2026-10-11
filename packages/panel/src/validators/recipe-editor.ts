@@ -3,6 +3,7 @@ import {
   RESERVED_ENV_NAMES,
   findToolFeatureErrors,
   safeParseRecipe,
+  validateBackupIncludePattern,
   type Recipe,
   type RunnerActionInput,
 } from '@mojito/contract';
@@ -273,6 +274,15 @@ export const requirementsValueSchema = z.object({
 
 export type RequirementsValue = z.infer<typeof requirementsValueSchema>;
 
+// ─── Backup (glob include patterns) ──────────────────────────────────────────
+
+export const backupValueSchema = z.object({
+  /** Empty list = whole install dir (the agent always excludes its .bin/). */
+  include: z.array(z.string()),
+});
+
+export type BackupValue = z.infer<typeof backupValueSchema>;
+
 // ─── Full editor value ───────────────────────────────────────────────────────
 
 export const recipeEditorSchema = z
@@ -290,6 +300,7 @@ export const recipeEditorSchema = z
     requirements: requirementsValueSchema,
     runtime: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
+    backup: backupValueSchema,
     variables: z.array(recipeVariableValueSchema),
     install: z.array(actionValueSchema),
     start: z.object({
@@ -360,6 +371,15 @@ export const recipeEditorSchema = z
     if (value.updateUrl && !z.url().safeParse(value.updateUrl).success) {
       ctx.addIssue({ code: 'custom', path: ['updateUrl'], message: 'URL invalide' });
     }
+
+    // Backup include patterns (contract validation, empty = whole dir)
+    value.backup.include.forEach((pattern, index) => {
+      if (!pattern) return;
+      const error = validateBackupIncludePattern(pattern);
+      if (error) {
+        ctx.addIssue({ code: 'custom', path: ['backup', 'include', index], message: error });
+      }
+    });
   });
 
 export type RecipeEditorValue = z.infer<typeof recipeEditorSchema>;
@@ -378,6 +398,7 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     runtime: [],
     env: [],
+    backup: { include: [] },
     variables: [],
     install: [],
     start: {
@@ -414,6 +435,7 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     },
     runtime: toPairs(recipe.runtime),
     env: toPairs(recipe.env),
+    backup: { include: recipe.backup?.include ?? [] },
     variables: recipe.variables.map((variable) => ({
       name: variable.name,
       env: variable.env,
@@ -641,6 +663,10 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
         : undefined,
     runtime: pairsToRecord(value.runtime),
     env: pairsToRecord(value.env),
+    backup: (() => {
+      const include = value.backup.include.map((p) => p.trim()).filter(Boolean);
+      return include.length > 0 ? { include } : undefined;
+    })(),
     variables,
     install,
     start: {

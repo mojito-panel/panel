@@ -22,6 +22,11 @@ import {
   HEALTH_TOKEN_TTL_SECONDS,
   healthTokenPayloadSchema,
   healthServerMessageSchema,
+  createBackupRequestSchema,
+  restoreBackupRequestSchema,
+  backupOperationStatusSchema,
+  backupDownloadTokenPayloadSchema,
+  BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
   AGENT_ROUTES,
 } from '../src/api';
 
@@ -591,5 +596,101 @@ describe('AGENT_ROUTES — health', () => {
   it('exposes the stats and health WS routes', () => {
     expect(AGENT_ROUTES.stats).toBe('GET /stats');
     expect(AGENT_ROUTES.healthWs).toBe('GET /health/ws');
+  });
+});
+
+describe('backup API (panel orchestrates, agent archives & restores)', () => {
+  const serverId = '6f6c3c8e-0b7a-4a2e-9f2b-3a1d4c5e6f70';
+  const backupId = '9d8b0f6e-2c4a-4e8f-9a3b-5c7d1e2f3a4b';
+
+  it('validates a create backup request', () => {
+    const result = createBackupRequestSchema.safeParse({
+      serverId,
+      backupId,
+      include: ['world/**'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.include).toEqual(['world/**']);
+    }
+  });
+
+  it('defaults truncate to false on a restore request', () => {
+    const result = restoreBackupRequestSchema.parse({ serverId });
+    expect(result.truncate).toBe(false);
+  });
+
+  it('rejects non-UUID ids on a create backup request', () => {
+    expect(
+      createBackupRequestSchema.safeParse({ serverId, backupId: 'not-a-uuid' }).success,
+    ).toBe(false);
+  });
+
+  it('validates a running operation status', () => {
+    const result = backupOperationStatusSchema.safeParse({
+      serverId,
+      backupId,
+      operation: 'create',
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sizeBytes).toBe(0);
+      expect(result.data.checksum).toBeNull();
+      expect(result.data.finishedAt).toBeNull();
+    }
+  });
+
+  it('rejects an unknown operation', () => {
+    const result = backupOperationStatusSchema.safeParse({
+      serverId,
+      backupId,
+      operation: 'prune',
+      status: 'running',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('validates a backup download token payload', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const result = backupDownloadTokenPayloadSchema.safeParse({
+      iss: 'mojito-panel',
+      aud: 'mojito-agent',
+      sub: 'user-1',
+      serverId,
+      backupId,
+      scope: 'backup-download',
+      iat: now,
+      exp: now + BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
+      jti: 'jti-1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a backup download token bound to another scope', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const result = backupDownloadTokenPayloadSchema.safeParse({
+      iss: 'mojito-panel',
+      aud: 'mojito-agent',
+      sub: 'user-1',
+      serverId,
+      backupId,
+      scope: 'websocket',
+      iat: now,
+      exp: now + BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
+      jti: 'jti-1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('lists the backup routes', () => {
+    expect(AGENT_ROUTES.backupCreate).toBe('POST /servers/:serverId/backups');
+    expect(AGENT_ROUTES.backupStatus).toBe(
+      'GET /servers/:serverId/backups/:backupId',
+    );
+    expect(AGENT_ROUTES.backupRestore).toBe(
+      'POST /servers/:serverId/backups/:backupId/restore',
+    );
   });
 });

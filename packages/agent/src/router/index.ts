@@ -6,11 +6,13 @@ import { ServerStore } from '../internal/server-store';
 import { StateStore } from '../internal/state-store';
 import { restoreServers } from '../server/restore';
 import { InstallRegistry } from '../server/installer/registry';
+import { BackupRegistry } from '../server/backup/registry';
 import { SystemStatsCollector } from '../system/stats';
 import { registerAuthenticationHook, hashToken } from './middleware';
 import { registerSystemRoutes } from './router-system';
 import { registerServerRoutes } from './router-server';
 import { registerFilesRoutes } from './router-files';
+import { registerBackupRoutes } from './router-backups';
 import { registerConsoleWs } from './websocket/websocket';
 import { registerHealthWs } from './websocket/health-ws';
 
@@ -52,6 +54,7 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
   const stateStore = new StateStore(config.dataDir);
   const manager = new ServerManager({ store, stateStore });
   const registry = new InstallRegistry();
+  const backupRegistry = new BackupRegistry();
   const collector = new SystemStatsCollector({
     dataDir: config.dataDir,
     version: config.version,
@@ -72,6 +75,15 @@ export function createAgentServer(config: AgentConfig): FastifyInstance {
 
   // ─── File browser routes (panel token, sandboxed to installDir) ─────────
   registerFilesRoutes(app, { store });
+
+  // ─── Backup routes (panel token; download also accepts a JWT) ───────────
+  registerBackupRoutes(app, {
+    config,
+    store,
+    manager,
+    registry: backupRegistry,
+    installRegistry: registry,
+  });
 
   // ─── Browser console WS (JWT auth, log streaming, commands, power) ──────
   // Own scope: the websocket recipe must be booted BEFORE the

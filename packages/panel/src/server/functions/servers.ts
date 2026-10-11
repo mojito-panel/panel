@@ -369,6 +369,8 @@ export const getServerFn = createServerFn({ method: 'GET' })
         // Variable definitions for the UI (forms)
         variables: canReadVariables ? (recipeJson.variables ?? []) : [],
         start: canReadVariables ? recipeJson.start : null,
+        // Backup contents (glob include patterns) shown on the Backups page
+        backup: recipeJson.backup ?? null,
       },
       allocation: primaryAllocation
         ? {

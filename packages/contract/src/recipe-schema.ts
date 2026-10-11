@@ -214,6 +214,65 @@ export const logsConfigSchema = z.object({
 
 export type LogsConfig = z.infer<typeof logsConfigSchema>;
 
+// ─── Backup (recipe-declared archive contents) ──────────────────────────────
+
+/**
+ * A backup include pattern: a RELATIVE POSIX path with optional glob
+ * metacharacters (`*`, `?`, `[...]`, `{a,b}`) — expanded by the agent
+ * against the server's installDir. Validated UP FRONT so a recipe cannot
+ * smuggle an escape: no absolute path, no drive letter, no `.`/`..`
+ * segment, no glob negation (`!`), no backslash, and no characters
+ * Windows forbids in file names outside of the glob metacharacters.
+ *
+ * Defense in depth on the agent: patterns are expanded with symlink
+ * following DISABLED and every match is re-checked against the install
+ * root before entering the archive (see the agent's backup service).
+ */
+
+/** Characters forbidden in a glob pattern: control chars, Windows-illegal chars and glob negation — `\`, `!`, `"`, `|`, `<`, `>` are NOT glob metacharacters we support. */
+const GLOB_FORBIDDEN_CHARS = /[\x00-\x1f<>:"|!\\]/;
+
+/** Max length of one include pattern. */
+export const BACKUP_INCLUDE_MAX_LENGTH = 512;
+
+/** Max number of include patterns per recipe. */
+export const BACKUP_INCLUDE_MAX_PATTERNS = 100;
+
+/**
+ * Validates one backup include pattern — returns a user-readable error
+ * message (French, panel/editor display), or null when valid.
+ */
+export function validateBackupIncludePattern(pattern: string): string | null {
+  if (pattern.length === 0) return 'Motif de sauvegarde vide';
+  if (pattern.length > BACKUP_INCLUDE_MAX_LENGTH) {
+    return `Motif de sauvegarde trop long (max ${BACKUP_INCLUDE_MAX_LENGTH} caractères)`;
+  }
+  if (pattern.startsWith('/')) return 'Chemin absolu interdit';
+  for (const segment of pattern.split('/')) {
+    if (segment.length === 0) return 'Segment vide dans le motif';
+    if (segment === '.' || segment === '..') return 'Chemin interdit (. ou ..)';
+    if (/^[a-zA-Z]:/.test(segment)) return 'Lettre de lecteur interdite';
+    if (GLOB_FORBIDDEN_CHARS.test(segment)) return 'Caractère interdit dans le motif';
+  }
+  return null;
+}
+
+export const backupIncludePatternSchema = z.string().refine(
+  (v) => validateBackupIncludePattern(v) === null,
+  { message: 'Motif d’inclusion de sauvegarde invalide' },
+);
+
+export const backupConfigSchema = z.object({
+  /**
+   * Glob patterns of the files/directories included in a backup, relative
+   * to the server root (`world`, `plugins/*`, `*.properties`). Absent → the
+   * agent archives the whole install dir except its own `.bin/` tools.
+   */
+  include: z.array(backupIncludePatternSchema).min(1).max(BACKUP_INCLUDE_MAX_PATTERNS),
+});
+
+export type BackupConfig = z.infer<typeof backupConfigSchema>;
+
 // ─── Tool features (interpreted by the agent, prebuilt into .bin/) ──────────
 
 /**
@@ -300,6 +359,8 @@ export const recipeSchema = z.object({
   install: z.array(runnerActionSchema).default([]),
   start: startConfigSchema,
   logs: logsConfigSchema.optional(),
+  /** Backup contents (glob include patterns) — absent = whole install dir. */
+  backup: backupConfigSchema.optional(),
   /** Fixed environment variables injected at spawn. */
   env: z.record(z.string(), z.string()).optional(),
 });

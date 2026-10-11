@@ -11,6 +11,7 @@ import {
   Allocation,
   ServerUser,
   PanelRole,
+  Backup,
 } from '~/db/entities';
 
 /**
@@ -34,6 +35,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
         Allocation,
         ServerUser,
         PanelRole,
+        Backup,
       ],
     });
     await orm.schema.create();
@@ -58,6 +60,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(tableNames).toContain('allocation');
     expect(tableNames).toContain('server_user');
     expect(tableNames).toContain('role');
+    expect(tableNames).toContain('backup');
   });
 
   it('creates a User with the default role', async () => {
@@ -138,7 +141,27 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     const found = await em.findOne(Server, { id: 'server-1' });
     expect(found?.status).toBe('stopped');
     expect(found?.memoryMb).toBe(2048); // default
+    expect(found?.backupLimit).toBe(5); // default
     expect(found?.variables).toMatchObject({ ram_mb: 2048 });
+  });
+
+  it('creates a Backup row with the default status and size', async () => {
+    const em = orm.em.fork();
+    const backup = em.create(Backup, {
+      id: '9d8b0f6e-2c4a-4e8f-9a3b-5c7d1e2f3a4b',
+      serverId: 'server-1',
+      name: 'Before the update',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(backup);
+    await em.flush();
+
+    const found = await em.findOne(Backup, { serverId: 'server-1' });
+    expect(found?.status).toBe('pending'); // default
+    expect(found?.sizeBytes).toBe(0); // default
+    expect(found?.checksum).toBeNull();
+    expect(found?.completedAt).toBeNull();
   });
 
   it('creates a free Allocation then assigns it to a server', async () => {

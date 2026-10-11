@@ -12,6 +12,7 @@ import {
   Allocation,
   ServerUser,
   PanelRole,
+  Backup,
 } from './entities';
 
 const databaseUrl =
@@ -49,6 +50,7 @@ export const ormConfig = {
     Allocation,
     ServerUser,
     PanelRole,
+    Backup,
   ],
   extensions: [Migrator],
   debug: process.env.NODE_ENV !== 'production',

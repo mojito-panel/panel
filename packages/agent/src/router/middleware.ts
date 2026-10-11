@@ -15,6 +15,9 @@ export const CONSOLE_WS_PATH = /^\/servers\/[^/]+\/ws$/;
 /** Browser health WS route — authenticated by health JWT, NOT by the panel token. */
 export const HEALTH_WS_PATH = /^\/health\/ws$/;
 
+/** Browser backup download route — panel token OR backup download JWT, NOT always the panel token. */
+export const BACKUP_DOWNLOAD_PATH = /^\/servers\/[^/]+\/backups\/[^/]+\/download$/;
+
 /** SHA-256 hash of the token for constant-time comparison. */
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -38,6 +41,7 @@ export function registerAuthenticationHook(app: FastifyInstance, expectedTokenHa
     if (request.url === '/health') return;
     if (HEALTH_WS_PATH.test(request.url.split('?')[0])) return; // health JWT, not panel token
     if (CONSOLE_WS_PATH.test(request.url.split('?')[0])) return; // console JWT, not panel token
+    if (BACKUP_DOWNLOAD_PATH.test(request.url.split('?')[0])) return; // panel token OR download JWT, checked by the route
     if (!isAuthorized(request, expectedTokenHash)) {
       return reply.code(401).send({ error: 'Unauthorized' });
     }

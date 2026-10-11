@@ -119,5 +119,8 @@
   "logs": {
     "mode": "stdout",
     "stripAnsi": true
+  },
+  "backup": {
+    "include": ["ricochet", "*.cfg", "steam_appcache"]
   }
 }

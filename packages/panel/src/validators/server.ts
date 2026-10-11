@@ -131,3 +131,52 @@ export const removeServerUserSchema = z.object({
 });
 
 export type RemoveServerUserDto = z.infer<typeof removeServerUserSchema>;
+
+// ─── Backups (server archives, Pelican "Backups" tab) ───────────────────────
+
+/** Reads the backup list of a server. */
+export const listBackupsSchema = z.object({
+  serverId: z.string().min(1),
+});
+
+export type ListBackupsDto = z.infer<typeof listBackupsSchema>;
+
+/** Creates a backup — the name is optional (default: dated label). */
+export const createBackupSchema = z.object({
+  serverId: z.string().min(1),
+  name: z.string().trim().max(128).optional(),
+});
+
+export type CreateBackupDto = z.infer<typeof createBackupSchema>;
+
+/** Form schema of the "create a backup" card (TanStack Form + Zod). */
+export const createBackupFormSchema = z.object({
+  name: z.string().max(128, 'Le nom doit faire au plus 128 caractères'),
+});
+
+export type CreateBackupFormDto = z.infer<typeof createBackupFormSchema>;
+
+/** Restores a backup onto the server (truncate = wipe first, destructive). */
+export const restoreBackupSchema = z.object({
+  serverId: z.string().min(1),
+  backupId: z.string().min(1),
+  truncate: z.boolean(),
+});
+
+export type RestoreBackupDto = z.infer<typeof restoreBackupSchema>;
+
+/** Deletes a backup (agent archive + panel row). */
+export const deleteBackupSchema = z.object({
+  serverId: z.string().min(1),
+  backupId: z.string().min(1),
+});
+
+export type DeleteBackupDto = z.infer<typeof deleteBackupSchema>;
+
+/** Requests a signed download link for a completed backup. */
+export const backupDownloadSchema = z.object({
+  serverId: z.string().min(1),
+  backupId: z.string().min(1),
+});
+
+export type BackupDownloadDto = z.infer<typeof backupDownloadSchema>;
