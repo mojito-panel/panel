@@ -140,8 +140,8 @@ function AdminNodesPage() {
                   Copie cette configuration maintenant — le token ne sera plus jamais affiché.
                 </p>
                 <p className="mt-1 text-xs text-amber-700">
-                  Placer ce fichier <code>icecube.yml</code> à côté de{' '}
-                  <code>icecube.exe</code> sur le node, puis démarrer l'agent.
+                  Placer ce fichier <code>shard.yml</code> à côté de{' '}
+                  <code>shard.exe</code> sur le node, puis démarrer l'agent.
                 </p>
                 <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs">
                   {buildAgentConfig(create.data)}
@@ -154,7 +154,7 @@ function AdminNodesPage() {
                   onClick={() => {
                     void navigator.clipboard
                       .writeText(buildAgentConfig(create.data!))
-                      .then(() => toast.success('Configuration icecube.yml copiée'))
+                      .then(() => toast.success('Configuration shard.yml copiée'))
                       .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
                   }}
                 >

@@ -33,7 +33,7 @@ export const Route = createFileRoute('/admin/nodes/$nodeId')({
 /**
  * Node edit page — Pelican panel layout (Filament NodeResource): a record
  * page with tabs. Overview (live agent version + counters) / basic settings
- * (name, fqdn, port) / config file (generated icecube.yml + token reset,
+ * (name, fqdn, port) / config file (generated shard.yml + token reset,
  * since the token is encrypted at rest and only displayable once).
  */
 function AdminNodeEditPage() {
@@ -55,7 +55,7 @@ function AdminNodeEditPage() {
       return result;
     },
     onSuccess: () => {
-      toast.success('Token régénéré — mets à jour l’icecube.yml de l’agent');
+      toast.success('Token régénéré — mets à jour l’shard.yml de l’agent');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -158,12 +158,12 @@ function AdminNodeEditPage() {
         <TabsContent value="config" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>icecube.yml</CardTitle>
+              <CardTitle>shard.yml</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Placer ce fichier à côté de <code>icecube.exe</code> sur le node
-                (ou démarrer avec <code>icecube.exe --config &lt;chemin&gt;</code>).
+                Placer ce fichier à côté de <code>shard.exe</code> sur le node
+                (ou démarrer avec <code>shard.exe --config &lt;chemin&gt;</code>).
                 Le token est chiffré côté panel et affiché une seule fois :{' '}
                 {freshToken
                   ? 'voici la configuration complète avec le token fraîchement régénéré.'
@@ -179,7 +179,7 @@ function AdminNodeEditPage() {
                   onClick={() => {
                     void navigator.clipboard
                       .writeText(configYaml)
-                      .then(() => toast.success('Configuration icecube.yml copiée'))
+                      .then(() => toast.success('Configuration shard.yml copiée'))
                       .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
                   }}
                 >
@@ -193,7 +193,7 @@ function AdminNodeEditPage() {
                   onClick={() => {
                     if (
                       confirm(
-                        'Régénérer le token ? L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son icecube.yml n’est pas mis à jour.',
+                        'Régénérer le token ? L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son shard.yml n’est pas mis à jour.',
                       )
                     ) {
                       reset.mutate();

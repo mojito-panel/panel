@@ -1,10 +1,10 @@
 /**
- * Generated icecube.yml (the wings config.yml equivalent): the panel knows
+ * Generated shard.yml (the wings config.yml equivalent): the panel knows
  * the node's FQDN/port, its token and its own URL — the admin copies the
- * file next to icecube.exe and the node is configured.
+ * file next to shard.exe and the node is configured.
  *
  * IMPORTANT — kept in sync with the agent:
- * internal/config TestPanelGeneratedConfigIsLoadable (mojito-icecube)
+ * internal/config TestPanelGeneratedConfigIsLoadable (mojito-shard)
  * pins this exact shape; change both sides together.
  * Windows paths need SINGLE quotes: in YAML double quotes, backslashes
  * start escapes (\P is invalid).
@@ -19,9 +19,9 @@ export interface AgentConfigNode {
 
 export function buildAgentConfig(node: AgentConfigNode): string {
   return [
-    `# icecube.yml — agent du node « ${node.name} » (${node.fqdn})`,
-    '# Généré par le panel — placer ce fichier à côté de icecube.exe',
-    '# (ou démarrer avec : icecube.exe --config <chemin>).',
+    `# shard.yml — agent du node « ${node.name} » (${node.fqdn})`,
+    '# Généré par le panel — placer ce fichier à côté de shard.exe',
+    '# (ou démarrer avec : shard.exe --config <chemin>).',
     `token: ${node.agentToken}`,
     `panel_url: ${node.panelUrl}`,
     'api:',

@@ -73,7 +73,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
     em.persist(node);
     await em.flush();
 
-    // The token is returned ONCE — the admin copies the generated icecube.yml
+    // The token is returned ONCE — the admin copies the generated shard.yml
     // (below) onto the node and it will never be replayable in clear again.
     return {
       id: node.id,
@@ -81,7 +81,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       fqdn: node.fqdn,
       agentPort: node.agentPort,
       agentToken: token,
-      // Panel URL injected into the generated agent config (icecube.yml).
+      // Panel URL injected into the generated agent config (shard.yml).
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
     };
   });
@@ -173,7 +173,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
 /**
  * Token reset (Pelican "reset token" action equivalent): generates a NEW
  * token, stores it encrypted and returns it ONCE — the admin copies the
- * regenerated icecube.yml and updates the agent's config file.
+ * regenerated shard.yml and updates the agent's config file.
  */
 export const resetNodeTokenFn = createServerFn({ method: 'POST' })
   .validator(nodeIdSchema)
