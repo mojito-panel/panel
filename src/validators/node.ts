@@ -12,6 +12,13 @@ export const nodeIdSchema = z.object({
   nodeId: z.string().min(1),
 });
 
+/** FQDN to resolve — Pelican-style live DNS check on the node create form. */
+export const nodeFqdnSchema = z.object({
+  fqdn: z.string().min(1).max(255),
+});
+
+export type NodeFqdnDto = z.infer<typeof nodeFqdnSchema>;
+
 export const updateNodeSchema = z.object({
   nodeId: z.string().min(1),
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),

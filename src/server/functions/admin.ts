@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import { ZodError } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
@@ -14,6 +15,7 @@ import {
   deleteNodeSchema,
   updateNodeSchema,
   nodeIdSchema,
+  nodeFqdnSchema,
   createAllocationsSchema,
   allocationIdSchema,
   assignAllocationSchema,
@@ -84,6 +86,23 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       // Panel URL injected into the generated agent config (shard.yml).
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
     };
+  });
+
+/**
+ * Pelican-style live FQDN check: resolves the hostname server-side (a browser
+ * cannot do DNS lookups) so the create form can show "valid: <ip>" or
+ * "unreachable". Never throws — an unresolvable name IS the answer.
+ */
+export const resolveNodeFqdnFn = createServerFn({ method: 'GET' })
+  .validator(nodeFqdnSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
+    try {
+      const result = await lookup(data.fqdn);
+      return { ip: result.address };
+    } catch {
+      return { ip: null };
+    }
   });
 
 export const deleteNodeFn = createServerFn({ method: 'POST' })

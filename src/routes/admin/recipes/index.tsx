@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { Pencil, Download, RefreshCw, Plus } from 'lucide-react';
+import { Pencil, Download, RefreshCw, Plus, Upload } from 'lucide-react';
 import {
   listRecipesFn,
   importRecipesFn,
@@ -39,6 +39,9 @@ function AdminRecipesPage() {
       await queryClient.invalidateQueries({ queryKey: ['recipes'] });
     },
   });
+
+  // Pelican-style layout: the import panel only shows behind the header button
+  const [showImport, setShowImport] = useState(false);
 
   /** Batch import: textarea + .json files + URL (each optional). */
   const onImportSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -82,23 +85,31 @@ function AdminRecipesPage() {
   };
 
   return (
-    <div>
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-6">
+      {/* ─── Header ─── */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Recettes</h1>
           <p className="text-muted-foreground">
             Eggs (format v2, compatible Pelican-like) installables sur les serveurs.
           </p>
         </div>
-        <Button asChild>
-          <Link to="/admin/recipes/new">
-            <Plus />
-            Créer une recette
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowImport((v) => !v)}>
+            <Upload />
+            {showImport ? 'Fermer' : 'Importer'}
+          </Button>
+          <Button asChild>
+            <Link to="/admin/recipes/new">
+              <Plus />
+              Créer une recette
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      {/* ─── Import panel (hidden behind the header button) ─── */}
+      {showImport && (
         <Card>
           <CardHeader>
             <CardTitle>Importer des recettes</CardTitle>
@@ -178,83 +189,109 @@ function AdminRecipesPage() {
             )}
           </CardContent>
         </Card>
+      )}
 
-        <div className="space-y-3">
-          {(query.data ?? []).map((recipe) => (
-            <div key={recipe.id} className="rounded-lg border p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold">{recipe.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {recipe.slug} · v{recipe.schemaVersion} ·{' '}
-                    {recipe.variables.length} variable(s)
-                  </p>
-                  {recipe.updateUrl && (
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      MAJ : {recipe.updateUrl}
-                    </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                  {recipe.updateUrl && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Re-importer depuis l'URL de mise à jour"
-                      disabled={importMutation.isPending}
-                      onClick={() => updateFromUrl(recipe.updateUrl as string)}
-                    >
-                      <RefreshCw />
-                      Mettre à jour
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link
-                      to="/admin/recipes/$recipeId"
-                      params={{ recipeId: recipe.id }}
-                    >
-                      <Pencil />
-                      Éditer
-                    </Link>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void exportRecipe(recipe.id, recipe.slug)}
-                  >
-                    <Download />
-                    Exporter
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      if (confirm(`Supprimer la recette « ${recipe.name} » ?`)) {
-                        remove.mutate(recipe.id);
-                      }
-                    }}
-                  >
-                    Supprimer
-                  </Button>
-                </div>
-              </div>
+      {/* ─── Recipe list ─── */}
+      <Card>
+        <CardContent className="space-y-4">
+          {(query.data ?? []).length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-4 font-medium">Recette</th>
+                    <th className="py-2 pr-4 font-medium">Variables</th>
+                    <th className="py-2 pr-4 font-medium">Mise à jour</th>
+                    <th className="py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(query.data ?? []).map((recipe) => (
+                    <tr key={recipe.id}>
+                      <td className="py-2 pr-4">
+                        <Link
+                          to="/admin/recipes/$recipeId"
+                          params={{ recipeId: recipe.id }}
+                          className="font-medium hover:underline"
+                        >
+                          {recipe.name}
+                        </Link>
+                        <p className="text-xs text-muted-foreground">
+                          {recipe.slug} · v{recipe.schemaVersion}
+                        </p>
+                      </td>
+                      <td className="py-2 pr-4">{recipe.variables.length}</td>
+                      <td className="max-w-xs py-2 pr-4">
+                        {recipe.updateUrl ? (
+                          <span
+                            className="block truncate text-xs text-muted-foreground"
+                            title={recipe.updateUrl}
+                          >
+                            {recipe.updateUrl}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="py-2">
+                        <div className="flex justify-end gap-1">
+                          {recipe.updateUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Re-importer depuis l'URL de mise à jour"
+                              disabled={importMutation.isPending}
+                              onClick={() => updateFromUrl(recipe.updateUrl as string)}
+                            >
+                              <RefreshCw />
+                              Mettre à jour
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link
+                              to="/admin/recipes/$recipeId"
+                              params={{ recipeId: recipe.id }}
+                            >
+                              <Pencil />
+                              Éditer
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void exportRecipe(recipe.id, recipe.slug)}
+                          >
+                            <Download />
+                            Exporter
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={remove.isPending}
+                            onClick={() => {
+                              if (confirm(`Supprimer la recette « ${recipe.name} » ?`)) {
+                                remove.mutate(recipe.id);
+                              }
+                            }}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-          {query.data?.length === 0 && (
-            <p className="text-muted-foreground">Aucune recette importée.</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Aucune recette importée.</p>
           )}
+
           {remove.isError && (
             <p className="text-sm text-destructive">{remove.error.message}</p>
           )}
-        </div>
-      </div>
-
-      <p className="mt-8">
-        <Button variant="ghost" asChild>
-          <Link to="/servers">← Mes serveurs</Link>
-        </Button>
-      </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

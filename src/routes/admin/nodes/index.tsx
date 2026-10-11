@@ -1,9 +1,16 @@
+import { useEffect, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useForm } from '@tanstack/react-form';
+import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
-import { listNodesFn, createNodeFn, deleteNodeFn } from '~/server/functions/admin';
+import { ExternalLink, Plus } from 'lucide-react';
+import {
+  listNodesFn,
+  createNodeFn,
+  deleteNodeFn,
+  resolveNodeFqdnFn,
+} from '~/server/functions/admin';
 import { createNodeSchema, type CreateNodeDto } from '~/validators/node';
 import { buildAgentConfig } from '~/lib/agent-config';
 import { Button } from '~/components/ui/button';
@@ -14,6 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 export const Route = createFileRoute('/admin/nodes/')({
   component: AdminNodesPage,
 });
+
+/** Crude IPv4 check — enough to skip the DNS lookup for raw IPs (like Pelican's is_ip). */
+const IP_PATTERN = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 function AdminNodesPage() {
   const queryClient = useQueryClient();
@@ -44,12 +54,44 @@ function AdminNodesPage() {
     onSubmit: ({ value }) => create.mutate(value),
   });
 
-  return (
-    <div>
-      <h1 className="text-3xl font-bold tracking-tight">Nodes</h1>
-      <p className="text-muted-foreground">Machines hébergeant un agent Mojito.</p>
+  // Pelican-style live DNS check: the FQDN is resolved server-side
+  // (browsers cannot do DNS), debounced so keystrokes don't spam lookups.
+  const resolveFqdn = useServerFn(resolveNodeFqdnFn);
+  const fqdnValue = useStore(form.store, (s) => s.values.fqdn);
+  const [debouncedFqdn, setDebouncedFqdn] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedFqdn(fqdnValue.trim()), 700);
+    return () => clearTimeout(timer);
+  }, [fqdnValue]);
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2">
+  const isIp = IP_PATTERN.test(debouncedFqdn);
+  const dnsCheckable = debouncedFqdn.length >= 3 && !isIp;
+  const dnsQuery = useQuery({
+    queryKey: ['node-fqdn-check', debouncedFqdn],
+    queryFn: () => resolveFqdn({ data: { fqdn: debouncedFqdn } }),
+    enabled: dnsCheckable,
+    staleTime: 60_000,
+  });
+
+  // Pelican-style layout: the "add node" form only shows behind the header button
+  const [showCreate, setShowCreate] = useState(false);
+
+  return (
+    <div className="space-y-6">
+      {/* ─── Header ─── */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Nodes</h1>
+          <p className="text-muted-foreground">Machines hébergeant un agent Mojito.</p>
+        </div>
+        <Button onClick={() => setShowCreate((v) => !v)}>
+          <Plus />
+          {showCreate ? 'Fermer' : 'Ajouter un node'}
+        </Button>
+      </div>
+
+      {/* ─── Create a node (hidden behind the header button) ─── */}
+      {showCreate && (
         <Card>
           <CardHeader>
             <CardTitle>Ajouter un node</CardTitle>
@@ -63,37 +105,43 @@ function AdminNodesPage() {
               }}
               className="space-y-4"
             >
-              <form.Field name="name">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="node-name">Nom</Label>
-                    <Input
-                      id="node-name"
-                      placeholder="Windows-01"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
-                        {field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </form.Field>
-
               <form.Field name="fqdn">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor="node-fqdn">FQDN / IP</Label>
+                    <Label htmlFor="node-fqdn">
+                      {isIp ? 'Adresse IP' : 'Nom de domaine (FQDN)'}
+                    </Label>
                     <Input
                       id="node-fqdn"
+                      autoFocus
                       placeholder="node1.example.com ou 192.168.1.10"
                       value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.handleChange(value);
+                        // Pelican-style: prefill the display name from the
+                        // subdomain while the name field is still empty.
+                        const label = value.split('.')[0];
+                        if (label && !/^\d+$/.test(label) && !form.getFieldValue('name')) {
+                          form.setFieldValue('name', label);
+                        }
+                      }}
                       onBlur={field.handleBlur}
                     />
+                    {dnsCheckable && dnsQuery.isPending && (
+                      <p className="text-sm text-muted-foreground">
+                        Vérification DNS…
+                      </p>
+                    )}
+                    {dnsCheckable && !dnsQuery.isPending && (
+                      <p
+                        className={`text-sm ${dnsQuery.data?.ip ? 'text-emerald-600' : 'text-destructive'}`}
+                      >
+                        {dnsQuery.data?.ip
+                          ? `Valide : ${dnsQuery.data.ip}`
+                          : 'Introuvable — vérifie le DNS (ou indique une IP)'}
+                      </p>
+                    )}
                     {field.state.meta.errors.length > 0 && (
                       <p className="text-sm text-destructive">
                         {field.state.meta.errors[0]?.message}
@@ -123,6 +171,26 @@ function AdminNodesPage() {
                 )}
               </form.Field>
 
+              <form.Field name="name">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="node-name">Nom d'affichage</Label>
+                    <Input
+                      id="node-name"
+                      placeholder="Windows-01"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+
               <Button type="submit" className="w-full" disabled={create.isPending}>
                 {create.isPending ? 'Création…' : 'Créer le node'}
               </Button>
@@ -135,81 +203,114 @@ function AdminNodesPage() {
             {/* Agent config shown ONCE after creation — the token inside will
                 never be displayed again */}
             {create.data?.agentToken && (
-              <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4">
-                <p className="font-semibold text-amber-800">
+              <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                <p className="font-semibold text-amber-800 dark:text-amber-300">
                   Copie cette configuration maintenant — le token ne sera plus jamais affiché.
                 </p>
-                <p className="mt-1 text-xs text-amber-700">
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                   Placer ce fichier <code>shard.yml</code> à côté de{' '}
                   <code>shard.exe</code> sur le node, puis démarrer l'agent.
                 </p>
-                <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs">
+                <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs dark:bg-black/40">
                   {buildAgentConfig(create.data)}
                 </pre>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {
-                    void navigator.clipboard
-                      .writeText(buildAgentConfig(create.data!))
-                      .then(() => toast.success('Configuration shard.yml copiée'))
-                      .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
-                  }}
-                >
-                  Copier la configuration
-                </Button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(buildAgentConfig(create.data!))
+                        .then(() => toast.success('Configuration shard.yml copiée'))
+                        .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
+                    }}
+                  >
+                    Copier la configuration
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    <Link to="/admin/nodes/$nodeId" params={{ nodeId: create.data.id }}>
+                      <ExternalLink />
+                      Ouvrir la page du node
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
+      )}
 
-        <div className="space-y-3">
-          {(query.data ?? []).map((node) => (
-            <Link
-              key={node.id}
-              to="/admin/nodes/$nodeId"
-              params={{ nodeId: node.id }}
-              className="block rounded-lg border p-4 transition-colors hover:border-primary"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold">{node.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {node.fqdn}:{node.agentPort} · {node.status}
-                  </p>
-                </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={remove.isPending}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (confirm(`Supprimer le node « ${node.name} » ?`)) {
-                      remove.mutate(node.id);
-                    }
-                  }}
-                >
-                  Supprimer
-                </Button>
-              </div>
-            </Link>
-          ))}
-          {query.data?.length === 0 && (
-            <p className="text-muted-foreground">Aucun node enregistré.</p>
+      {/* ─── Node list ─── */}
+      <Card>
+        <CardContent className="space-y-4">
+          {query.isPending && (
+            <p className="text-sm text-muted-foreground">Chargement…</p>
           )}
+          {query.isError && (
+            <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
+          )}
+
+          {(query.data ?? []).length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-4 font-medium">Node</th>
+                    <th className="py-2 pr-4 font-medium">Adresse</th>
+                    <th className="py-2 pr-4 font-medium">Statut</th>
+                    <th className="py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(query.data ?? []).map((node) => (
+                    <tr key={node.id}>
+                      <td className="py-2 pr-4">
+                        <Link
+                          to="/admin/nodes/$nodeId"
+                          params={{ nodeId: node.id }}
+                          className="font-medium hover:underline"
+                        >
+                          {node.name}
+                        </Link>
+                      </td>
+                      <td className="py-2 pr-4 text-muted-foreground">
+                        {node.fqdn}:{node.agentPort}
+                      </td>
+                      <td className="py-2 pr-4">{node.status}</td>
+                      <td className="py-2">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={remove.isPending}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (confirm(`Supprimer le node « ${node.name} » ?`)) {
+                                remove.mutate(node.id);
+                              }
+                            }}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            !query.isPending && (
+              <p className="text-sm text-muted-foreground">Aucun node enregistré.</p>
+            )
+          )}
+
           {remove.isError && (
             <p className="text-sm text-destructive">{remove.error.message}</p>
           )}
-        </div>
-      </div>
-
-      <p className="mt-8">
-        <Button variant="ghost" asChild>
-          <Link to="/servers">← Mes serveurs</Link>
-        </Button>
-      </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
