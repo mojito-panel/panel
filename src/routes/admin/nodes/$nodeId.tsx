@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
@@ -64,14 +64,7 @@ function AdminNodeEditPage() {
     return <p className="text-muted-foreground">Chargement du node…</p>;
   }
   if (query.isError) {
-    return (
-      <div className="space-y-2">
-        <p className="text-destructive">{query.error.message}</p>
-        <Button variant="ghost" asChild>
-          <Link to="/admin/nodes">← Retour aux nodes</Link>
-        </Button>
-      </div>
-    );
+    return <p className="text-destructive">{query.error.message}</p>;
   }
 
   const node = query.data;
@@ -91,9 +84,6 @@ function AdminNodeEditPage() {
   return (
     <div>
       {/* ─── Record header (Filament EditNode heading) ─────────────────── */}
-      <Button variant="ghost" size="sm" className="mb-2" asChild>
-        <Link to="/admin/nodes">← Nodes</Link>
-      </Button>
       <div className="flex items-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{node.name}</h1>
         <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
