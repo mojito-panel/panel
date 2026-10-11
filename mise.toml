@@ -10,27 +10,23 @@ description = "Installation complète du projet (npm install)"
 run = "npm install"
 
 [tasks."setup:dev"]
-description = "Setup dev : démarre les services Docker (Postgres) et copie les .env.default en .env"
+description = "Setup dev : démarre les services Docker (Postgres) et copie le .env.default en .env"
 run = [
   "docker compose -f docker-compose.dev.yml up -d",
   "node scripts/copy-env.mjs",
 ]
 
 [tasks.migrate]
-description = "Lance les migrations better-auth (tables user/session/account/verification)"
-run = "npm run auth:migrate -w @mojito/panel"
+description = "Génère une migration MikroORM (appliquée au boot par src/server.ts)"
+run = "npm run db:migrate"
 
 [tasks.dev]
 description = "Lance le panel en mode dev"
-run = "npm run dev -w @mojito/panel"
-
-[tasks."dev:agent"]
-description = "Lance l'agent en mode dev"
-run = "npm run dev -w @mojito/agent"
+run = "npm run dev"
 
 [tasks.test]
 depends = ["setup"]
-run = "npm test --workspaces --if-present"
+run = "npm test"
 
 [tasks."docker:down"]
 run = "docker compose -f docker-compose.dev.yml down"

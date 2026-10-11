@@ -11,8 +11,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const envFiles = [
   '.env.default',
-  'packages/panel/.env.default',
-  'packages/agent/.env.default',
 ];
 
 let copied = 0;

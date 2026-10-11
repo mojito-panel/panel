@@ -1,16 +1,16 @@
 # Panel ↔ Agent ↔ Web client communications
 
 > Reference for the communication flows between the three actors of the system.
-> The shared Zod schemas (`@mojito/contract`) are authoritative: this document describes
-> the *workflows*, not the exact types (see `packages/contract/src/api.ts`).
+> The shared Zod schemas (`src/contract`) are authoritative: this document describes
+> the *workflows*, not the exact types (see `src/contract/api.ts`).
 
 ## Actors
 
 | Actor | Role |
 |---|---|
 | **Web client** (browser) | React 19 + TanStack Router/Query. NEVER talks to game servers directly: it calls TanStack Start *server functions* (SSR-aware), or the agent directly for the console (short-lived JWT). |
-| **Panel** (`@mojito/panel`) | TanStack Start (Node SSR). Sole owner of the DB (Postgres/MikroORM) and of sessions (better-auth). Talks to the agent over HTTP `Bearer <node token>` (token encrypted AES-256-GCM at rest). |
-| **Agent** (`@mojito/agent`) | Fastify, 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB. |
+| **Panel** (this repo) | TanStack Start (Node SSR). Sole owner of the DB (Postgres/MikroORM) and of sessions (better-auth). Talks to the agent over HTTP `Bearer <node token>` (token encrypted AES-256-GCM at rest). |
+| **Agent** (external, one per machine) | Fastify, 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB. |
 
 ```mermaid
 graph LR
@@ -335,7 +335,7 @@ stateDiagram-v2
 | | `{ type: "install-log", lines[], reset, replace }` — `reset` = full replay (clear the console), `replace` = `\r` rewrite (progress), levels `step`/`info`/`error` |
 | | `{ type: "error", code }` |
 
-### Server functions exposed to the browser (`packages/panel/src/server/functions/`)
+### Server functions exposed to the browser (`src/server/functions/`)
 
 | Function | Method | Role |
 |---|---|---|

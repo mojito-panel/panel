@@ -1,29 +1,28 @@
 # AGENTS.md — Mojito Panel Project Conventions
 
 Game server hosting panel, native Windows, no Docker.
-npm workspaces monorepo: `contract` (Zod), `panel` (TanStack Start), `agent` (Fastify).
+Single project (TanStack Start). The agent (Fastify daemon, one per machine) is a SEPARATE, external codebase — not part of this repo; the panel talks to it over HTTP/WS.
 
 ## Commands
 
 ```bash
 npm install                    # Dependencies (Node 24 required)
 mise run setup:dev             # Docker Postgres + copy .env.default → .env
-npm run db:migrate -w @mojito/panel   # Generate a MikroORM migration (applied at boot by src/server.ts)
+npm run db:migrate             # Generate a MikroORM migration (applied at boot by src/server.ts)
 npm run dev                    # Panel — http://localhost:5173 (strictPort)
-npm run dev:agent              # Fastify agent
-npm test                       # All tests (workspaces)
+npm test                       # All tests
 npm run build                  # Panel build (vite, client + SSR)
 ```
 
 ## Architecture
 
 - The panel NEVER touches game servers directly — it talks to the agent via API.
-- The panel ↔ agent contract is defined in `@mojito/contract` (shared Zod schemas).
-- The agent is a generic daemon — nothing game-specific in its code.
+- The panel ↔ agent contract is defined in `src/contract` (shared Zod schemas) — it is the authoritative reference for the external agent's API.
+- The agent is a generic daemon — nothing game-specific in it.
 
 ## Language
 
-- **Code comments**: in ENGLISH, in all packages (`src/` and `tests/` alike).
+- **Code comments**: in ENGLISH (`src/` and `tests/` alike).
 - **Tests**: in ENGLISH — descriptions, assertion messages, variable names in fixtures.
 - **Docs**: in ENGLISH.
 - Runtime error messages addressed to the end user (e.g. `PowerActionError('Serveur inconnu')`) stay in French.
@@ -40,12 +39,13 @@ npm run build                  # Panel build (vite, client + SSR)
 | better-auth | `pg` Pool + snake_case mapping (`user.fields` etc.), `tanstackStartCookies` plugin — tables managed by MikroORM |
 | Zod 4 | Standard Schema — TanStack Form's native validator (no adapter) |
 
-## Panel conventions (packages/panel)
+## Panel conventions
 
 ### Structure
 
 ```
 src/
+├── contract/         # Panel ↔ agent contract (shared Zod schemas: recipes, API, WS, JWT)
 ├── routes/            # TanStack Router file-based, as DIRECTORIES (no flat names)
 │   ├── __root.tsx     # createRootRouteWithContext + beforeLoad (SSR session)
 │   ├── index.tsx      # / → redirect (logged in → /servers, otherwise /login)
@@ -91,17 +91,7 @@ src/
 - **DB**: Postgres — MikroORM manages ALL tables (including better-auth). Migrations at boot via `src/server.ts` (`orm.migrator.up()`). NEVER `schema.update()` (MikroORM v7 drops unknown tables by default). The better-auth snake_case mapping is in `src/lib/auth.ts` (`user.fields` etc.).
 - **better-auth**: `baseURL: process.env.BETTER_AUTH_URL` — NO custom `trustedOrigins`. The dev server port is fixed in `vite.config.ts` (`strictPort: true`).
 
-## Agent conventions (packages/agent)
-
-- Fastify + Bearer token (SHA-256 hash, `timingSafeEqual` comparison).
-- `/health` public, everything else behind auth.
-- Zod config from environment variables (`AGENT_TOKEN` required, 32+ characters).
-- NEVER log the token.
-- **Server variables** (≈ wings, but push-based): the panel DB is the source of truth; the agent only keeps a **cache** in `servers.json`, used at start (templating resolution + env). Since the agent cannot pull the config from the panel (no credentials), the panel pushes updates via `POST /servers/:serverId/variables` (merge + re-validation with the contract's `validateVariableValue`, 409 refused during an install). New values apply on the **next start** — a running process keeps its original env.
-- **Agent restart** (≈ wings cmd/root.go): runtime state + PID persisted in `states.json` (dataDir, written on every state transition via `ServerManager`). At boot, `restoreServers` (`onReady` hook): running/starting state + live PID → "adopted" (marked running WITHOUT a live console; the process is never killed just to please the agent); dead PID → start replayed (`handlePowerAction('start')`). An adopted server: `sendCommand` refuses, stop/kill → `taskkill /T /F` on the PID, unexpected death → normal crash detection. NO console history persistence: the ring buffer starts empty at every agent boot (a frozen history would be confusing). Deleting a server also erases its `states.json` entry.
-- **Backups** (≈ wings server/backup, but panel-PUSHED): the agent archives tar.gz under `dataDir/backups/<serverId>/<backupId>.tar.gz` (OUTSIDE the installDir — invisible to the file browser, survives a restore-truncate) and tracks operations in an in-memory registry (`server/backup`) — the panel POLLS `GET /servers/:id/backups/:backupId` (the agent cannot call the panel back). One operation at a time per server (409 `backup_busy`). Includes are the recipe's glob patterns (contract `validateBackupIncludePattern`), expanded by `fast-glob` with `followSymbolicLinks: false` + a `resolveServerPath` backstop per match; `.bin/` is ALWAYS excluded (explicit `.bin` patterns are refused). Restore: pre-pass validating every tar entry (no `..`, no absolute, no drive letter, no `.bin/`) BEFORE extraction, optional `truncate` wipes the install dir except `.bin/`, the server is stopped first and stays stopped. Download: panel Bearer token OR a `backup-download` JWT (browser link, `verifyBackupDownloadToken`). Deleting a server also wipes its `backups/<serverId>/` dir.
-
-## Contract conventions (packages/contract)
+## Contract conventions (src/contract)
 
 - **Recipe format v2** — feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first (no Docker, no mandatory bash script).
 - **Variables**: `env` UPPERCASE (`MINECRAFT_VERSION`) + `{{ENV_VAR}}` templating everywhere. Fields: `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (regex validation, equivalent of Pelican's Laravel `rules`), `options`.
@@ -119,8 +109,8 @@ src/
 
 ## Tests
 
-- Vitest in each package (`tests/` next to `src/`).
-- After any change: `npm test` must pass (currently 332 tests).
+- Vitest (`tests/` next to `src/`).
+- After any change: `npm test` must pass.
 
 ## Deferred to V2 (do NOT do in V1)
 

@@ -1,7 +1,7 @@
 # Mojito Panel
 
 Game server hosting panel, native Windows, no Docker.
-Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **Agent** (pure Node) + **JSON recipes** (eggs).
+Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **external Agent** (deployed per machine) + **JSON recipes** (eggs).
 
 ## Stack
 
@@ -10,8 +10,8 @@ Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **Agent** (
 | Panel front | TanStack Start + shadcn/ui + TanStack Table |
 | Auth | better-auth (email/password, admin/user roles) |
 | DB | Postgres 17 (docker compose) — MikroORM v7 manages all tables (including better-auth) |
-| Panel ↔ agent contract | Shared Zod schemas (`@mojito/contract`) |
-| Agent | Pure Node (Fastify + Bearer token) |
+| Panel ↔ agent contract | Shared Zod schemas (`src/contract`) |
+| Agent | External daemon (Fastify + Bearer token), one per machine — not part of this repo |
 | Tests | Vitest |
 
 ## Prerequisites
@@ -32,7 +32,7 @@ mise install
 # 1. Install dependencies
 npm install
 
-# 2. Dev setup: starts Postgres (Docker) + copies the .env files
+# 2. Dev setup: starts Postgres (Docker) + copies the .env file
 mise run setup:dev
 # or manually:
 #   docker compose -f docker-compose.dev.yml up -d
@@ -48,10 +48,6 @@ mise run setup:dev
 npm run dev
 # or: mise run dev
 
-# Start the agent
-npm run dev:agent
-# or: mise run dev:agent
-
 # Run all tests
 npm test
 
@@ -65,13 +61,22 @@ mise run docker:logs
 mise run docker:down
 ```
 
-## Monorepo structure
+## Project structure
 
 ```
-packages/
-├── contract/     # Shared Zod schemas (recipe JSON + panel ↔ agent API)
-├── panel/        # Web panel (TanStack Start + MikroORM + better-auth)
-└── agent/        # Agent daemon (Fastify, 1 per Windows machine)
+src/
+├── contract/      # Shared Zod schemas (recipe JSON + panel ↔ agent API)
+├── routes/        # TanStack Router file-based routes
+├── components/    # React components (shadcn/ui generated in components/ui)
+├── server/        # TanStack Start server functions, agent client, JWT signing
+├── db/            # MikroORM entities + config + migrations
+├── lib/           # Auth, permissions, utils
+├── validators/    # Zod schemas for forms
+└── ...
+tests/             # Vitest tests (panel + contract)
+recipes/           # Recipe JSONs (eggs)
+scripts/           # Dev utility scripts
+docs/              # Architecture documentation
 ```
 
 ## Documentation
@@ -80,26 +85,15 @@ packages/
 
 ## Configuration
 
-The `.env.default` files are copied to `.env` by `mise run setup:dev` (or `node scripts/copy-env.mjs`).
+The `.env.default` file is copied to `.env` by `mise run setup:dev` (or `node scripts/copy-env.mjs`).
 
-### Panel (`packages/panel/.env`)
+### Panel (`.env`)
 
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `postgres://mojito:mojito@localhost:5432/mojito` | Postgres connection (shared by better-auth + MikroORM) |
-| `PANEL_URL` | `http://localhost:3000` | Public panel URL |
+| `PANEL_URL` | `http://localhost:5173` | Public panel URL |
 | `BETTER_AUTH_SECRET` | — | better-auth secret (32+ characters) — **also** the at-rest encryption key for agent tokens |
-
-### Agent (`packages/agent/.env`)
-
-| Variable | Default | Description |
-|---|---|---|
-| `AGENT_TOKEN` | — | **Required** — Bearer token (32+ characters). **Also** the HS256 key for console JWTs (unique secret per node, like Pelican) |
-| `AGENT_PORT` | `8080` | Listen port |
-| `AGENT_HOST` | `0.0.0.0` | Listen interface |
-| `AGENT_DATA_DIR` | `C:\PanelData` | Server data directory |
-| `PANEL_URL` | — | Panel URL — **allowed origin** for the WS console |
-| `AGENT_ALLOWED_ORIGINS` | — | Additional allowed origins (comma-separated) |
 
 ### Live console & JWT (browser ↔ direct agent)
 
@@ -116,7 +110,7 @@ Browser ◀──auth-ok + log stream─── Agent (permissions re-validated o
 
 - **Unique secret per node** (like Pelican): the console JWT is signed by the panel with the node's agent token; the agent verifies with its own token — no extra shared secret to keep in sync.
 - The agent token is encrypted at rest in the panel DB (AES-256-GCM, key derived from `BETTER_AUTH_SECRET`) — it is both a credential and a signing key.
-- The JWT travels as the **first WS message** (`auth`), never in the URL; the agent checks the Origin header (panel URL or `AGENT_ALLOWED_ORIGINS`).
+- The JWT travels as the **first WS message** (`auth`), never in the URL; the agent checks the Origin header.
 - The token is refreshed **in place** (re-`auth`) before expiry — no reconnection.
 - Fallback: if the WS fails to open, the console falls back to log polling (`GET /logs?after=N`).
 - The agent token is NEVER logged.
@@ -136,22 +130,11 @@ automatically at server startup (`src/server.ts` → `orm.migrator.up()`):
 
 ```bash
 # Generate a migration after an entity schema change
-npm run db:migrate -w @mojito/panel
+npm run db:migrate
 
 # Apply migrations manually (boot already does it)
-npm run db:migrate:up -w @mojito/panel
+npm run db:migrate:up
 ```
-
-## Roadmap
-
-- **Phase 0** — Skeleton ✅: monorepo, panel, agent, contract, tests
-- **Phase 1** — Agent core ✅: step runner, process manager, graceful stop, crash detection, boot restore
-- **Phase 2** — Throttling: Job Objects (RAM/CPU) — *V2*
-- **Phase 3** — Panel & wiring ✅: servers/nodes/recipes CRUD, live installation tracking, live console, Variables page (editing + validation + agent sync)
-- **Phase 4** — SEA & distribution: agent packaging as an `.exe`
-- **Phase 5** — Direct WS console browser ↔ agent + JWT + permissions ✅
-
-> Job Objects and Windows user isolation are deliberately deferred to V2.
 
 ## License
 
