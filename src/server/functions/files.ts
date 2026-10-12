@@ -59,10 +59,43 @@ async function loadNodeWithPermission(
   return node;
 }
 
-/** Agent error → HttpError: agent status codes (404/409/413…) are meaningful. */
+/** Network-level failure codes (Node fetch / undici) — the agent is unreachable. */
+const NETWORK_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+
+/** True when the failure is a network-level error (agent down / unreachable). */
+function isNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.message === 'fetch failed') return true;
+  const code =
+    (err as { code?: unknown }).code ??
+    (err.cause as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' && NETWORK_ERROR_CODES.has(code);
+}
+
+/**
+ * Agent error → HttpError: agent status codes (404/409/413…) are meaningful,
+ * network failures become a 503 with a user-facing message (the raw
+ * "fetch failed" TypeError is useless to the end user).
+ */
 function mapAgentError(err: unknown): HttpError {
   if (err instanceof AgentError) {
     throw new HttpError(err.statusCode, err.message);
+  }
+  if (isNetworkError(err)) {
+    throw new HttpError(
+      503,
+      'Agent injoignable — le nœud ne répond pas (vérifie que l’agent tourne et que son port est ouvert).',
+    );
   }
   throw err;
 }
