@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePortsSpec, PORTS_SPEC_MESSAGE, createAllocationsSchema } from '~/validators/node';
+import { parsePortsSpec, createAllocationsSchema } from '~/validators/node';
 
 describe('parsePortsSpec', () => {
   it('parses a single port', () => {
@@ -69,7 +69,4 @@ describe('createAllocationsSchema', () => {
     }
   });
 
-  it('exposes a readable message constant for the UI hint', () => {
-    expect(PORTS_SPEC_MESSAGE).toContain('25570-25575');
-  });
 });

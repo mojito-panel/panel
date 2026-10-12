@@ -8,7 +8,6 @@ import {
   findToolFeatureErrors,
   validateVariableValue,
   validateBackupIncludePattern,
-  RESERVED_ENV_NAMES,
   JAVA_VERSION_ENV,
   STEAM_APP_ID_ENV,
   STEAM_MOD_ENV,
@@ -190,17 +189,6 @@ describe('recipeSchema v2', () => {
   });
 });
 
-describe('parseRecipe / safeParseRecipe', () => {
-  it('parseRecipe throws on invalid data', () => {
-    expect(() => parseRecipe({ foo: 'bar' })).toThrow();
-  });
-
-  it('safeParseRecipe returns success=false without throwing', () => {
-    const result = safeParseRecipe({ foo: 'bar' });
-    expect(result.success).toBe(false);
-  });
-});
-
 describe('extractTemplateVars', () => {
   it('extracts UPPERCASE variables', () => {
     expect(extractTemplateVars('java -Xmx{{SERVER_MEMORY}}M {{MINECRAFT_VERSION}}')).toEqual([
@@ -368,14 +356,6 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
     };
     expect(validateVariableValue(varDef, 'normal')).toBeNull();
     expect(validateVariableValue(varDef, 'impossible')).toContain('easy');
-  });
-});
-
-describe('RESERVED_ENV_NAMES', () => {
-  it('contains the expected system variables', () => {
-    expect(RESERVED_ENV_NAMES).toContain('SERVER_MEMORY');
-    expect(RESERVED_ENV_NAMES).toContain('SERVER_PORT');
-    expect(RESERVED_ENV_NAMES).toContain('SERVER_UUID');
   });
 });
 

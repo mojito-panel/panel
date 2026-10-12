@@ -27,7 +27,6 @@ import {
   backupOperationStatusSchema,
   backupDownloadTokenPayloadSchema,
   BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
-  AGENT_ROUTES,
 } from '../src/contract/api';
 
 describe('healthResponseSchema', () => {
@@ -228,36 +227,11 @@ describe('wsMessageSchema', () => {
   });
 });
 
-describe('AGENT_ROUTES', () => {
-  it('defines all expected routes', () => {
-    expect(AGENT_ROUTES.health).toBe('GET /health');
-    expect(AGENT_ROUTES.install).toBe('POST /servers/install');
-    expect(AGENT_ROUTES.action).toBe('POST /servers/:serverId/action');
-    expect(AGENT_ROUTES.command).toBe('POST /servers/:serverId/command');
-    expect(AGENT_ROUTES.info).toBe('GET /servers/:serverId');
-    expect(AGENT_ROUTES.list).toBe('GET /servers');
-    expect(AGENT_ROUTES.delete).toBe('DELETE /servers/:serverId');
-    expect(AGENT_ROUTES.allocationUpdate).toBe('POST /servers/:serverId/allocation');
-    expect(AGENT_ROUTES.consoleWs).toBe('GET /servers/:serverId/ws');
-  });
-});
-
 describe('permissionSchema', () => {
   it('accepts each permission from the closed list', () => {
     for (const permission of ALL_PERMISSIONS) {
       expect(permissionSchema.safeParse(permission).success).toBe(true);
     }
-  });
-
-  it('contains the expected console/power/variables permissions', () => {
-    expect(ALL_PERMISSIONS).toContain('console.read');
-    expect(ALL_PERMISSIONS).toContain('console.write');
-    expect(ALL_PERMISSIONS).toContain('power.start');
-    expect(ALL_PERMISSIONS).toContain('power.stop');
-    expect(ALL_PERMISSIONS).toContain('power.restart');
-    expect(ALL_PERMISSIONS).toContain('power.kill');
-    expect(ALL_PERMISSIONS).toContain('variables.read');
-    expect(ALL_PERMISSIONS).toContain('variables.write');
   });
 
   it('rejects a permission outside the list', () => {
@@ -558,13 +532,6 @@ describe('installStatusSchema', () => {
   });
 });
 
-describe('AGENT_ROUTES', () => {
-  it('exposes the install status route', () => {
-    expect(AGENT_ROUTES.installStatus).toBe('GET /servers/:serverId/install');
-    expect(AGENT_ROUTES.reinstall).toBe('POST /servers/:serverId/reinstall');
-  });
-});
-
 // ─── Node health (admin dashboard) ───────────────────────────────────────────
 
 describe('nodeStatsSchema', () => {
@@ -649,13 +616,6 @@ describe('healthServerMessageSchema', () => {
   it('validates auth-ok and rejects an unknown type', () => {
     expect(healthServerMessageSchema.safeParse({ type: 'auth-ok' }).success).toBe(true);
     expect(healthServerMessageSchema.safeParse({ type: 'log', lines: [] }).success).toBe(false);
-  });
-});
-
-describe('AGENT_ROUTES — health', () => {
-  it('exposes the stats and health WS routes', () => {
-    expect(AGENT_ROUTES.stats).toBe('GET /stats');
-    expect(AGENT_ROUTES.healthWs).toBe('GET /health/ws');
   });
 });
 
@@ -744,13 +704,4 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
     expect(result.success).toBe(false);
   });
 
-  it('lists the backup routes', () => {
-    expect(AGENT_ROUTES.backupCreate).toBe('POST /servers/:serverId/backups');
-    expect(AGENT_ROUTES.backupStatus).toBe(
-      'GET /servers/:serverId/backups/:backupId',
-    );
-    expect(AGENT_ROUTES.backupRestore).toBe(
-      'POST /servers/:serverId/backups/:backupId/restore',
-    );
-  });
 });

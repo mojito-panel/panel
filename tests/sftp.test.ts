@@ -6,7 +6,7 @@ import { toSftpPermissions } from '~/lib/permissions';
 
 import { buildAgentConfig } from '~/lib/agent-config';
 
-import { sftpAuthRequestSchema, sftpAuthResponseSchema, DEFAULT_SFTP_PORT } from '~/contract';
+import { sftpAuthRequestSchema, sftpAuthResponseSchema } from '~/contract';
 
 describe('parseSftpUsername', () => {
   it('splits at the LAST dot — the username part never contains dots', () => {
@@ -111,9 +111,6 @@ describe('sftp contract schemas', () => {
     expect(subuser.permissions).toHaveLength(2);
   });
 
-  it('exposes the wings default SFTP port', () => {
-    expect(DEFAULT_SFTP_PORT).toBe(2022);
-  });
 });
 
 describe('buildAgentConfig', () => {

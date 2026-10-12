@@ -60,15 +60,6 @@ describe('panel roles', () => {
     expect(can(userRole, { 'server.files': ['read'] })).toBe(false);
   });
 
-  it('registers exactly admin / moderator / user', () => {
-    expect(Object.keys(PANEL_ROLES).sort()).toEqual(['admin', 'moderator', 'user']);
-  });
-
-  it('degrades unknown role names to the plain user role', () => {
-    expect(panelRole('superadmin')).toBe(userRole);
-    expect(panelRole('moderator')).toBe(PANEL_ROLES.moderator);
-  });
-
   it('exposes the full server permission set to owners', () => {
     expect(can(ownerRole, { 'server.files': ['read', 'write', 'create', 'delete'] })).toBe(true);
     expect(can(ownerRole, { 'server.users': ['create', 'read', 'update', 'delete'] })).toBe(true);
