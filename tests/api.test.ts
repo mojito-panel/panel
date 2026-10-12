@@ -422,6 +422,22 @@ describe('consoleServerMessageSchema', () => {
     ).toBe(true);
   });
 
+  it('validates an install-log with coded lines (code + params)', () => {
+    const coded = {
+      timestamp: new Date().toISOString(),
+      level: 'step',
+      message: '',
+      code: 'install.action.download',
+      params: { step: '1', total: '2', dest: 'server.jar' },
+    };
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'install-log',
+        lines: [coded],
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects an install-log with an unknown level', () => {
     expect(
       consoleServerMessageSchema.safeParse({
@@ -429,6 +445,39 @@ describe('consoleServerMessageSchema', () => {
         lines: [{ timestamp: new Date().toISOString(), level: 'verbose', message: 'x' }],
       }).success,
     ).toBe(false);
+  });
+
+  it('validates a coded install-status (current step message)', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'install-status',
+        status: 'installing',
+        step: 2,
+        totalSteps: 7,
+        percent: 28,
+        message: '',
+        code: 'install.action.download',
+        params: { dest: 'server.jar' },
+        error: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates a runtime event (power action / server online)', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({ type: 'event', code: 'power.start' }).success,
+    ).toBe(true);
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'event',
+        code: 'server.online',
+        params: {},
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an event without a code', () => {
+    expect(consoleServerMessageSchema.safeParse({ type: 'event' }).success).toBe(false);
   });
 
   it('rejects an unknown error code', () => {
@@ -471,6 +520,17 @@ describe('installStatusSchema', () => {
 
   it('validates an in-progress install status', () => {
     expect(installStatusSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('validates a coded current-step message (code + params)', () => {
+    expect(
+      installStatusSchema.safeParse({
+        ...valid,
+        message: '',
+        code: 'install.action.download',
+        params: { dest: 'server.jar' },
+      }).success,
+    ).toBe(true);
   });
 
   it('validates a failed status with error', () => {

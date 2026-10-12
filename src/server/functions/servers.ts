@@ -248,10 +248,10 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
         percent: status === 'installed' ? 100 : 0,
         message:
           status === 'installing'
-            ? 'Agent injoignable — statut inconnu'
+            ? 'Agent unreachable — status unknown'
             : status === 'failed'
-              ? 'Installation échouée (logs indisponibles)'
-              : 'Installé',
+              ? 'Installation failed (logs unavailable)'
+              : 'Installed',
         error: null,
         logs: [],
         startedAt: null,

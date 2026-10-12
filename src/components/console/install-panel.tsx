@@ -1,22 +1,21 @@
 import { useEffect, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
-import { RefreshCw } from 'lucide-react';
-import type { ConsoleInstallStatus, InstallStatus } from '~/contract';
-import { retryInstallFn } from '~/server/functions/servers';
-import { Button } from '~/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '~/components/ui/card';
 
-interface InstallBannerProps {
-  /** Live install status pushed by the agent over the console WS (null = pending). */
-  status: ConsoleInstallStatus | null;
+import { Loader2, RefreshCw } from 'lucide-react';
+
+import type { InstallLogLine } from '~/contract';
+
+import { Button } from '~/components/ui/button';
+
+import { renderInstallLine } from './messages';
+
+/** Minimal shape shared by the WS status (ConsoleInstallStatus) and the polled one (InstallStatus). */
+export interface InstallNoticeStatus {
+  status: 'installing' | 'installed' | 'failed';
+}
+
+interface InstallNoticeProps {
+  /** Live install status (null = pending, the WS has not pushed yet). */
+  status: InstallNoticeStatus | null;
   /** Retry callback — undefined hides the button (no server.settings.update). */
   onRetry?: () => void;
   retryPending: boolean;
@@ -24,61 +23,36 @@ interface InstallBannerProps {
 }
 
 /**
- * Slim install banner (WS mode) — sits above the console while the install
- * streams into the terminal itself. Same info as InstallPanel, minus the
- * duplicated log area.
+ * Slim install notice — replaces the old progress banner: the steps stream
+ * below (console in WS mode, log box in polling mode), so a one-line message
+ * is enough, plus the retry action when the install fails (the error itself
+ * is already in the console).
  */
-export function InstallBanner({ status, onRetry, retryPending, retryError }: InstallBannerProps) {
-  const failed = status?.status === 'failed';
-  const percent = status?.percent ?? 0;
-
-  return (
-    <Card className={failed ? 'mb-6 border-destructive/50' : 'mb-6'}>
-      <CardHeader>
-        <CardTitle>
-          {failed
-            ? 'Installation échouée'
-            : status
-              ? `Installation en cours… (étape ${Math.max(status.step, 1)}/${status.totalSteps || '…'})`
-              : 'Installation en cours…'}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">{status?.message ?? '…'}</p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className={`h-full rounded-full transition-all ${failed ? 'bg-destructive' : 'bg-green-500'}`}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <p className="text-right text-xs text-muted-foreground">{percent}%</p>
-        </div>
-        {failed && status?.error && (
-          <pre className="whitespace-pre-wrap rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {status.error}
-          </pre>
+export function InstallNotice({ status, onRetry, retryPending, retryError }: InstallNoticeProps) {
+  if (status?.status === 'failed') {
+    return (
+      <div className="flex flex-wrap items-center gap-3 text-sm text-destructive">
+        <span>Échec de l'installation</span>
+        {onRetry && (
+          <Button size="sm" variant="outline" onClick={onRetry} disabled={retryPending}>
+            <RefreshCw className={retryPending ? 'animate-spin' : undefined} />
+            {retryPending ? 'Nouvelle tentative…' : 'Réessayer'}
+          </Button>
         )}
-      </CardContent>
-      {failed && (
-        <CardFooter>
-          {onRetry && (
-            <Button onClick={onRetry} disabled={retryPending}>
-              <RefreshCw className={retryPending ? 'animate-spin' : undefined} />
-              {retryPending ? 'Relance…' : 'Réessayer l’installation'}
-            </Button>
-          )}
-          {retryError && <span className="ml-2 text-sm text-destructive">{retryError}</span>}
-        </CardFooter>
-      )}
-    </Card>
+        {retryError && <span>{retryError}</span>}
+      </div>
+    );
+  }
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="size-4 animate-spin" />
+      Installation en cours — suivez la progression ci-dessous.
+    </p>
   );
 }
 
-interface InstallPanelProps {
-  serverId: string;
-  /** Install status polled by the parent (console page). */
-  status: InstallStatus;
+interface InstallLogsProps {
+  logs: InstallLogLine[];
 }
 
 /** HH:MM:SS of an ISO timestamp (log lines). */
@@ -86,99 +60,55 @@ function shortTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR');
 }
 
-/** Log line color: step = yellow, error = red, command output = gray. */
-function lineClass(level: string): string | undefined {
-  if (level === 'step') return 'text-yellow-400';
-  if (level === 'error') return 'text-red-400';
+/** Log line color: one color for every step, gray for the logs that follow. */
+function lineClass(line: InstallLogLine): string {
+  if (line.level === 'error') return 'text-red-400';
+  if (line.level === 'step') return 'text-yellow-400';
+  if (line.code === 'install.done') return 'text-green-400';
   return 'text-neutral-400';
 }
 
 /**
- * Live install panel — shows each step as it runs (yellow), with the output
- * of every operation/command streamed line by line (gray, stderr/errors in
- * red), and a retry button when the install failed. Replaces the console
- * until the install completes.
+ * Install step logs — polling fallback only: the console polls the server's
+ * runtime logs, which stay empty during an install, so the steps render here.
+ * A blank line separates each step.
  */
-export function InstallPanel({ serverId, status }: InstallPanelProps) {
-  const queryClient = useQueryClient();
-  const retryInstall = useServerFn(retryInstallFn);
+export function InstallLogs({ logs }: InstallLogsProps) {
   const logRef = useRef<HTMLDivElement>(null);
-
-  const retry = useMutation({
-    mutationFn: () => retryInstall({ data: { serverId, after: 0 } }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['install-status', serverId] });
-      await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-    },
-  });
 
   // Keep the log scrolled to the newest line
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [status.logs.length, status.status]);
+  }, [logs.length]);
 
-  const failed = status.status === 'failed';
-  const done = status.status === 'installed';
+  // A blank line at the end of each step (before the next step starts).
+  const rows: { line: InstallLogLine; gapBefore: boolean }[] = [];
+  let stepsSeen = 0;
+  for (const line of logs) {
+    const gapBefore = line.level === 'step' && stepsSeen > 0;
+    if (line.level === 'step') stepsSeen++;
+    rows.push({ line, gapBefore });
+  }
 
   return (
-    <Card className={failed ? 'border-destructive/50' : undefined}>
-      <CardHeader>
-        <CardTitle>
-          {failed
-            ? 'Installation échouée'
-            : done
-              ? 'Installation terminée'
-              : `Installation en cours… (étape ${Math.max(status.step, 1)}/${status.totalSteps || '…'})`}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {status.totalSteps > 0 && (
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">{status.message}</p>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full transition-all ${failed ? 'bg-destructive' : 'bg-green-500'}`}
-                style={{ width: `${status.percent}%` }}
-              />
-            </div>
-            <p className="text-right text-xs text-muted-foreground">{status.percent}%</p>
+    <div
+      ref={logRef}
+      className="max-h-80 overflow-y-auto rounded-md bg-black p-3 font-mono text-xs leading-relaxed text-neutral-200"
+    >
+      {rows.length === 0 ? (
+        <p className="text-neutral-500">Waiting for the first log…</p>
+      ) : (
+        rows.map(({ line, gapBefore }, i) => (
+          <div key={i}>
+            {gapBefore && <div className="h-3" aria-hidden="true" />}
+            <p className={lineClass(line)}>
+              <span className="text-neutral-500">[{shortTime(line.timestamp)}] </span>
+              {renderInstallLine(line)}
+            </p>
           </div>
-        )}
-
-        {failed && status.error && (
-          <pre className="whitespace-pre-wrap rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {status.error}
-          </pre>
-        )}
-
-        <div
-          ref={logRef}
-          className="max-h-80 overflow-y-auto rounded-md bg-black p-3 font-mono text-xs leading-relaxed text-neutral-200"
-        >
-          {status.logs.length === 0 ? (
-            <p className="text-neutral-500">En attente du premier log…</p>
-          ) : (
-            status.logs.map((line, i) => (
-              <p key={i} className={lineClass(line.level)}>
-                <span className="text-neutral-500">[{shortTime(line.timestamp)}] </span>
-                {line.message}
-              </p>
-            ))
-          )}
-        </div>
-      </CardContent>
-      {failed && (
-        <CardFooter>
-          <Button onClick={() => retry.mutate()} disabled={retry.isPending}>
-            <RefreshCw className={retry.isPending ? 'animate-spin' : undefined} />
-            {retry.isPending ? 'Relance…' : 'Réessayer l’installation'}
-          </Button>
-          {retry.isError && (
-            <span className="ml-2 text-sm text-destructive">{retry.error.message}</span>
-          )}
-        </CardFooter>
+        ))
       )}
-    </Card>
+    </div>
   );
 }

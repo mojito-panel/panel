@@ -18,14 +18,33 @@ import {
   sendCommandFn,
 } from '~/server/functions/servers';
 import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
-import { InstallBanner, InstallPanel } from '~/components/console/install-panel';
+import { InstallLogs, InstallNotice } from '~/components/console/install-panel';
 import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
   component: ServerConsolePage,
 });
+
+/** Caption of the console card (transport mode + install/runtime state). */
+function consoleCaption(mode: ConsoleMode, installActive: boolean, isRunning: boolean): string {
+  if (!installActive && !isRunning) return 'Console — le serveur est arrêté';
+  if (installActive) {
+    return mode === 'polling'
+      ? 'Installation — rafraîchie toutes les 2 s (WS indisponible)'
+      : 'Installation en cours — console en direct';
+  }
+  switch (mode) {
+    case 'ws':
+      return 'Console live (WebSocket direct agent)';
+    case 'polling':
+      return 'Console live (WS indisponible — rafraîchie toutes les 2 s)';
+    default:
+      return 'Connexion à la console…';
+  }
+}
 
 function ServerConsolePage() {
   const { serverId } = Route.useParams();
@@ -147,24 +166,33 @@ function ServerConsolePage() {
     setCommand('');
   };
 
-  // Degraded (polling) transport + install in progress → dedicated panel
+  // Degraded (polling) transport + install in progress → the console polls the
+  // server's runtime logs (empty during an install), so the step logs render
+  // here under the notice.
   if (consoleMode === 'polling' && installQuery.data && installQuery.data.status !== 'installed') {
     return (
-      <div>
-        <InstallPanel serverId={serverId} status={installQuery.data} />
+      <div className="space-y-4">
+        <InstallNotice
+          status={installQuery.data}
+          onRetry={canRetryInstall ? () => retry.mutate() : undefined}
+          retryPending={retry.isPending}
+          retryError={retry.isError ? retry.error.message : null}
+        />
+        <InstallLogs logs={installQuery.data.logs} />
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       {query.isError && (
-        <p className="mb-4 text-sm text-destructive">Erreur : {query.error.message}</p>
+        <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
       )}
 
-      {/* Live install (steps + logs stream into the console below) */}
+      {/* Live install — the steps stream into the console below, a one-line
+          notice replaces the old progress banner */}
       {installActive && (
-        <InstallBanner
+        <InstallNotice
           status={installStatus}
           onRetry={canRetryInstall ? () => retry.mutate() : undefined}
           retryPending={retry.isPending}
@@ -219,40 +247,46 @@ function ServerConsolePage() {
         </div>
       )}
       {action.isError && (
-        <p className="mt-2 text-sm text-destructive">{action.error.message}</p>
+        <p className="text-sm text-destructive">{action.error.message}</p>
       )}
 
-      {/* Console — runtime logs AND install output (same WS, same terminal) */}
-      <div className="mt-6">
-        <XtermConsole
-          serverId={serverId}
-          isRunning={isRunning}
-          installActive={installActive}
-          onConnection={handleConsoleConnection}
-          onStatus={(message) => handleConsoleStatus(message.status)}
-          onMode={setConsoleMode}
-          onInstallStatus={handleInstallStatus}
-        />
+      {/* Console card — runtime logs AND install output (same WS, same terminal) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Console</CardTitle>
+          <CardDescription>{consoleCaption(consoleMode, installActive, isRunning)}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <XtermConsole
+            serverId={serverId}
+            onConnection={handleConsoleConnection}
+            onStatus={(message) => handleConsoleStatus(message.status)}
+            onMode={setConsoleMode}
+            onInstallStatus={handleInstallStatus}
+          />
+        </CardContent>
 
         {/* Send commands (process stdin) — hidden during an install */}
         {!installActive && canCommand && (
-          <form onSubmit={handleCommand} className="mt-3 flex gap-2">
-            <Input
-              placeholder={isRunning ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              disabled={!isRunning || submitCommand.isPending}
-            />
-            <Button type="submit" disabled={!isRunning || submitCommand.isPending || !command.trim()}>
-              <Send />
-              Envoyer
-            </Button>
-          </form>
+          <CardFooter>
+            <form onSubmit={handleCommand} className="flex w-full gap-2">
+              <Input
+                placeholder={isRunning ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                disabled={!isRunning || submitCommand.isPending}
+              />
+              <Button type="submit" disabled={!isRunning || submitCommand.isPending || !command.trim()}>
+                <Send />
+                Envoyer
+              </Button>
+            </form>
+          </CardFooter>
         )}
-        {submitCommand.isError && (
-          <p className="mt-2 text-sm text-destructive">{submitCommand.error.message}</p>
-        )}
-      </div>
+      </Card>
+      {submitCommand.isError && (
+        <p className="text-sm text-destructive">{submitCommand.error.message}</p>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useServerFn } from '@tanstack/react-start';
+import '@xterm/xterm/css/xterm.css';
 import {
   CONSOLE_TOKEN_TTL_SECONDS,
   type ConsoleClientMessage,
@@ -9,13 +10,12 @@ import {
 } from '~/contract';
 import { getServerLogsFn, createConsoleTokenFn } from '~/server/functions/servers';
 
+import { consoleMessageEmoji, renderConsoleMessage, renderInstallLine } from './messages';
+
 export type ConsoleMode = 'connecting' | 'ws' | 'polling';
 
 interface XtermConsoleProps {
   serverId: string;
-  isRunning: boolean;
-  /** Install in progress/failed → the caption reflects it. */
-  installActive?: boolean;
   /**
    * Called when the direct agent WS authenticates/disconnects.
    * Non-null = live WS sender usable for console commands/power (bypasses the
@@ -49,8 +49,6 @@ const TOKEN_REFRESH_MARGIN_SECONDS = 60;
  */
 export function XtermConsole({
   serverId,
-  isRunning,
-  installActive = false,
   onConnection,
   onStatus,
   onMode,
@@ -60,7 +58,6 @@ export function XtermConsole({
   const cursorRef = useRef(0);
   const getLogs = useServerFn(getServerLogsFn);
   const createToken = useServerFn(createConsoleTokenFn);
-  const [mode, setMode] = useState<ConsoleMode>('connecting');
 
   // Callbacks via refs: the WS connection must not be torn down on re-renders
   const onConnectionRef = useRef(onConnection);
@@ -74,8 +71,8 @@ export function XtermConsole({
     onInstallStatusRef.current = onInstallStatus;
   });
 
+  // The transport mode is owned by the page (via onMode) — no local state.
   const switchMode = (next: ConsoleMode) => {
-    setMode(next);
     onModeRef.current?.(next);
   };
 
@@ -124,14 +121,27 @@ export function XtermConsole({
     };
 
     // ─── Install stream rendering (same terminal, ANSI colors) ─────────
-    // step = yellow, error = red, command output = default (gray),
-    // timestamp dim; progress rewrites (\r) erase the previous line.
+    // Coded lines are rendered by the catalog (emoji included); raw lines
+    // (command output) pass through. One color for every step (yellow), the
+    // logs that follow in gray, errors in red, success in green. A blank
+    // line separates each step; progress rewrites (\r) erase the previous line.
     let installRewriteActive = false;
+    let installStepsSeen = 0;
+    const lineColor = (line: InstallLogLine): string => {
+      if (line.level === 'error') return '\x1b[31m';
+      if (line.level === 'step') return '\x1b[33m';
+      if (line.code === 'install.done') return '\x1b[32m';
+      return '\x1b[90m';
+    };
     const writeInstallLine = (line: InstallLogLine, replace: boolean) => {
       if (!term) return;
       const time = new Date(line.timestamp).toLocaleTimeString('fr-FR');
-      const color = line.level === 'step' ? '\x1b[33m' : line.level === 'error' ? '\x1b[31m' : '';
-      const text = `\x1b[90m[${time}]\x1b[0m ${color}${line.message}\x1b[0m`;
+      // Blank line at the end of each step (before the next step starts).
+      if (line.level === 'step' && !replace) {
+        if (installStepsSeen > 0) term.writeln('');
+        installStepsSeen++;
+      }
+      const text = `\x1b[90m[${time}]\x1b[0m ${lineColor(line)}${renderInstallLine(line)}\x1b[0m`;
       if (replace && installRewriteActive) {
         term.write(`\x1b[1A\x1b[2K\r${text}\r\n`);
       } else {
@@ -215,9 +225,22 @@ export function XtermConsole({
             // Full trail replay (fresh connection or restarted install)
             term?.reset();
             installRewriteActive = false;
+            installStepsSeen = 0;
           }
           for (const line of message.lines) {
             writeInstallLine(line, message.replace && !message.reset && message.lines.length === 1);
+          }
+          return;
+        }
+        if (message.type === 'event') {
+          // Coded runtime event (power action, server online…) — rendered by
+          // the catalog with its emoji; power actions in cyan, the rest green.
+          const text = renderConsoleMessage(message.code, message.params);
+          if (text && term) {
+            const time = new Date().toLocaleTimeString('fr-FR');
+            const color = message.code.startsWith('power.') ? '\x1b[36m' : '\x1b[32m';
+            const emoji = consoleMessageEmoji(message.code);
+            term.writeln(`\x1b[90m[${time}]\x1b[0m ${color}${emoji} ${text}\x1b[0m`);
           }
           return;
         }
@@ -271,18 +294,11 @@ export function XtermConsole({
     };
 
     const boot = async () => {
-      const [{ Terminal }, { FitAddon: FitAddonClass }] = await Promise.all([
+      const [{ Terminal }, { FitAddon: FitAddonClass }, { Unicode11Addon }] = await Promise.all([
         import('@xterm/xterm'),
         import('@xterm/addon-fit'),
+        import('@xterm/addon-unicode11'),
       ]);
-      // Terminal CSS (once)
-      if (!document.getElementById('xterm-css')) {
-        const link = document.createElement('link');
-        link.id = 'xterm-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.min.css';
-        document.head.appendChild(link);
-      }
 
       if (disposed || !containerRef.current) return;
 
@@ -291,10 +307,18 @@ export function XtermConsole({
         fontSize: 13,
         scrollback: 5000,
         disableStdin: true,
+        // The Unicode 11 addon registers its width tables through the proposed
+        // `terminal.unicode` API — the getter throws without this flag.
+        allowProposedApi: true,
         theme: { background: '#0d1117' },
       });
       const fit = new FitAddonClass();
       term.loadAddon(fit);
+      // Unicode 11 width tables: the default Unicode 6 tables measure modern
+      // emoji (🚀 🚦 📦 🚧 🛠️) as 1 cell while the font renders them 2 cells wide,
+      // so the space after an emoji is eaten and the following text overlaps it.
+      term.loadAddon(new Unicode11Addon());
+      term.unicode.activeVersion = '11';
       term.open(containerRef.current);
       fit.fit();
 
@@ -328,26 +352,12 @@ export function XtermConsole({
     };
   }, [serverId, getLogs, createToken]);
 
-  const caption =
-    installActive
-      ? mode === 'polling'
-        ? 'Installation — rafraîchie toutes les 2 s (WS indisponible)'
-        : 'Installation en cours — console en direct'
-      : mode === 'ws'
-        ? 'Console live (WebSocket direct agent)'
-        : mode === 'polling'
-          ? 'Console live (WS indisponible — rafraîchie toutes les 2 s)'
-          : 'Connexion à la console…';
-
+  // The caption lives in the page (card header) — this component renders
+  // only the terminal container.
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        {installActive || isRunning ? caption : 'Console — le serveur est arrêté'}
-      </p>
-      <div
-        ref={containerRef}
-        className="h-[400px] overflow-hidden border bg-[#0d1117] p-2"
-      />
-    </div>
+    <div
+      ref={containerRef}
+      className="h-[400px] overflow-hidden rounded-md bg-[#0d1117] p-2"
+    />
   );
 }

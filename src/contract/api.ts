@@ -156,11 +156,26 @@ export type InstallProgress = z.infer<typeof installProgressSchema>;
  * message, command/script output and errors. The agent keeps it in memory
  * for the last install of each server.
  */
+/**
+ * Parameters of a structured console message (`code` + `params`): the agent
+ * sends the code, the panel renders the text itself (i18n-ready — the agent
+ * never formats user-facing text). Raw lines (command output) carry only
+ * `message`.
+ */
+export const consoleMessageParamsSchema = z.record(z.string(), z.string());
+
+export type ConsoleMessageParams = z.infer<typeof consoleMessageParamsSchema>;
+
 export const installLogLineSchema = z.object({
   timestamp: z.string().datetime(),
-  /** step = step start/end (yellow in the panel), info = command output (gray), error = stderr/failure. */
+  /** step = step start (one color in the panel), info = command output (gray), error = stderr/failure. */
   level: z.enum(['info', 'step', 'error']),
+  /** Raw text (command output) — empty when `code` carries a structured message. */
   message: z.string(),
+  /** Message code — rendered by the panel's catalog (e.g. 'install.action.download'). */
+  code: z.string().optional(),
+  /** Parameters of `code`. Step lines also carry `step`/`total`. */
+  params: consoleMessageParamsSchema.optional(),
 });
 
 export type InstallLogLine = z.infer<typeof installLogLineSchema>;
@@ -171,7 +186,12 @@ export const installStatusSchema = z.object({
   step: z.number().int().min(0),
   totalSteps: z.number().int().min(0),
   percent: z.number().min(0).max(100),
+  /** Raw fallback text — empty when `code` carries the current step's message. */
   message: z.string(),
+  /** Code of the current step's message (rendered by the panel's catalog). */
+  code: z.string().optional(),
+  /** Parameters of `code`. */
+  params: consoleMessageParamsSchema.optional(),
   error: z.string().nullable(),
   logs: z.array(installLogLineSchema),
   startedAt: z.string().datetime().nullable(),
@@ -306,7 +326,20 @@ export const consoleServerMessageSchema = z.discriminatedUnion('type', [
     totalSteps: z.number().int().min(0),
     percent: z.number().min(0).max(100),
     message: z.string(),
+    /** Code of the current step's message (rendered by the panel's catalog). */
+    code: z.string().optional(),
+    /** Parameters of `code`. */
+    params: consoleMessageParamsSchema.optional(),
     error: z.string().nullable(),
+  }),
+  z.object({
+    /**
+     * Runtime console event (power action, server online…) — a coded message
+     * the panel renders via its catalog (e.g. 'power.start', 'server.online').
+     */
+    type: z.literal('event'),
+    code: z.string().min(1),
+    params: consoleMessageParamsSchema.optional(),
   }),
   z.object({
     /** Install log lines (leveled: step=yellow, info=gray, error=red). */
