@@ -16,7 +16,7 @@ import { loadServerForViewer } from './session';
  * shard's SFTP password callback POSTs the user-supplied credentials here,
  * authenticated with the node's agent token (the same shared per-node
  * secret the panel uses in the other direction). The username is
- * `{email}.{serverId}` and the password is the user's PANEL account
+ * `{username}.{serverId}` and the password is the user's PANEL account
  * password (Pelican reuses the account password for SFTP).
  *
  * Every failure answers the SAME 403 — the panel deliberately does not
@@ -95,7 +95,7 @@ export async function authenticateSftp(request: Request): Promise<Response> {
 
   const orm = await initOrm();
   const em = orm.em.fork();
-  const user = await em.findOne(User, { email: connection.email.toLowerCase() });
+  const user = await em.findOne(User, { username: connection.username.toLowerCase() });
   if (!user || user.banned) {
     return reject();
   }

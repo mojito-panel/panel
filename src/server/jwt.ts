@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import {
   ALL_PERMISSIONS,
   BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
@@ -9,6 +9,7 @@ import {
   healthTokenPayloadSchema,
   type Permission,
 } from '~/contract';
+import { nanoid } from '~/lib/nanoid';
 
 /**
  * Console/health JWT signing (panel side) — HS256 with node:crypto only.
@@ -50,7 +51,7 @@ export function signConsoleToken(
     scope: 'websocket',
     iat,
     exp: iat + CONSOLE_TOKEN_TTL_SECONDS,
-    jti: randomUUID(),
+    jti: nanoid(),
   });
   return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };
 }
@@ -68,7 +69,7 @@ export function signHealthToken(
     scope: 'health',
     iat,
     exp: iat + HEALTH_TOKEN_TTL_SECONDS,
-    jti: randomUUID(),
+    jti: nanoid(),
   });
   return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };
 }
@@ -88,7 +89,7 @@ export function signBackupDownloadToken(
     scope: 'backup-download',
     iat,
     exp: iat + BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
-    jti: randomUUID(),
+    jti: nanoid(),
   });
   return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };
 }

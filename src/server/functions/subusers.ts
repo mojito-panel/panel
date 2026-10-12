@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
-import { randomUUID } from 'node:crypto';
 import { initOrm } from '~/db';
 import { Server, ServerUser, User } from '~/db/entities';
+import { nanoid } from '~/lib/nanoid';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
 import {
   flattenPermissions,
@@ -102,7 +102,7 @@ export const addServerUserFn = createServerFn({ method: 'POST' })
     const now = new Date();
     em.persist(
       em.create(ServerUser, {
-        id: randomUUID(),
+        id: nanoid(),
         serverId: server.id,
         userId: target.id,
         permissions: statements,

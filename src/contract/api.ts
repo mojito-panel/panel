@@ -15,6 +15,18 @@ export const healthResponseSchema = z.object({
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+// ─── Ids ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Panel-generated id — any non-empty string. The panel uses nanoid()
+ * (rows created before the nanoid migration hold a UUID); the format is
+ * NOT part of the contract, so ids stay opaque on both sides.
+ */
+
+export const idSchema = z.string().min(1);
+
+export type Id = z.infer<typeof idSchema>;
+
 // ─── Server lifecycle (panel → agent) ─────────────────────────────────────────
 
 /** Server allocation — source of system variables (SERVER_PORT, SERVER_MEMORY...). */
@@ -27,7 +39,7 @@ export const serverAllocationSchema = z.object({
 export type ServerAllocationPayload = z.infer<typeof serverAllocationSchema>;
 
 export const installServerRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   name: z.string().min(1),
   recipe: z.unknown(), // Recipe validated on the panel side, passed as-is
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
@@ -44,7 +56,7 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
  * the agent keeps its stored installDir and allocation.
  */
 export const reinstallServerRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   recipe: z.unknown(), // Recipe validated by the agent, passed as-is
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
@@ -59,7 +71,7 @@ export type ReinstallServerRequest = z.infer<typeof reinstallServerRequestSchema
  * process keeps its original environment).
  */
 export const updateServerVariablesRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 
@@ -74,7 +86,7 @@ export type UpdateServerVariablesRequest = z.infer<
  * on the NEXT start — a running process keeps its original environment.
  */
 export const updateServerAllocationRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   allocation: z.object({
     port: z.number().int().positive(),
     ip: z.string().min(1),
@@ -90,14 +102,14 @@ export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
 export type ServerAction = z.infer<typeof serverActionSchema>;
 
 export const serverActionRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   action: serverActionSchema,
 });
 
 export type ServerActionRequest = z.infer<typeof serverActionRequestSchema>;
 
 export const sendCommandRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   command: z.string().min(1),
 });
 
@@ -115,7 +127,7 @@ export const serverStatusSchema = z.enum([
 export type ServerStatus = z.infer<typeof serverStatusSchema>;
 
 export const serverInfoSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   status: serverStatusSchema,
   pid: z.number().int().positive().nullable(),
   ramMb: z.number().nonnegative().nullable(),
@@ -128,7 +140,7 @@ export type ServerInfo = z.infer<typeof serverInfoSchema>;
 // ─── Install progress (agent → panel, via WS) ───────────────────────
 
 export const installProgressSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   step: z.number().int().min(0),
   totalSteps: z.number().int().min(0),
   message: z.string(),
@@ -154,7 +166,7 @@ export const installLogLineSchema = z.object({
 export type InstallLogLine = z.infer<typeof installLogLineSchema>;
 
 export const installStatusSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   status: z.enum(['installing', 'installed', 'failed']),
   step: z.number().int().min(0),
   totalSteps: z.number().int().min(0),
@@ -171,7 +183,7 @@ export type InstallStatus = z.infer<typeof installStatusSchema>;
 // ─── Live logs (agent → panel, via WS) ────────────────────────────────────────
 
 export const logLineSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   timestamp: z.string().datetime(),
   stream: z.enum(['stdout', 'stderr']),
   line: z.string(),
@@ -229,7 +241,7 @@ export const consoleTokenPayloadSchema = z.object({
   iss: z.literal('mojito-panel'),
   aud: z.literal('mojito-agent'),
   sub: z.string().min(1), // user id
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   permissions: z.array(permissionSchema),
   scope: z.literal('websocket'),
   iat: z.number().int().nonnegative(),
@@ -490,9 +502,9 @@ export type BackupOperation = z.infer<typeof backupOperationSchema>;
 
 /** Creates a backup — the agent archives async (202), the panel polls. */
 export const createBackupRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   /** Panel-generated backup id — the archive file name on the agent. */
-  backupId: z.string().uuid(),
+  backupId: idSchema,
   /** Overrides the recipe's include patterns for THIS backup (optional). */
   include: z.array(z.string().min(1)).optional(),
 });
@@ -501,7 +513,7 @@ export type CreateBackupRequest = z.infer<typeof createBackupRequestSchema>;
 
 /** Restores a backup onto the (stopped) server. */
 export const restoreBackupRequestSchema = z.object({
-  serverId: z.string().uuid(),
+  serverId: idSchema,
   /**
    * Wipe the install dir (except the agent's `.bin/`) before extracting —
    * destructive: files absent from the archive are LOST. Default: merge.
@@ -513,8 +525,8 @@ export type RestoreBackupRequest = z.infer<typeof restoreBackupRequestSchema>;
 
 /** Live status of a backup operation (create or restore), polled by the panel. */
 export const backupOperationStatusSchema = z.object({
-  serverId: z.string().uuid(),
-  backupId: z.string().uuid(),
+  serverId: idSchema,
+  backupId: idSchema,
   operation: backupOperationSchema,
   status: z.enum(['running', 'completed', 'failed']),
   /** Archive size (0 until a create completes). */
@@ -546,8 +558,8 @@ export const backupDownloadTokenPayloadSchema = z.object({
   iss: z.literal('mojito-panel'),
   aud: z.literal('mojito-agent'),
   sub: z.string().min(1), // user id
-  serverId: z.string().uuid(),
-  backupId: z.string().uuid(),
+  serverId: idSchema,
+  backupId: idSchema,
   scope: z.literal('backup-download'),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
@@ -563,8 +575,8 @@ export type BackupDownloadTokenPayload = z.infer<typeof backupDownloadTokenPaylo
  * credential validation to the panel — its password callback POSTs here,
  * authenticated with the node's agent token (the same shared per-node
  * secret the panel uses in the other direction). The username format is
- * `{email}.{serverId}` (split at the LAST dot — an email may contain
- * dots), and the password is the user's PANEL account password (like
+ * `{username}.{serverId}` (split at the LAST dot — a username never
+ * contains dots), and the password is the user's PANEL account password (like
  * Pelican, which verifies it against the user's account hash).
  */
 
@@ -600,7 +612,7 @@ export const sftpAuthResponseSchema = z.object({
   /** Panel user id (better-auth). */
   user: z.string().min(1),
   /** Server the username was scoped to — MUST belong to the calling node. */
-  server: z.string().uuid(),
+  server: idSchema,
   /** `"*"` = full access (owner/admin), else the file.* permission list. */
   permissions: z.array(z.union([sftpPermissionSchema, z.literal('*')])),
 });

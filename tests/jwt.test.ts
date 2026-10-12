@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { randomUUID } from 'node:crypto';
 import {
   ALL_PERMISSIONS,
   CONSOLE_TOKEN_TTL_SECONDS,
   consoleTokenPayloadSchema,
 } from '~/contract';
+import { nanoid } from '~/lib/nanoid';
 import { signConsoleToken } from '../src/server/jwt';
 
 const SECRET = 'panel-secret-0123456789abcdef0123456789abcdef';
 const USER_ID = 'user_42';
-const SERVER_ID = randomUUID();
+const SERVER_ID = nanoid();
 
 function decodePayload(token: string): Record<string, unknown> {
   const body = token.split('.')[1];

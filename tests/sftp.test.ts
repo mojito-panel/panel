@@ -1,35 +1,52 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseSftpUsername, buildSftpUsername } from '~/lib/sftp';
+
 import { toSftpPermissions } from '~/lib/permissions';
+
 import { buildAgentConfig } from '~/lib/agent-config';
+
 import { sftpAuthRequestSchema, sftpAuthResponseSchema, DEFAULT_SFTP_PORT } from '~/contract';
 
 describe('parseSftpUsername', () => {
-  it('splits at the LAST dot — emails may contain dots', () => {
-    const parsed = parseSftpUsername(
-      'jean.dupont@mail.example.com.123e4567-e89b-12d3-a456-426614174000',
-    );
+  it('splits at the LAST dot — the username part never contains dots', () => {
+    const parsed = parseSftpUsername('jdoe.123e4567-e89b-12d3-a456-426614174000');
     expect(parsed).toEqual({
-      email: 'jean.dupont@mail.example.com',
+      username: 'jdoe',
       serverId: '123e4567-e89b-12d3-a456-426614174000',
     });
   });
 
+  it('accepts a nanoid serverId (panel-generated since the nanoid migration)', () => {
+    const parsed = parseSftpUsername('jdoe.V1StGXR8_Z5jdHi6B-myT');
+    expect(parsed).toEqual({
+      username: 'jdoe',
+      serverId: 'V1StGXR8_Z5jdHi6B-myT',
+    });
+  });
+
+  it('accepts any non-empty serverId (the DB lookup is the real validation)', () => {
+    const parsed = parseSftpUsername('jdoe.some-random-id');
+    expect(parsed).toEqual({ username: 'jdoe', serverId: 'some-random-id' });
+  });
+
   it('round-trips with buildSftpUsername', () => {
-    const username = buildSftpUsername('a.b@c.fr', '123e4567-e89b-12d3-a456-426614174000');
+    const username = buildSftpUsername('jdoe', 'V1StGXR8_Z5jdHi6B-myT');
     expect(parseSftpUsername(username)).toEqual({
-      email: 'a.b@c.fr',
-      serverId: '123e4567-e89b-12d3-a456-426614174000',
+      username: 'jdoe',
+      serverId: 'V1StGXR8_Z5jdHi6B-myT',
     });
   });
 
   it('rejects malformed usernames', () => {
     const invalid = [
       '',                                   // empty
-      'user@example.com',                   // no server id
-      'user@example.com.not-a-uuid',        // bad server id
-      '.123e4567-e89b-12d3-a456-426614174000', // empty email
-      'user@example.com.',                  // empty server id
+      'jdoe',                               // no server id
+      'jdoe@x.123e4567-e89b-12d3-a456-426614174000', // @ in the username
+      '.123e4567-e89b-12d3-a456-426614174000', // empty username
+      'jdoe.',                              // empty server id
+      'jean.dupont.123e4567-e89b-12d3-a456-426614174000', // dots in the username
+      'ab.123e4567-e89b-12d3-a456-426614174000', // username too short
     ];
     for (const username of invalid) {
       expect(parseSftpUsername(username)).toBeNull();
@@ -72,7 +89,7 @@ describe('toSftpPermissions', () => {
 describe('sftp contract schemas', () => {
   it('sftpAuthRequestSchema accepts the agent payload', () => {
     const parsed = sftpAuthRequestSchema.parse({
-      username: 'user@example.com.123e4567-e89b-12d3-a456-426614174000',
+      username: 'jdoe.V1StGXR8_Z5jdHi6B-myT',
       password: 'secret',
       ip: '127.0.0.1:54321',
     });

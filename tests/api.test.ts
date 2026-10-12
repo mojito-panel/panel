@@ -77,9 +77,9 @@ describe('installServerRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects a non-UUID serverId', () => {
+  it('rejects an empty serverId', () => {
     const result = installServerRequestSchema.safeParse({
-      serverId: 'not-a-uuid',
+      serverId: '',
       recipe: {},
       variables: {},
       installDir: '/tmp',
@@ -133,9 +133,9 @@ describe('updateServerAllocationRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects a non-UUID serverId', () => {
+  it('rejects an empty serverId', () => {
     const result = updateServerAllocationRequestSchema.safeParse({
-      serverId: 'not-a-uuid',
+      serverId: '',
       allocation: { port: 25565, ip: '192.168.1.10' },
     });
     expect(result.success).toBe(false);
@@ -303,9 +303,9 @@ describe('consoleTokenPayloadSchema', () => {
     ).toBe(false);
   });
 
-  it('rejects a non-uuid serverId', () => {
+  it('rejects an empty serverId', () => {
     expect(
-      consoleTokenPayloadSchema.safeParse({ ...validPayload, serverId: 'abc' }).success,
+      consoleTokenPayloadSchema.safeParse({ ...validPayload, serverId: '' }).success,
     ).toBe(false);
   });
 
@@ -620,9 +620,9 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
     expect(result.truncate).toBe(false);
   });
 
-  it('rejects non-UUID ids on a create backup request', () => {
+  it('rejects empty ids on a create backup request', () => {
     expect(
-      createBackupRequestSchema.safeParse({ serverId, backupId: 'not-a-uuid' }).success,
+      createBackupRequestSchema.safeParse({ serverId, backupId: '' }).success,
     ).toBe(false);
   });
 

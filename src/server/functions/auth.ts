@@ -24,6 +24,7 @@ export const getSession = createServerFn({ method: 'GET' }).handler(
       user: {
         id: session.user.id,
         name: session.user.name ?? null,
+        username: session.user.username ?? null,
         email: session.user.email,
         role,
         permissions: await resolvePanelPermissions(role),

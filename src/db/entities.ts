@@ -7,6 +7,7 @@ export const User = defineEntity({
   properties: {
     id: p.text().primary(),
     name: p.string().length(128),
+    username: p.string().length(32).unique().nullable(),
     email: p.text().unique(),
     emailVerified: p.boolean().fieldName('email_verified').default(false),
     image: p.text().nullable(),

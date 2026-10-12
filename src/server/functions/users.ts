@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { hashPassword } from 'better-auth/crypto';
 import { initOrm } from '~/db';
@@ -9,7 +8,9 @@ import {
   requirePanelPermission,
   HttpError,
 } from '../session';
+import { nanoid } from '~/lib/nanoid';
 import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, type PanelRoleName } from '~/lib/permissions';
+import { usernameSchema } from '~/validators/auth';
 
 /**
  * Admin panel user management — DIRECT MikroORM access (panel DB is the
@@ -111,6 +112,7 @@ export const createUserFn = createServerFn({ method: 'POST' })
   .validator(
     z.object({
       name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
+      username: usernameSchema,
       email: z.string().email('Email invalide'),
       password: z.string().min(8, 'Le mot de passe doit faire au moins 8 caractères'),
       /** Built-in role name or custom role id. */
@@ -129,13 +131,17 @@ export const createUserFn = createServerFn({ method: 'POST' })
     const email = data.email.toLowerCase();
     const existing = await em.findOne(User, { email });
     if (existing) throw new HttpError(409, 'Un compte utilise déjà cet e-mail');
+    const username = data.username.toLowerCase();
+    const existingUsername = await em.findOne(User, { username });
+    if (existingUsername) throw new HttpError(409, 'Ce nom d’utilisateur est déjà utilisé');
 
     // Same password format as better-auth (scrypt) — the account can sign in
     const password = await hashPassword(data.password);
     const now = new Date();
     const user = em.create(User, {
-      id: randomUUID(),
+      id: nanoid(),
       name: data.name,
+      username,
       email,
       emailVerified: true,
       role: data.role,
@@ -148,7 +154,7 @@ export const createUserFn = createServerFn({ method: 'POST' })
     em.persist(user);
     em.persist(
       em.create(Account, {
-        id: randomUUID(),
+        id: nanoid(),
         accountId: email,
         providerId: 'credential',
         userId: user.id,

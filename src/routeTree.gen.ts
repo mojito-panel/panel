@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
+import { Route as AuthSetupRouteImport } from './routes/_auth/setup'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminApiRouteImport } from './routes/admin/api'
 import { Route as AdminHealthRouteImport } from './routes/admin/health'
@@ -64,6 +65,11 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
 const AuthRegisterRoute = AuthRegisterRouteImport.update({
   id: '/_auth/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSetupRoute = AuthSetupRouteImport.update({
+  id: '/_auth/setup',
+  path: '/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId': typeof ServersServerIdRouteRouteWithChildren
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
+  '/setup': typeof AuthSetupRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/roles': typeof AdminRolesRoute
@@ -242,6 +249,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
+  '/setup': typeof AuthSetupRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/roles': typeof AdminRolesRoute
@@ -277,6 +285,7 @@ export interface FileRoutesById {
   '/servers/$serverId': typeof ServersServerIdRouteRouteWithChildren
   '/_auth/login': typeof AuthLoginRoute
   '/_auth/register': typeof AuthRegisterRoute
+  '/_auth/setup': typeof AuthSetupRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/roles': typeof AdminRolesRoute
@@ -312,6 +321,7 @@ export interface FileRouteTypes {
     | '/servers/$serverId'
     | '/login'
     | '/register'
+    | '/setup'
     | '/admin/api'
     | '/admin/health'
     | '/admin/roles'
@@ -343,6 +353,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/setup'
     | '/admin/api'
     | '/admin/health'
     | '/admin/roles'
@@ -377,6 +388,7 @@ export interface FileRouteTypes {
     | '/servers/$serverId'
     | '/_auth/login'
     | '/_auth/register'
+    | '/_auth/setup'
     | '/admin/api'
     | '/admin/health'
     | '/admin/roles'
@@ -412,6 +424,7 @@ export interface RootRouteChildren {
   ServersServerIdRouteRoute: typeof ServersServerIdRouteRouteWithChildren
   AuthLoginRoute: typeof AuthLoginRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
+  AuthSetupRoute: typeof AuthSetupRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiSftpAuthRoute: typeof ApiSftpAuthRoute
 }
@@ -451,6 +464,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof AuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/setup': {
+      id: '/_auth/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof AuthSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -727,6 +747,7 @@ const rootRouteChildren: RootRouteChildren = {
   ServersServerIdRouteRoute: ServersServerIdRouteRouteWithChildren,
   AuthLoginRoute: AuthLoginRoute,
   AuthRegisterRoute: AuthRegisterRoute,
+  AuthSetupRoute: AuthSetupRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiSftpAuthRoute: ApiSftpAuthRoute,
 }

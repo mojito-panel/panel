@@ -41,6 +41,7 @@ export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';
 export interface SessionUser {
   id: string;
   name: string | null;
+  username: string | null;
   email: string;
   role: string;
   /** Effective flat panel permissions of the role (built-in or custom). */

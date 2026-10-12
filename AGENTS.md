@@ -49,7 +49,7 @@ src/
 ├── routes/            # TanStack Router file-based, as DIRECTORIES (no flat names)
 │   ├── __root.tsx     # createRootRouteWithContext + beforeLoad (SSR session)
 │   ├── index.tsx      # / → redirect (logged in → /servers, otherwise /login)
-│   ├── _auth/         # pathless layout → /login, /register (NO sidebar)
+│   ├── _auth/         # pathless layout → /login, /register, /setup (NO sidebar)
 │   ├── _app.tsx       # protected layout: SidebarProvider + AppSidebar + guard
 │   ├── _app/servers/  # /servers (list), /servers/new (creation)
 │   ├── servers/$serverId/  # PELICAN layout: dedicated sidebar + pages
@@ -86,6 +86,9 @@ src/
 - **Types**: inferred from entities via `InferEntity` in `db/types.ts` (`I` prefix: `IUser`, `ISession`). NO hand-duplicated types.
 - **Entities**: all in `db/entities.ts` with `defineEntity` + `p`. snake_case DB columns via `.fieldName()`, camelCase in TS.
 - **Session**: fetched in SSR in `beforeLoad` of `__root.tsx` via `queryClient.fetchQuery({ queryKey: ['auth'] })`. After login/register/signOut: `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
+- **First-run setup**: while the `user` table is empty, `__root.tsx` redirects every page to `/setup` (queryKey `['setup']` → `getSetupStatusFn`); `createFirstAdminFn` (`server/functions/setup.ts`) creates the first account with the built-in `admin` role and refuses (403) once any account exists; `/setup` redirects to `/` afterwards.
+- **Usernames**: every user has a unique `username` (stored lowercased, `[a-zA-Z0-9_-]{3,32}` — no dots) — asked at setup, register and admin user creation. SFTP login is `{username}.{serverId}` (see `lib/sftp.ts`); the panel password is reused for SFTP.
+- **IDs**: panel-generated ids are `nanoid()` from `~/lib/nanoid` (default 21 chars) — NEVER `randomUUID`. The contract accepts nanoid or legacy UUID (`idSchema` in `src/contract/api.ts`); shard mirrors it with `contract.IsID`.
 - **shadcn components**: `ref` as a prop (React 19), no `React.forwardRef`.
 - **Routes**: as directories. One page = one directory with `index.tsx`. Grouping via pathless layouts (`_auth/`).
 - **DB**: Postgres — MikroORM manages ALL tables (including better-auth). Migrations at boot via `src/server.ts` (`orm.migrator.up()`). NEVER `schema.update()` (MikroORM v7 drops unknown tables by default). The better-auth snake_case mapping is in `src/lib/auth.ts` (`user.fields` etc.).

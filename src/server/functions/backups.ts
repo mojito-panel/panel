@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
-import { randomUUID } from 'node:crypto';
 import type { EntityManager } from '@mikro-orm/core';
 import { Backup, Node, Recipe } from '~/db/entities';
+import { nanoid } from '~/lib/nanoid';
 import type { IBackup, INode } from '~/db/types';
 import type { BackupOperationStatus } from '~/contract';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
@@ -155,7 +155,7 @@ export const createBackupFn = createServerFn({ method: 'POST' })
     if (!recipe) throw new HttpError(500, 'Recette introuvable');
     const recipeJson = recipe.json as { backup?: { include?: string[] } };
 
-    const backupId = randomUUID();
+    const backupId = nanoid();
     const backup = em.create(Backup, {
       id: backupId,
       serverId: server.id,

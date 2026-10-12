@@ -24,7 +24,7 @@ function SftpInfoRow({ label, value }: { label: string; value: React.ReactNode }
 /**
  * SFTP connection details (Pelican "SFTP Configuration" equivalent) behind
  * an "SFTP" toolbar button — host `fqdn:sftpPort`, username
- * `{email}.{serverId}`, password = the panel account password. Shown to
+ * `{username}.{serverId}`, password = the panel account password. Shown to
  * users holding any server.files.* grant — the same grants that gate the
  * SFTP permissions server-side.
  */
@@ -57,7 +57,7 @@ export function SftpConnectionDialog({
         <div className="divide-y">
           <SftpInfoRow label="Hôte" value={`${fqdn}:${sftpPort}`} />
           <SftpInfoRow label="Port" value={sftpPort} />
-          <SftpInfoRow label="Identifiant" value={buildSftpUsername(user?.email ?? '…', serverId)} />
+          <SftpInfoRow label="Identifiant" value={buildSftpUsername(user?.username ?? '…', serverId)} />
           <SftpInfoRow label="Mot de passe" value="Ton mot de passe panel" />
         </div>
       </DialogContent>

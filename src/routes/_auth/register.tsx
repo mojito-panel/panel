@@ -30,7 +30,7 @@ function RegisterPage() {
 
   const form = useForm({
     validators: { onChange: registerSchema },
-    defaultValues: { name: '', email: '', password: '' },
+    defaultValues: { name: '', username: '', email: '', password: '' },
     onSubmit: ({ value }) => mutation.mutate(value),
   });
 
@@ -62,6 +62,28 @@ function RegisterPage() {
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                     autoComplete="name"
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="username">
+              {(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="username">Nom d’utilisateur</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="ton-pseudo"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    autoComplete="username"
                   />
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">

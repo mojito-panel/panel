@@ -1,8 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
-import { randomUUID } from 'node:crypto';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, Allocation, ServerUser } from '~/db/entities';
+import { nanoid } from '~/lib/nanoid';
 import type { IServer } from '~/db/types';
 import type { Recipe as RecipeContract } from '~/contract';
 import {
@@ -143,7 +143,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
       throw new HttpError(422, 'Cette allocation n’appartient pas au node sélectionné');
     }
 
-    const serverId = randomUUID();
+    const serverId = nanoid();
     const now = new Date();
 
     // 1. Persist FIRST with status 'installing' — the user is redirected to

@@ -1,10 +1,11 @@
 import { createServerFn } from '@tanstack/react-start';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { ZodError } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
+import { nanoid } from '~/lib/nanoid';
 import { parseRecipe, DEFAULT_SFTP_PORT, type Recipe as RecipeDefinition } from '~/contract';
 import { requireUser, requirePanelPermission, HttpError } from '../session';
 import { encryptSecret, decryptSecret } from '../crypto';
@@ -61,7 +62,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
     const token = randomBytes(32).toString('hex');
     const now = new Date();
     const node = em.create(Node, {
-      id: randomUUID(),
+      id: nanoid(),
       name: data.name,
       fqdn: data.fqdn,
       agentPort: data.agentPort,
@@ -299,7 +300,7 @@ export const createNodeAllocationsFn = createServerFn({ method: 'POST' })
       if (takenPorts.has(port)) continue;
       em.persist(
         em.create(Allocation, {
-          id: randomUUID(),
+          id: nanoid(),
           nodeId: data.nodeId,
           serverId: null,
           ip: data.ip,
@@ -523,7 +524,7 @@ async function upsertRecipe(
   }
 
   const recipe = em.create(Recipe, {
-    id: randomUUID(),
+    id: nanoid(),
     slug: recipeJson.id,
     name: recipeJson.name,
     schemaVersion: recipeJson.schemaVersion,
@@ -639,7 +640,7 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
 
     const now = new Date();
     const recipe = em.create(Recipe, {
-      id: randomUUID(),
+      id: nanoid(),
       slug: recipeJson.id,
       name: recipeJson.name,
       schemaVersion: recipeJson.schemaVersion,

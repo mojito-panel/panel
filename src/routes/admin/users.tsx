@@ -327,6 +327,7 @@ function CreateUserCard({
     validators: { onChange: createUserFormSchema },
     defaultValues: {
       name: '',
+      username: '',
       email: '',
       password: '',
       role: 'user',
@@ -366,6 +367,23 @@ function CreateUserCard({
               <div className="space-y-2">
                 <Input
                   placeholder="Nom"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
+          <form.Field name="username">
+            {(field) => (
+              <div className="space-y-2">
+                <Input
+                  placeholder="Nom d’utilisateur (SFTP)"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
