@@ -84,7 +84,6 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    tanstackStartCookies(),
     admin({
       // Custom Pelican-style statements/roles (~/lib/permissions) — the
       // plugin checks its endpoints against these roles, so a moderator
@@ -110,6 +109,7 @@ export const auth = betterAuth({
         },
       },
     }),
+    tanstackStartCookies(),
   ],
   hooks: {
     // Pelican "registration_enabled" equivalent: the /register toggle is
