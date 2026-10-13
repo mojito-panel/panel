@@ -410,6 +410,9 @@ describe('consoleServerMessageSchema', () => {
 
   it('validates a status and an error', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'running' }).success).toBe(true);
+    // Every runtime status flows over the WS — starting/stopping included.
+    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'starting' }).success).toBe(true);
+    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'stopping' }).success).toBe(true);
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(true);
   });
 

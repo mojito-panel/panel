@@ -76,7 +76,7 @@ export interface AgentInstallResponse {
 export interface AgentServerInfo {
   serverId: string;
   name: string;
-  status: 'installing' | 'stopped' | 'running' | 'crashed';
+  status: 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
   runtimeState?: string;
   logs?: string[];
 }
@@ -85,7 +85,7 @@ export interface AgentLogsChunk {
   serverId: string;
   lines: string[];
   next: number;
-  status: 'installing' | 'stopped' | 'running' | 'crashed';
+  status: 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
   runtimeState?: string;
 }
 

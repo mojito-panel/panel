@@ -122,7 +122,9 @@ export type SendCommandRequest = z.infer<typeof sendCommandRequestSchema>;
 export const serverStatusSchema = z.enum([
   'installing',
   'stopped',
+  'starting',
   'running',
+  'stopping',
   'crashed',
 ]);
 

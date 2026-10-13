@@ -7,8 +7,10 @@
 
 /** Ball color per status (LED tint) — defaults to neutral gray. */
 const BALL_COLORS: Record<string, string> = {
+  starting: 'bg-amber-400',
   running: 'bg-lime-400',
   online: 'bg-lime-400',
+  stopping: 'bg-amber-400',
   installing: 'bg-blue-500',
   crashed: 'bg-red-500',
   install_failed: 'bg-red-500',
@@ -17,8 +19,10 @@ const BALL_COLORS: Record<string, string> = {
 
 /** Pill tint per status — semi-transparent bg, text/border matching the ball. */
 const PILL_COLORS: Record<string, string> = {
+  starting: 'border border-amber-400/50 bg-amber-400/15 text-amber-400',
   running: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   online: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
+  stopping: 'border border-amber-400/50 bg-amber-400/15 text-amber-400',
   installing: 'border border-blue-500/50 bg-blue-500/15 text-blue-500',
   crashed: 'border border-red-500/50 bg-red-500/15 text-red-500',
   install_failed: 'border border-red-500/50 bg-red-500/15 text-red-500',
@@ -27,8 +31,10 @@ const PILL_COLORS: Record<string, string> = {
 
 /** French label per status — defaults to the raw status. */
 const LABELS: Record<string, string> = {
+  starting: 'Démarrage…',
   running: 'En marche',
   online: 'En ligne',
+  stopping: 'Arrêt en cours…',
   installing: 'Installation…',
   crashed: 'Planté',
   install_failed: 'Échec installation',

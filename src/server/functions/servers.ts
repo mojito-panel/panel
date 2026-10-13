@@ -43,7 +43,9 @@ type ServerStatusDb =
   | 'installing'
   | 'install_failed'
   | 'stopped'
+  | 'starting'
   | 'running'
+  | 'stopping'
   | 'crashed';
 
 // ─── Allocation helpers ───────────────────────────────────────────────────────
