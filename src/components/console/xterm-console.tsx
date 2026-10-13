@@ -322,8 +322,8 @@ export function XtermConsole({
       term.open(containerRef.current);
       fit.fit();
 
-      // The container has a fixed height (h-[400px]): the fit can no longer
-      // grow its own observed parent, so no ResizeObserver → fit → resize loop.
+      // The container's height is viewport-based (calc(100vh-26rem), floor
+      // 400px): the ResizeObserver below re-fits the grid on every change.
       // rAF debounce to coalesce cascading resizes.
       const scheduleFit = () => {
         if (fitRaf !== null) return;
@@ -357,7 +357,7 @@ export function XtermConsole({
   return (
     <div
       ref={containerRef}
-      className="h-[400px] overflow-hidden rounded-md bg-[#0d1117] p-2"
+      className="h-[calc(100vh-26rem)] min-h-[400px] overflow-hidden rounded-md bg-[#0d1117] p-2"
     />
   );
 }
