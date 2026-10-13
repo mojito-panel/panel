@@ -17,6 +17,7 @@ import { getBrandingFn } from '~/server/functions/settings';
 import { AuthProvider } from '~/contexts/use-auth';
 import type { BrandingSettings } from '~/lib/settings';
 
+import { ThemeProvider } from 'next-themes';
 import { Toaster } from '~/components/ui/sonner';
 import styles from '~/styles.css?url';
 
@@ -90,6 +91,14 @@ function RootComponent() {
  * (admin > Paramètres), rendered server-side so the tab is correct on the
  * very first paint.
  */
+/**
+ * Applies the stored theme BEFORE the first paint — next-themes only syncs
+ * the class after hydration, which would flash the wrong palette. Mirrors
+ * the ThemeProvider: localStorage key "theme", default "system", `.dark`
+ * class on <html>. Fails dark on any error (the panel was dark-first).
+ */
+const THEME_INIT_SCRIPT = `!function(){try{var t=localStorage.getItem("theme")||"system",d="dark"===t||("system"===t&&window.matchMedia("(prefers-color-scheme: dark)").matches),c=document.documentElement.classList;d?c.add("dark"):c.remove("dark")}catch(e){document.documentElement.classList.add("dark")}}()`;
+
 function RootDocument({
   children,
   branding,
@@ -98,16 +107,26 @@ function RootDocument({
   branding: BrandingSettings;
 }) {
   return (
-    <html lang="fr" className='dark'>
+    <html lang="fr" suppressHydrationWarning>
       <head>
+        {/* pre-paint theme class — must run before the stylesheet paints */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
         <title>{branding.appName}</title>
         {branding.favicon !== '' && <link rel="icon" href={branding.favicon} />}
       </head>
       <body>
-        {children}
-        {/* richColors: success/error/warning toasts get their own palette */}
-        <Toaster richColors closeButton position="bottom-right" />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          {/* richColors: success/error/warning toasts get their own palette.
+              Inside ThemeProvider so sonner follows the active theme. */}
+          <Toaster richColors closeButton position="bottom-right" />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>

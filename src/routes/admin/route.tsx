@@ -1,14 +1,15 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { AdminSidebar } from '~/components/admin-sidebar';
+import { AppSidebar } from '~/components/app-sidebar';
 import { AppShell } from '~/components/app-shell';
 import { hasAdminAreaAccess } from '~/lib/permissions';
 
 /**
- * Admin layout — SEPARATE sidebar from the dashboard (Pelican-style admin
- * area). Guard: signed-in users with at least one panel-level permission
- * (admin OR moderator role); others are redirected to their servers.
+ * Admin layout — Pelican-style admin area. Same consolidated sidebar as
+ * the dashboard (admin item set + user menu footer). Guard: signed-in
+ * users with at least one panel-level permission (admin OR moderator
+ * role); others are redirected to their servers.
  */
 export const Route = createFileRoute('/admin')({
   beforeLoad: ({ context }) => {
@@ -27,7 +28,7 @@ function AdminLayout() {
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <AdminSidebar />
+        <AppSidebar variant="admin" />
         <AppShell
           header={
             <span className="text-sm font-medium text-muted-foreground">

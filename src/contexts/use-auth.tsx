@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useContext } from 'react';
 import { useMutation, type UseMutationResult, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
+import { toast } from 'sonner';
 import { signOutFn } from '~/server/functions/auth';
 import type { SessionInfo, SessionUser } from '~/db/types';
 
@@ -30,6 +31,7 @@ export const AuthProvider = ({ children, user, session }: AuthProviderProps) => 
         await signOut();
         await queryClient.invalidateQueries();
         await router.invalidate();
+        toast.success('À bientôt ! 👋');
       },
     });
 
