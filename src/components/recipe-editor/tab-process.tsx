@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
+import { STOP_SIGNALS, type StopSignal } from '~/contract';
 import { FieldShell } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
@@ -72,7 +73,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
 
       <CardSection
         title="Arrêt gracieux"
-        description="Envoyé avant un kill forcé après le délai (commande envoyée au process, ou signal Windows)."
+        description="Envoyé avant un kill forcé après le délai : commande écrite sur le stdin du serveur, ou signal (SIGINT/SIGTERM/SIGKILL) envoyé au process."
       >
         <div className="space-y-4">
           <form.Field name="start.stop">
@@ -89,7 +90,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                         } else {
                           field.handleChange({
                             type: mode as 'command' | 'signal',
-                            value: '',
+                            value: mode === 'signal' ? 'SIGTERM' : '',
                             timeoutMs: 30000,
                           });
                         }
@@ -101,7 +102,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                       <SelectContent>
                         <SelectItem value="none">Aucun (kill direct)</SelectItem>
                         <SelectItem value="command">Commande (ex : stop)</SelectItem>
-                        <SelectItem value="signal">Signal (ex : CTRL_C_EVENT)</SelectItem>
+                        <SelectItem value="signal">Signal (SIGINT/SIGTERM/SIGKILL)</SelectItem>
                       </SelectContent>
                     </Select>
                   </FieldShell>
@@ -113,16 +114,39 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                           <FieldShell
                             id="stop-value"
                             label={stop.type === 'command' ? 'Commande d\u2019arrêt' : 'Signal'}
+                            hint={
+                              stop.type === 'signal'
+                                ? 'SIGINT : Ctrl+C gracieux — SIGTERM : arrêt du process — SIGKILL : kill immédiat de l\u2019arbre.'
+                                : undefined
+                            }
                             errors={valueField.state.meta.errors}
                           >
-                            <Input
-                              id="stop-value"
-                              className="font-mono"
-                              value={valueField.state.value ?? ''}
-                              onChange={(e) => valueField.handleChange(e.target.value)}
-                              onBlur={valueField.handleBlur}
-                              placeholder={stop.type === 'command' ? 'stop' : 'CTRL_C_EVENT'}
-                            />
+                            {stop.type === 'signal' ? (
+                              <Select
+                                value={valueField.state.value as StopSignal}
+                                onValueChange={(signal) => valueField.handleChange(signal)}
+                              >
+                                <SelectTrigger id="stop-value" className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {STOP_SIGNALS.map((signal) => (
+                                    <SelectItem key={signal} value={signal}>
+                                      {signal}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                id="stop-value"
+                                className="font-mono"
+                                value={valueField.state.value ?? ''}
+                                onChange={(e) => valueField.handleChange(e.target.value)}
+                                onBlur={valueField.handleBlur}
+                                placeholder="stop"
+                              />
+                            )}
                           </FieldShell>
                         )}
                       </form.Field>

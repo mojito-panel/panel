@@ -183,12 +183,33 @@ export type RunnerAction = z.infer<typeof runnerActionSchema>;
 
 // ─── Graceful stop ────────────────────────────────────────────────────────────
 
-export const stopConfigSchema = z.object({
-  type: z.enum(['command', 'signal']),
+/**
+ * Signals a signal-type stop can deliver. POSIX names — the agent maps them
+ * to the closest platform equivalent (CTRL_C_EVENT for SIGINT on Windows).
+ */
+export const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGKILL'] as const;
+export type StopSignal = (typeof STOP_SIGNALS)[number];
+
+const stopCommandConfigSchema = z.object({
+  type: z.literal('command'),
+  /** Command written to the server's stdin (e.g. "stop", "quit"). */
   value: z.string().min(1),
   /** Delay before a force kill after the graceful stop. */
   timeoutMs: z.number().int().positive().default(30000),
 });
+
+const stopSignalConfigSchema = z.object({
+  type: z.literal('signal'),
+  /** Signal sent to the server process instead of a stdin command. */
+  value: z.enum(STOP_SIGNALS),
+  /** Delay before a force kill after the graceful stop (SIGKILL skips it). */
+  timeoutMs: z.number().int().positive().default(30000),
+});
+
+export const stopConfigSchema = z.discriminatedUnion('type', [
+  stopCommandConfigSchema,
+  stopSignalConfigSchema,
+]);
 
 export type StopConfig = z.infer<typeof stopConfigSchema>;
 
