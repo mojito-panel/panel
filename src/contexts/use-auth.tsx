@@ -29,7 +29,12 @@ export const AuthProvider = ({ children, user, session }: AuthProviderProps) => 
     useMutation({
       mutationFn: async () => {
         await signOut();
-        await queryClient.invalidateQueries();
+        // Clear the cache instead of invalidating: invalidateQueries() would
+        // refetch every active query as a guest (401 storm) while we are
+        // still on the page. router.invalidate() re-runs the root beforeLoad,
+        // which refetches ['auth'] (now empty) — the guards then redirect
+        // to /login.
+        queryClient.clear();
         await router.invalidate();
         toast.success('À bientôt ! 👋');
       },

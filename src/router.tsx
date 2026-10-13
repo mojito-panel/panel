@@ -23,6 +23,16 @@ export function getRouter() {
         defaultOptions: {
           queries: {
             staleTime: 60_000,
+            // 4xx errors (HttpError.statusCode — 401/403…) never recover on
+            // retry: fail fast so the route guards can redirect instead of
+            // hanging through the exponential backoff (e.g. after sign-out).
+            retry: (failureCount, error) => {
+              const statusCode = (error as { statusCode?: number }).statusCode;
+              if (statusCode !== undefined && statusCode >= 400 && statusCode < 500) {
+                return false;
+              }
+              return failureCount < 2;
+            },
           },
         },
       }),
