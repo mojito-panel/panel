@@ -11,7 +11,8 @@ import { decryptSecret } from '../crypto';
 
 /**
  * Panel-to-agent HTTP client (Bearer token).
- * V1: http — HTTPS (even self-signed) to be wired in prod.
+ * Scheme follows the node setting (Pelican "Communicate over SSL"): https
+ * when the agent — or a reverse proxy in front of it — serves TLS.
  * The node's agent token is stored encrypted at rest — it is decrypted here
  * on each call and never cached or logged.
  */
@@ -32,12 +33,12 @@ export class AgentError extends Error {
   }
 }
 
-function baseUrl(node: Pick<INode, 'fqdn' | 'agentPort'>): string {
-  return `http://${node.fqdn}:${node.agentPort}`;
+function baseUrl(node: Pick<INode, 'fqdn' | 'agentPort' | 'scheme'>): string {
+  return `${node.scheme === 'https' ? 'https' : 'http'}://${node.fqdn}:${node.agentPort}`;
 }
 
 async function agentCall<T>(
-  node: Pick<INode, 'fqdn' | 'agentPort' | 'agentToken'>,
+  node: Pick<INode, 'fqdn' | 'agentPort' | 'scheme' | 'agentToken'>,
   path: string,
   options: AgentCallOptions = {},
 ): Promise<T> {

@@ -1,9 +1,14 @@
 import { z } from 'zod';
 
+/** Scheme the panel uses to talk to the agent — https when the agent (or a
+ * reverse proxy in front of it) serves TLS. */
+export const nodeSchemeSchema = z.enum(['http', 'https']);
+
 export const createNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   fqdn: z.string().min(3, 'FQDN invalide').max(255),
   agentPort: z.number().int().min(1).max(65535),
+  scheme: nodeSchemeSchema,
   /** SFTP port of the agent (optional — DEFAULT_SFTP_PORT when omitted). */
   sftpPort: z.number().int().min(1).max(65535).optional(),
 });
@@ -26,6 +31,7 @@ export const updateNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   fqdn: z.string().min(3, 'FQDN invalide').max(255),
   agentPort: z.number().int().min(1).max(65535),
+  scheme: nodeSchemeSchema,
   /** SFTP port of the agent — the node edit form always submits it. */
   sftpPort: z.number().int().min(1).max(65535),
 });

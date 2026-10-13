@@ -46,6 +46,7 @@ export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () =>
     id: node.id,
     name: node.name,
     fqdn: node.fqdn,
+    scheme: node.scheme,
     agentPort: node.agentPort,
     status: node.status,
     lastSeenAt: node.lastSeenAt,
@@ -65,6 +66,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       id: nanoid(),
       name: data.name,
       fqdn: data.fqdn,
+      scheme: data.scheme,
       agentPort: data.agentPort,
       sftpPort: data.sftpPort ?? DEFAULT_SFTP_PORT,
       // Encrypted at rest — the token doubles as the console-JWT signing key
@@ -85,6 +87,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       fqdn: node.fqdn,
       agentPort: node.agentPort,
       sftpPort: node.sftpPort,
+      scheme: node.scheme,
       agentToken: token,
       // Panel URL injected into the generated agent config (shard.yml).
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
@@ -160,6 +163,7 @@ export const getNodeFn = createServerFn({ method: 'GET' })
       id: node.id,
       name: node.name,
       fqdn: node.fqdn,
+      scheme: node.scheme,
       agentPort: node.agentPort,
       sftpPort: node.sftpPort,
       status: node.status,
@@ -188,6 +192,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
     node.name = data.name;
     node.fqdn = data.fqdn;
     node.agentPort = data.agentPort;
+    node.scheme = data.scheme;
     node.sftpPort = data.sftpPort;
     await em.flush();
 
@@ -871,6 +876,6 @@ export const createNodeHealthTokenFn = createServerFn({ method: 'POST' })
     return {
       token,
       expiresAt,
-      wsUrl: `ws://${node.fqdn}:${node.agentPort}/health/ws`,
+      wsUrl: `${node.scheme === 'https' ? 'wss' : 'ws'}://${node.fqdn}:${node.agentPort}/health/ws`,
     };
   });

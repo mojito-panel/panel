@@ -640,7 +640,7 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
 
     return {
       token,
-      wsUrl: `ws://${node.fqdn}:${node.agentPort}/servers/${server.id}/ws`,
+      wsUrl: `${node.scheme === 'https' ? 'wss' : 'ws'}://${node.fqdn}:${node.agentPort}/servers/${server.id}/ws`,
     };
   });
 

@@ -276,7 +276,7 @@ export const getBackupDownloadUrlFn = createServerFn({ method: 'GET' })
       { userId: user.id, serverId: server.id, backupId: backup.id },
       decryptSecret(node.agentToken),
     );
-    const url = `http://${node.fqdn}:${node.agentPort}/servers/${server.id}/backups/${backup.id}/download?token=${token}`;
+    const url = `${node.scheme === 'https' ? 'https' : 'http'}://${node.fqdn}:${node.agentPort}/servers/${server.id}/backups/${backup.id}/download?token=${token}`;
 
     return { url, expiresAt };
   });

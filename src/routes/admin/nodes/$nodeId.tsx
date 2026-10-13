@@ -92,7 +92,7 @@ function AdminNodeEditPage() {
         </span>
       </div>
       <p className="text-muted-foreground">
-        {node.fqdn}:{node.agentPort}
+        {node.scheme}://{node.fqdn}:{node.agentPort}
       </p>
 
       {/* ─── Tabs (Pelican detailTabs: overview / basic settings / allocations / config) ── */}
@@ -136,7 +136,7 @@ function AdminNodeEditPage() {
               defaultValues at mount, so it must NOT live in the loading
               skeleton (empty fields would freeze in the form). */}
           <NodeSettingsCard
-            node={{ id: node.id, name: node.name, fqdn: node.fqdn, agentPort: node.agentPort, sftpPort: node.sftpPort }}
+            node={{ id: node.id, name: node.name, fqdn: node.fqdn, scheme: node.scheme as 'http' | 'https', agentPort: node.agentPort, sftpPort: node.sftpPort }}
           />
         </TabsContent>
 
@@ -220,7 +220,7 @@ function InfoEntry({ label, value, muted }: { label: string; value: string; mute
 function NodeSettingsCard({
   node,
 }: {
-  node: { id: string; name: string; fqdn: string; agentPort: number; sftpPort: number };
+  node: { id: string; name: string; fqdn: string; scheme: 'http' | 'https'; agentPort: number; sftpPort: number };
 }) {
   const queryClient = useQueryClient();
   const updateNode = useServerFn(updateNodeFn);
@@ -242,6 +242,7 @@ function NodeSettingsCard({
       nodeId: node.id,
       name: node.name,
       fqdn: node.fqdn,
+      scheme: node.scheme,
       agentPort: node.agentPort,
       sftpPort: node.sftpPort,
     },
@@ -317,6 +318,33 @@ function NodeSettingsCard({
                     {field.state.meta.errors[0]?.message}
                   </p>
                 )}
+              </div>
+            )}
+          </form.Field>
+
+          <form.Field name="scheme">
+            {(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="node-edit-scheme">Communication SSL</Label>
+                <Select
+                  value={field.state.value}
+                  onValueChange={(value) => field.handleChange(value as 'http' | 'https')}
+                >
+                  <SelectTrigger id="node-edit-scheme">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="http">HTTP — agent en clair</SelectItem>
+                    <SelectItem value="https">
+                      HTTPS — agent (ou reverse proxy) en TLS
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Protocole utilisé par le panel ET les navigateurs (console,
+                  santé) pour joindre l'agent. Derrière un reverse proxy qui
+                  termine le TLS : HTTPS — l'agent reste en HTTP derrière le proxy.
+                </p>
               </div>
             )}
           </form.Field>

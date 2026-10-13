@@ -17,6 +17,13 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 
 export const Route = createFileRoute('/admin/nodes/')({
   component: AdminNodesPage,
@@ -50,7 +57,7 @@ function AdminNodesPage() {
 
   const form = useForm({
     validators: { onChange: createNodeSchema },
-    defaultValues: { name: '', fqdn: '', agentPort: 8080 },
+    defaultValues: { name: '', fqdn: '', agentPort: 8080, scheme: 'http' as 'http' | 'https' },
     onSubmit: ({ value }) => create.mutate(value),
   });
 
@@ -171,6 +178,34 @@ function AdminNodesPage() {
                 )}
               </form.Field>
 
+              <form.Field name="scheme">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="node-scheme">Communication SSL</Label>
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(value) => field.handleChange(value as 'http' | 'https')}
+                    >
+                      <SelectTrigger id="node-scheme">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="http">HTTP — agent en clair</SelectItem>
+                        <SelectItem value="https">
+                          HTTPS — agent (ou reverse proxy) en TLS
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Équivalent Pelican « Communicate over SSL » : le panel et
+                      les navigateurs (console WS) parlent à l'agent via ce
+                      protocole. Derrière un reverse proxy qui termine le TLS,
+                      choisis HTTPS — l'agent lui reste en HTTP derrière le proxy.
+                    </p>
+                  </div>
+                )}
+              </form.Field>
+
               <form.Field name="name">
                 {(field) => (
                   <div className="space-y-2">
@@ -278,7 +313,7 @@ function AdminNodesPage() {
                         </Link>
                       </td>
                       <td className="py-2 pr-4 text-muted-foreground">
-                        {node.fqdn}:{node.agentPort}
+                        {node.scheme}://{node.fqdn}:{node.agentPort}
                       </td>
                       <td className="py-2 pr-4">{node.status}</td>
                       <td className="py-2">
