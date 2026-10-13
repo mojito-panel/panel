@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
 import {
   Select,
@@ -18,16 +18,17 @@ import type { RecipeForm } from './recipe-editor';
 
 export function ProcessTab({ form }: { form: RecipeForm }) {
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Commande de démarrage</CardTitle>
-          <CardDescription>
+    <div className="divide-y">
+      <CardSection
+        title="Commande de démarrage"
+        description={
+          <>
             Templating {'{{VAR}}'} : variables système &gt; variables du serveur &gt;{' '}
             defaults de la recette &gt; environnement fixe.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </>
+        }
+      >
+        <div className="space-y-4">
           <form.Field name="start.command">
             {(field) => (
               <FieldShell
@@ -66,18 +67,14 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Arrêt gracieux</CardTitle>
-          <CardDescription>
-            Envoyé avant un kill forcé après le délai (commande envoyée au
-            process, ou signal Windows).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Arrêt gracieux"
+        description="Envoyé avant un kill forcé après le délai (commande envoyée au process, ou signal Windows)."
+      >
+        <div className="space-y-4">
           <form.Field name="start.stop">
             {(field) => {
               const stop = field.state.value;
@@ -153,18 +150,14 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               );
             }}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Détection de démarrage</CardTitle>
-          <CardDescription>
-            Le serveur passe « running » quand une ligne de log correspond au
-            pattern (équivalent du config.startup de Pelican).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Détection de démarrage"
+        description="Le serveur passe « running » quand une ligne de log correspond au pattern (équivalent du config.startup de Pelican)."
+      >
+        <div className="space-y-4">
           <form.Field name="start.ready">
             {(field) => (
               <>
@@ -225,15 +218,14 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               </>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Logs</CardTitle>
-          <CardDescription>Source des logs affichés dans la console.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Logs"
+        description="Source des logs affichés dans la console."
+      >
+        <div className="space-y-4">
           <form.Field name="logs.mode">
             {(field) => (
               <FieldShell id="logs-mode" label="Source" errors={field.state.meta.errors}>
@@ -293,8 +285,8 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               </div>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
     </div>
   );
 }
