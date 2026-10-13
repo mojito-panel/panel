@@ -21,6 +21,7 @@ import {
   deleteBackupSchema,
   backupDownloadSchema,
 } from '~/validators/server';
+import { isHttpsScheme } from '~/validators/node';
 
 /**
  * Backups (≈ Pelican's Backups tab, push-based): the panel row is the
@@ -276,7 +277,7 @@ export const getBackupDownloadUrlFn = createServerFn({ method: 'GET' })
       { userId: user.id, serverId: server.id, backupId: backup.id },
       decryptSecret(node.agentToken),
     );
-    const url = `${node.scheme === 'https' ? 'https' : 'http'}://${node.fqdn}:${node.agentPort}/servers/${server.id}/backups/${backup.id}/download?token=${token}`;
+    const url = `${isHttpsScheme(node.scheme) ? 'https' : 'http'}://${node.fqdn}:${node.publicPort}/servers/${server.id}/backups/${backup.id}/download?token=${token}`;
 
     return { url, expiresAt };
   });

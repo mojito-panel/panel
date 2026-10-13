@@ -22,6 +22,7 @@ import {
   assignAllocationSchema,
   parsePortsSpec,
   PORTS_SPEC_MESSAGE,
+  isHttpsScheme,
 } from '~/validators/node';
 import {
   importRecipesSchema,
@@ -48,6 +49,7 @@ export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () =>
     fqdn: node.fqdn,
     scheme: node.scheme,
     agentPort: node.agentPort,
+    publicPort: node.publicPort,
     status: node.status,
     lastSeenAt: node.lastSeenAt,
   }));
@@ -68,6 +70,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       fqdn: data.fqdn,
       scheme: data.scheme,
       agentPort: data.agentPort,
+      publicPort: data.publicPort,
       sftpPort: data.sftpPort ?? DEFAULT_SFTP_PORT,
       // Encrypted at rest — the token doubles as the console-JWT signing key
       agentToken: encryptSecret(token),
@@ -86,6 +89,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       name: node.name,
       fqdn: node.fqdn,
       agentPort: node.agentPort,
+      publicPort: node.publicPort,
       sftpPort: node.sftpPort,
       scheme: node.scheme,
       agentToken: token,
@@ -165,6 +169,7 @@ export const getNodeFn = createServerFn({ method: 'GET' })
       fqdn: node.fqdn,
       scheme: node.scheme,
       agentPort: node.agentPort,
+      publicPort: node.publicPort,
       sftpPort: node.sftpPort,
       status: node.status,
       lastSeenAt: node.lastSeenAt,
@@ -192,6 +197,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
     node.name = data.name;
     node.fqdn = data.fqdn;
     node.agentPort = data.agentPort;
+    node.publicPort = data.publicPort;
     node.scheme = data.scheme;
     node.sftpPort = data.sftpPort;
     await em.flush();
@@ -770,7 +776,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
     id: node.id,
     name: node.name,
     fqdn: node.fqdn,
-    agentPort: node.agentPort,
+    publicPort: node.publicPort,
     status: node.status,
     lastSeenAt: node.lastSeenAt,
     agentVersion: pings[index].status === 'fulfilled' ? (pings[index].value.version ?? null) : null,
@@ -845,7 +851,7 @@ export const getHealthNodesFn = createServerFn({ method: 'GET' }).handler(async 
     id: node.id,
     name: node.name,
     fqdn: node.fqdn,
-    agentPort: node.agentPort,
+    publicPort: node.publicPort,
     // Just set above by the ping — typed for the health page's DTO
     status: node.status as 'online' | 'offline' | 'unknown',
     lastSeenAt: node.lastSeenAt ?? null,
@@ -876,6 +882,6 @@ export const createNodeHealthTokenFn = createServerFn({ method: 'POST' })
     return {
       token,
       expiresAt,
-      wsUrl: `${node.scheme === 'https' ? 'wss' : 'ws'}://${node.fqdn}:${node.agentPort}/health/ws`,
+      wsUrl: `${isHttpsScheme(node.scheme) ? 'wss' : 'ws'}://${node.fqdn}:${node.publicPort}/health/ws`,
     };
   });

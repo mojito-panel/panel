@@ -28,7 +28,7 @@ export interface NodeHealthDto {
   id: string;
   name: string;
   fqdn: string;
-  agentPort: number;
+  publicPort: number;
   status: 'online' | 'offline' | 'unknown';
   lastSeenAt: Date | string | null;
   latencyMs: number | null;
@@ -137,7 +137,7 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
             {online && <LiveIndicator live={connection === 'live'} />}
           </div>
           <span className="text-xs text-muted-foreground">
-            {node.fqdn}:{node.agentPort}
+            {node.fqdn}:{node.publicPort}
           </span>
         </div>
       </CardHeader>

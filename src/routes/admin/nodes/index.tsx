@@ -17,13 +17,8 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
+import { NodeSchemeField } from '~/components/node-scheme-field';
+import type { NodeScheme } from '~/validators/node';
 
 export const Route = createFileRoute('/admin/nodes/')({
   component: AdminNodesPage,
@@ -57,7 +52,7 @@ function AdminNodesPage() {
 
   const form = useForm({
     validators: { onChange: createNodeSchema },
-    defaultValues: { name: '', fqdn: '', agentPort: 8080, scheme: 'http' as 'http' | 'https' },
+    defaultValues: { name: '', fqdn: '', agentPort: 8080, publicPort: 8080, scheme: 'http' as NodeScheme },
     onSubmit: ({ value }) => create.mutate(value),
   });
 
@@ -161,7 +156,7 @@ function AdminNodesPage() {
               <form.Field name="agentPort">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor="node-port">Port agent</Label>
+                    <Label htmlFor="node-port">Port d’écoute</Label>
                     <Input
                       id="node-port"
                       type="number"
@@ -169,6 +164,28 @@ function AdminNodesPage() {
                       onChange={(e) => field.handleChange(Number(e.target.value))}
                       onBlur={field.handleBlur}
                     />
+                    <p className="text-xs text-muted-foreground">Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>).</p>
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+
+              <form.Field name="publicPort">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="node-public-port">Port accessible</Label>
+                    <Input
+                      id="node-public-port"
+                      type="number"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(Number(e.target.value))}
+                      onBlur={field.handleBlur}
+                    />
+                    <p className="text-xs text-muted-foreground">Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port d’écoute.</p>
                     {field.state.meta.errors.length > 0 && (
                       <p className="text-sm text-destructive">
                         {field.state.meta.errors[0]?.message}
@@ -181,26 +198,19 @@ function AdminNodesPage() {
               <form.Field name="scheme">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor="node-scheme">Communication SSL</Label>
-                    <Select
+                    <p id="node-scheme" className="text-sm font-medium leading-none">
+                      Communication SSL
+                    </p>
+                    <NodeSchemeField
+                      id="node-scheme"
                       value={field.state.value}
-                      onValueChange={(value) => field.handleChange(value as 'http' | 'https')}
-                    >
-                      <SelectTrigger id="node-scheme">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="http">HTTP — agent en clair</SelectItem>
-                        <SelectItem value="https">
-                          HTTPS — agent (ou reverse proxy) en TLS
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                      onChange={(value) => field.handleChange(value)}
+                    />
                     <p className="text-xs text-muted-foreground">
-                      Équivalent Pelican « Communicate over SSL » : le panel et
-                      les navigateurs (console WS) parlent à l'agent via ce
-                      protocole. Derrière un reverse proxy qui termine le TLS,
-                      choisis HTTPS — l'agent lui reste en HTTP derrière le proxy.
+                      Équivalent Pelican « Communicate over SSL » : le panel et les
+                      navigateurs (console WS) joignent l’agent via ce protocole, sur le
+                      port accessible. Derrière un reverse proxy qui termine le TLS,
+                      l’agent reste en HTTP sur son port d’écoute.
                     </p>
                   </div>
                 )}
@@ -313,7 +323,7 @@ function AdminNodesPage() {
                         </Link>
                       </td>
                       <td className="py-2 pr-4 text-muted-foreground">
-                        {node.scheme}://{node.fqdn}:{node.agentPort}
+                        {node.scheme}://{node.fqdn}:{node.publicPort}
                       </td>
                       <td className="py-2 pr-4">{node.status}</td>
                       <td className="py-2">

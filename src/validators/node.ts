@@ -1,13 +1,27 @@
 import { z } from 'zod';
 
-/** Scheme the panel uses to talk to the agent — https when the agent (or a
- * reverse proxy in front of it) serves TLS. */
-export const nodeSchemeSchema = z.enum(['http', 'https']);
+/**
+ * Scheme the panel and browsers use to talk to the agent — Pelican
+ * "Communicate over SSL": 'http', 'https' when the agent itself serves TLS,
+ * or 'https-behind-proxy' when a reverse proxy in front of it terminates
+ * the TLS (the agent stays in plain HTTP on its listen port).
+ */
+export const nodeSchemeSchema = z.enum(['http', 'https', 'https-behind-proxy']);
+
+export type NodeScheme = z.infer<typeof nodeSchemeSchema>;
+
+/** HTTPS variants — the panel and browsers talk TLS to the agent (directly
+ * or through the reverse proxy in front of it). */
+export function isHttpsScheme(scheme: string): boolean {
+  return scheme === 'https' || scheme === 'https-behind-proxy';
+}
 
 export const createNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   fqdn: z.string().min(3, 'FQDN invalide').max(255),
   agentPort: z.number().int().min(1).max(65535),
+  /** Accessible port — the port the panel and browsers connect to. */
+  publicPort: z.number().int().min(1).max(65535),
   scheme: nodeSchemeSchema,
   /** SFTP port of the agent (optional — DEFAULT_SFTP_PORT when omitted). */
   sftpPort: z.number().int().min(1).max(65535).optional(),
@@ -31,6 +45,8 @@ export const updateNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   fqdn: z.string().min(3, 'FQDN invalide').max(255),
   agentPort: z.number().int().min(1).max(65535),
+  /** Accessible port — the port the panel and browsers connect to. */
+  publicPort: z.number().int().min(1).max(65535),
   scheme: nodeSchemeSchema,
   /** SFTP port of the agent — the node edit form always submits it. */
   sftpPort: z.number().int().min(1).max(65535),

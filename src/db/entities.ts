@@ -77,11 +77,18 @@ export const Node = defineEntity({
     id: p.string().primary(),
     name: p.string().length(128),
     fqdn: p.string().length(255),
-        /** Scheme the panel and browsers use to reach the agent — Pelican
-     * "Communicate over SSL": https when the agent (or a reverse proxy in
-     * front of it) serves TLS, http otherwise. */
+    /** Scheme the panel and browsers use to reach the agent — Pelican
+     * "Communicate over SSL": 'http', 'https' (TLS served by the agent) or
+     * 'https-behind-proxy' (a reverse proxy terminates the TLS, the agent
+     * itself stays in plain HTTP on its listen port). */
     scheme: p.string().default('http'),
+    /** Listen port — the port the agent binds on the node (shard.yml
+     * `api.port`). NOT the port clients connect to: see publicPort. */
     agentPort: p.integer().fieldName('agent_port').default(8080),
+    /** Accessible port — the port the panel and browsers use to reach the
+     * agent (differs from the listen port when a reverse proxy fronts the
+     * agent, e.g. agent listening on 8080, public on 443). */
+    publicPort: p.integer().fieldName('public_port').default(8080),
     /** SFTP listen port of the agent (shard.yml `sftp.port`), shown to users. */
     sftpPort: p.integer().fieldName('sftp_port').default(2022),
     /** Agent token (Bearer) — sent to the agent on every request. */

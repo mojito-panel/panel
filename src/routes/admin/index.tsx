@@ -116,7 +116,7 @@ function AdminOverviewPage() {
                 <div className="min-w-0">
                   <p className="truncate font-medium">{node.name}</p>
                   <p className="truncate text-sm text-muted-foreground">
-                    {node.fqdn}:{node.agentPort}
+                    {node.fqdn}:{node.publicPort}
                     {node.agentVersion && ` · agent ${node.agentVersion}`}
                     {node.lastSeenAt &&
                       ` · vu ${new Date(node.lastSeenAt).toLocaleString('fr-FR')}`}

@@ -8,11 +8,14 @@ import type {
   BackupOperationStatus,
 } from '~/contract';
 import { decryptSecret } from '../crypto';
+import { isHttpsScheme } from '~/validators/node';
 
 /**
  * Panel-to-agent HTTP client (Bearer token).
- * Scheme follows the node setting (Pelican "Communicate over SSL"): https
- * when the agent — or a reverse proxy in front of it — serves TLS.
+ * Scheme follows the node setting (Pelican "Communicate over SSL") and
+ * the port is the node's ACCESSIBLE port: behind a reverse proxy, the
+ * proxy exposes the public port and the agent keeps listening on its own
+ * (listen) port.
  * The node's agent token is stored encrypted at rest — it is decrypted here
  * on each call and never cached or logged.
  */
@@ -33,12 +36,12 @@ export class AgentError extends Error {
   }
 }
 
-function baseUrl(node: Pick<INode, 'fqdn' | 'agentPort' | 'scheme'>): string {
-  return `${node.scheme === 'https' ? 'https' : 'http'}://${node.fqdn}:${node.agentPort}`;
+function baseUrl(node: Pick<INode, 'fqdn' | 'publicPort' | 'scheme'>): string {
+  return `${isHttpsScheme(node.scheme) ? 'https' : 'http'}://${node.fqdn}:${node.publicPort}`;
 }
 
 async function agentCall<T>(
-  node: Pick<INode, 'fqdn' | 'agentPort' | 'scheme' | 'agentToken'>,
+  node: Pick<INode, 'fqdn' | 'publicPort' | 'scheme' | 'agentToken'>,
   path: string,
   options: AgentCallOptions = {},
 ): Promise<T> {

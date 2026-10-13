@@ -12,6 +12,8 @@ import {
   type CreateAllocationsDto,
 } from '~/validators/node';
 import { buildAgentConfig, buildAgentConfigWithoutToken } from '~/lib/agent-config';
+import { NodeSchemeField } from '~/components/node-scheme-field';
+import type { NodeScheme } from '~/validators/node';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -92,7 +94,7 @@ function AdminNodeEditPage() {
         </span>
       </div>
       <p className="text-muted-foreground">
-        {node.scheme}://{node.fqdn}:{node.agentPort}
+        {node.scheme}://{node.fqdn}:{node.publicPort}
       </p>
 
       {/* ─── Tabs (Pelican detailTabs: overview / basic settings / allocations / config) ── */}
@@ -136,7 +138,7 @@ function AdminNodeEditPage() {
               defaultValues at mount, so it must NOT live in the loading
               skeleton (empty fields would freeze in the form). */}
           <NodeSettingsCard
-            node={{ id: node.id, name: node.name, fqdn: node.fqdn, scheme: node.scheme as 'http' | 'https', agentPort: node.agentPort, sftpPort: node.sftpPort }}
+            node={{ id: node.id, name: node.name, fqdn: node.fqdn, scheme: node.scheme as NodeScheme, agentPort: node.agentPort, publicPort: node.publicPort, sftpPort: node.sftpPort }}
           />
         </TabsContent>
 
@@ -220,7 +222,7 @@ function InfoEntry({ label, value, muted }: { label: string; value: string; mute
 function NodeSettingsCard({
   node,
 }: {
-  node: { id: string; name: string; fqdn: string; scheme: 'http' | 'https'; agentPort: number; sftpPort: number };
+  node: { id: string; name: string; fqdn: string; scheme: NodeScheme; agentPort: number; publicPort: number; sftpPort: number };
 }) {
   const queryClient = useQueryClient();
   const updateNode = useServerFn(updateNodeFn);
@@ -244,6 +246,7 @@ function NodeSettingsCard({
       fqdn: node.fqdn,
       scheme: node.scheme,
       agentPort: node.agentPort,
+      publicPort: node.publicPort,
       sftpPort: node.sftpPort,
     },
     onSubmit: ({ value }) => update.mutate(value),
@@ -305,7 +308,7 @@ function NodeSettingsCard({
           <form.Field name="agentPort">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor="node-edit-port">Port agent</Label>
+                <Label htmlFor="node-edit-port">Port d’écoute</Label>
                 <Input
                   id="node-edit-port"
                   type="number"
@@ -313,6 +316,28 @@ function NodeSettingsCard({
                   onChange={(e) => field.handleChange(Number(e.target.value))}
                   onBlur={field.handleBlur}
                 />
+                <p className="text-xs text-muted-foreground">Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>) — après modification, régénère la configuration.</p>
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
+
+          <form.Field name="publicPort">
+            {(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="node-edit-public-port">Port accessible</Label>
+                <Input
+                  id="node-edit-public-port"
+                  type="number"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(Number(e.target.value))}
+                  onBlur={field.handleBlur}
+                />
+                <p className="text-xs text-muted-foreground">Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port d’écoute.</p>
                 {field.state.meta.errors.length > 0 && (
                   <p className="text-sm text-destructive">
                     {field.state.meta.errors[0]?.message}
@@ -325,25 +350,19 @@ function NodeSettingsCard({
           <form.Field name="scheme">
             {(field) => (
               <div className="space-y-2">
-                <Label htmlFor="node-edit-scheme">Communication SSL</Label>
-                <Select
+                <p id="node-edit-scheme" className="text-sm font-medium leading-none">
+                  Communication SSL
+                </p>
+                <NodeSchemeField
+                  id="node-edit-scheme"
                   value={field.state.value}
-                  onValueChange={(value) => field.handleChange(value as 'http' | 'https')}
-                >
-                  <SelectTrigger id="node-edit-scheme">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="http">HTTP — agent en clair</SelectItem>
-                    <SelectItem value="https">
-                      HTTPS — agent (ou reverse proxy) en TLS
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  onChange={(value) => field.handleChange(value)}
+                />
                 <p className="text-xs text-muted-foreground">
-                  Protocole utilisé par le panel ET les navigateurs (console,
-                  santé) pour joindre l'agent. Derrière un reverse proxy qui
-                  termine le TLS : HTTPS — l'agent reste en HTTP derrière le proxy.
+                  Protocole utilisé par le panel ET les navigateurs (console, santé)
+                  pour joindre l’agent, sur le port accessible. Derrière un reverse
+                  proxy qui termine le TLS : l’agent reste en HTTP sur son port
+                  d’écoute.
                 </p>
               </div>
             )}

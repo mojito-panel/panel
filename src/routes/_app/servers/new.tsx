@@ -152,6 +152,7 @@ function NewServerPage() {
                   <Select
                     value={field.state.value}
                     onValueChange={(v) => v !== null && selectNode(v)}
+                    items={nodes.map((node) => ({ value: node.id, label: `${node.name} (${node.fqdn}:${node.publicPort})` }))}
                   >
                     <SelectTrigger id="nodeId" className="w-full" onBlur={field.handleBlur}>
                       <SelectValue placeholder="— Choisir un node —" />
@@ -159,7 +160,7 @@ function NewServerPage() {
                     <SelectContent>
                       {nodes.map((node) => (
                         <SelectItem key={node.id} value={node.id}>
-                          {node.name} ({node.fqdn}:{node.agentPort})
+                          {node.name} ({node.fqdn}:{node.publicPort})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -180,6 +181,7 @@ function NewServerPage() {
                   <Select
                     value={field.state.value}
                     onValueChange={(v) => v !== null && selectRecipe(v)}
+                    items={recipes.map((recipe) => ({ value: recipe.id, label: recipe.name }))}
                   >
                     <SelectTrigger id="recipeId" className="w-full" onBlur={field.handleBlur}>
                       <SelectValue placeholder="— Choisir une recette —" />
@@ -210,6 +212,7 @@ function NewServerPage() {
                   <Select
                     value={field.state.value}
                     onValueChange={(v) => v !== null && field.handleChange(v)}
+                    items={(freeAllocationsQuery.data ?? []).map((a) => ({ value: a.id, label: `${a.ip}:${a.port}${a.alias ? ` (${a.alias})` : ''}` }))}
                     disabled={!selectedNodeId}
                   >
                     <SelectTrigger id="allocationId" className="w-full" onBlur={field.handleBlur}>

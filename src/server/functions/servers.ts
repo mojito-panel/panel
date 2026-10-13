@@ -37,6 +37,7 @@ import {
   serverLogsQuerySchema,
   serverAllocationActionSchema,
 } from '~/validators/server';
+import { isHttpsScheme } from '~/validators/node';
 
 type ServerStatusDb =
   | 'installing'
@@ -640,7 +641,7 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
 
     return {
       token,
-      wsUrl: `${node.scheme === 'https' ? 'wss' : 'ws'}://${node.fqdn}:${node.agentPort}/servers/${server.id}/ws`,
+      wsUrl: `${isHttpsScheme(node.scheme) ? 'wss' : 'ws'}://${node.fqdn}:${node.publicPort}/servers/${server.id}/ws`,
     };
   });
 
