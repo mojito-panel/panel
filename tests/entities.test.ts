@@ -12,6 +12,7 @@ import {
   ServerUser,
   PanelRole,
   Backup,
+  Setting,
 } from '~/db/entities';
 
 /**
@@ -36,6 +37,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
         ServerUser,
         PanelRole,
         Backup,
+        Setting,
       ],
     });
     await orm.schema.create();
@@ -61,6 +63,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(tableNames).toContain('server_user');
     expect(tableNames).toContain('role');
     expect(tableNames).toContain('backup');
+    expect(tableNames).toContain('setting');
   });
 
   it('creates a User with the default role', async () => {

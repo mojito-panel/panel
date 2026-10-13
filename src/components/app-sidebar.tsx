@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Server, Shield, LogOut } from 'lucide-react';
 import {
   Sidebar,
@@ -12,20 +13,25 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '~/components/ui/sidebar';
+import { UserAvatar } from '~/components/user-avatar';
+import { getBrandingFn } from '~/server/functions/settings';
 import { useAuth } from '~/contexts/use-auth';
 import { hasAdminAreaAccess } from '~/lib/permissions';
 
-/** Main menu. */
-const mainItems = [
-  { title: 'Mes serveurs', url: '/servers', icon: Server },
-];
-
 /**
- * Application sidebar — main navigation + user footer.
+ * Application sidebar — main navigation + user footer. The header title and
+ * the avatar mode (Gravatar) come from the branding settings (admin >
+ * Paramètres), prefetched in __root.tsx (queryKey ['branding']).
  */
 export function AppSidebar() {
   const { user, useSignOut } = useAuth();
   const signOut = useSignOut();
+
+  const brandingQuery = useQuery({
+    queryKey: ['branding'],
+    queryFn: () => getBrandingFn(),
+  });
+  const branding = brandingQuery.data;
 
   return (
     <Sidebar collapsible="icon">
@@ -37,7 +43,7 @@ export function AppSidebar() {
                 <Server className="size-4" />
               </div>
               <div className="flex flex-col gap-0.5 leading-none">
-                <span className="font-semibold">Mojito Panel</span>
+                <span className="font-semibold">{branding?.appName ?? 'Mojito Panel'}</span>
                 <span className="text-xs text-muted-foreground">
                   Serveurs de jeux
                 </span>
@@ -82,9 +88,12 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <div className="flex items-center gap-2 px-2 py-1.5 group-data-[collapsible=icon]:p-0">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold">
-                {user?.name?.charAt(0).toUpperCase() ?? '?'}
-              </div>
+              <UserAvatar
+                name={user?.name}
+                email={user?.email}
+                gravatar={branding?.gravatar ?? false}
+                className="size-8 shrink-0"
+              />
               <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
                 <p className="truncate text-sm font-medium">{user?.name}</p>
                 <p className="truncate text-xs text-muted-foreground">{user?.email}</p>

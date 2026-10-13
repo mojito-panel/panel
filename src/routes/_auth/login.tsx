@@ -1,11 +1,12 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { signIn } from '~/lib/auth-client';
+import { getBrandingFn } from '~/server/functions/settings';
 import { loginSchema, type LoginDto } from '~/validators/auth';
 
 export const Route = createFileRoute('/_auth/login')({
@@ -15,6 +16,13 @@ export const Route = createFileRoute('/_auth/login')({
 function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Registration toggle (admin > Paramètres) — the sign-up link is hidden
+  // while public registration is closed (prefetched SSR, no flash).
+  const brandingQuery = useQuery({
+    queryKey: ['branding'],
+    queryFn: () => getBrandingFn(),
+  });
 
   const mutation = useMutation({
     mutationFn: async (data: LoginDto) => {
@@ -101,12 +109,14 @@ function LoginPage() {
               {mutation.isPending ? 'Connexion...' : 'Se connecter'}
             </Button>
           </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Pas encore de compte ?{' '}
-            <Link to="/register" className="text-primary underline-offset-4 hover:underline">
-              S'inscrire
-            </Link>
-          </p>
+          {(brandingQuery.data?.registrationEnabled ?? true) && (
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              Pas encore de compte ?{' '}
+              <Link to="/register" className="text-primary underline-offset-4 hover:underline">
+                S'inscrire
+              </Link>
+            </p>
+          )}
         </CardContent>
       </Card>
     </main>

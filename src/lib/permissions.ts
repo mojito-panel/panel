@@ -49,6 +49,7 @@ export const statement = {
   'panel.recipes': ['read', 'create', 'update', 'delete'],
   'panel.roles': ['read', 'create', 'update', 'delete'],
   'panel.servers': ['read', 'update', 'delete'],
+  'panel.settings': ['read', 'update'],
 
   // Per-server (Pelican "server permissions", granted to sub-users)
   'server.console': ['read', 'command'],
@@ -110,12 +111,14 @@ export const adminRole = ac.newRole({
   'panel.recipes': [...statement['panel.recipes']],
   'panel.roles': [...statement['panel.roles']],
   'panel.servers': [...statement['panel.servers']],
+  'panel.settings': [...statement['panel.settings']],
   ...allServerStatements(),
 });
 
 /** Moderator (Pelican-style): read-only oversight of the admin area. */
 export const moderatorRole = ac.newRole({
   user: ['list', 'get'],
+  'panel.settings': ['read'],
   'panel.overview': ['read'],
   'panel.nodes': ['read'],
   'panel.recipes': ['read'],
@@ -211,6 +214,7 @@ export function hasAdminAreaAccess(permissions: string[]): boolean {
       'panel.recipes': ['read'],
       'panel.roles': ['read'],
       'panel.servers': ['read'],
+      'panel.settings': ['read'],
       user: ['list'],
     },
     'OR',
@@ -405,6 +409,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   'panel.recipes': 'Recettes',
   'panel.roles': 'Rôles',
   'panel.servers': 'Serveurs',
+  'panel.settings': 'Paramètres',
   user: 'Comptes utilisateurs',
   session: 'Sessions',
 };

@@ -11,6 +11,7 @@ import type {
   ServerUser,
   PanelRole,
   Backup,
+  Setting,
 } from './entities';
 
 // ─── Types inferred from MikroORM entities ───────────────────────────────────────
@@ -26,6 +27,7 @@ export interface IAllocation extends InferEntity<typeof Allocation> {}
 export interface IServerUser extends InferEntity<typeof ServerUser> {}
 export interface IPanelRole extends InferEntity<typeof PanelRole> {}
 export interface IBackup extends InferEntity<typeof Backup> {}
+export interface ISetting extends InferEntity<typeof Setting> {}
 
 export type NodeStatus = INode['status'];
 export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';

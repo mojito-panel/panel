@@ -40,7 +40,7 @@ const adminItems = [
   { title: 'Utilisateurs', url: '/admin/users', icon: Users, soon: false, permission: { user: ['list'] } },
   { title: 'Rôles', url: '/admin/roles', icon: ShieldCheck, soon: false, permission: { 'panel.roles': ['read'] } },
   { title: 'API', url: '/admin/api', icon: KeyRound, soon: true, permission: { 'panel.overview': ['read'] } },
-  { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: true, permission: { 'panel.overview': ['read'] } },
+  { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: false, permission: { 'panel.settings': ['read'] } },
   { title: 'Santé', url: '/admin/health', icon: HeartPulse, soon: false, permission: { 'panel.overview': ['read'] } },
 ] as const;
 

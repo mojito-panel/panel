@@ -197,3 +197,23 @@ export const Backup = defineEntity({
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },
 });
+
+/**
+ * Panel-wide settings — Pelican-style EAV store: one row per namespaced
+ * key ("app:name", "mail:smtp:host", …), value as text. Defaults live in
+ * code (SETTING_DEFAULTS in ~/lib/settings) — DB rows are overrides only.
+ * Any key can be FORCED by an environment variable (MOJITO_* mapping,
+ * see ~/lib/settings), which then wins over the DB row.
+ */
+export const Setting = defineEntity({
+  name: 'setting',
+  properties: {
+    /** Namespaced key — "app:name", "mail:smtp:host", … */
+    key: p.string().length(128).primary(),
+    /**
+     * Stored value (text — booleans as "true"/"false"). Secrets
+     * (mail:smtp:password) are encrypted at rest via encryptSecret.
+     */
+    value: p.text(),
+  },
+});

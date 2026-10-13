@@ -2,6 +2,9 @@ import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { Pool } from 'pg';
+import { APIError } from 'better-auth/api';
+import { initOrm } from '~/db';
+import { isRegistrationEnabled } from '../server/settings';
 import { ac, PANEL_ROLES } from '~/lib/permissions';
 
 const databaseUrl =
@@ -101,6 +104,23 @@ export const auth = betterAuth({
       },
     }),
   ],
+  hooks: {
+    // Pelican "registration_enabled" equivalent: the /register toggle is
+    // enforced at the better-auth layer, not just hidden in the UI. Only the
+    // sign-up endpoints are gated — admin user creation is direct MikroORM
+    // (server/functions/users.ts) and /setup is the first-run route.
+    before: async (ctx) => {
+      // The sign-up endpoints are gated via the request path (the dispatch
+      // context also carries `path`, but the static type only knows `request`).
+      if (!ctx.request || !new URL(ctx.request.url).pathname.includes('/sign-up')) return;
+      const orm = await initOrm();
+      if (!(await isRegistrationEnabled(orm.em.fork()))) {
+        throw new APIError('FORBIDDEN', {
+          message: 'Les inscriptions sont désactivées par un administrateur',
+        });
+      }
+    },
+  },
   advanced: {
     cookiePrefix: 'mojito',
   },
