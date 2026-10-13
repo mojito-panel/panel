@@ -274,7 +274,7 @@ mojito-panel/
 
 ### Phase 2 — Throttling (Job Objects — done in shard)
 
-- [x] Job Object bindings (RAM + CPU rate) — `shard/internal/jobobject`:
+- [x] Job Object bindings (RAM + CPU rate) — `shard/internal/job_object`:
       job-wide commit cap (memoryMb) + CPU rate hard cap in cores
       (cpuCores, fractionals OK — scaled to % of the host's total bandwidth,
       max 10000 units; HARD_CAP Win10+, soft-rate fallback)
