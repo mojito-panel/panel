@@ -157,6 +157,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
       ownerId: user.id,
       status: 'installing',
       memoryMb: data.memoryMb,
+      cpuCores: data.cpuCores,
       variables: data.variables,
       createdAt: now,
       updatedAt: now,
@@ -181,6 +182,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
         allocation: {
           port: allocation.port,
           memoryMb: data.memoryMb,
+          cpuCores: data.cpuCores,
           ip: allocation.ip,
         },
       });
@@ -292,6 +294,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
         allocation: {
           port: allocation.port,
           memoryMb: server.memoryMb,
+          cpuCores: Number(server.cpuCores),
           ip: allocation.ip,
         },
       });
@@ -378,6 +381,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
             port: primaryAllocation.port,
             ip: primaryAllocation.ip,
             memoryMb: server.memoryMb,
+            cpuCores: Number(server.cpuCores),
           }
         : null,
       logs,
@@ -469,6 +473,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
             allocation: {
               port: allocation.port,
               memoryMb: server.memoryMb,
+              cpuCores: Number(server.cpuCores),
               ip: allocation.ip,
             },
           });

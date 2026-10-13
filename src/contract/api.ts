@@ -33,6 +33,8 @@ export type Id = z.infer<typeof idSchema>;
 export const serverAllocationSchema = z.object({
   port: z.number().int().positive(),
   memoryMb: z.number().int().positive(),
+  /** CPU limit in cores — Job Object CPU rate (0 = unlimited, halves OK: 1.5). */
+  cpuCores: z.number().min(0).max(1024).default(0),
   ip: z.string().default('0.0.0.0'),
 });
 

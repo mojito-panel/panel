@@ -272,12 +272,22 @@ mojito-panel/
 - **Local persistence**: JSON registry in `AGENT_DATA_DIR` (serverId → recipe, variables, installDir, allocation) filled at install — start only needs the serverId.
 - **Divergence note vs wings**: wings re-applies `config.files` on every boot (`UpdateConfigurationFiles` in onBeforeStart). For us the `configFile` actions are install-only: **variable editing exists** (Variables page — changes the value + env at next start) but does NOT rewrite already-generated config files (e.g.: changing the port on the page does not update `server.properties`). Full parity = re-running the `configFile` actions at start or on variable save — still to be decided.
 
-### Phase 2 — Throttling (V2 — not in V1)
+### Phase 2 — Throttling (Job Objects — done in shard)
 
-- [ ] Job Object bindings (RAM + CPU rate)
-- [ ] Assignment at spawn (before the children!)
+- [x] Job Object bindings (RAM + CPU rate) — `shard/internal/jobobject`:
+      job-wide commit cap (memoryMb) + CPU rate hard cap in cores
+      (cpuCores, fractionals OK — scaled to % of the host's total bandwidth,
+      max 10000 units; HARD_CAP Win10+, soft-rate fallback)
+- [x] Assignment at spawn (before the children!) — the process is born
+      inside its job via PROC_THREAD_ATTRIBUTE_JOB_LIST at CreateProcess:
+      no escape window, every child (java under cmd.exe) inherits the job.
+      Panel side: `cpuCores` in the contract allocation + Server entity
+      (migration 20261013160000) + create form (step 0.5) + install push;
+      adopted orphans are re-jailed at boot (children born before
+      adoption stay out — documented divergence).
 - [ ] Metrics: per-server RAM/CPU usage reading
-- [ ] Crash detection + configurable auto-restart
+- [x] Crash detection + configurable auto-restart (ported with phase 1 —
+      crash.go + anti-crash-loop)
 
 ### Phase 3 — Panel & wiring ✅ (V1)
 
@@ -432,7 +442,7 @@ Browser ◀──auth-ok + logs stream───── Agent (every incoming mess
 
 ## Pitfalls not to forget (checklist)
 
-- [ ] Job Object assigned BEFORE child processes (escape) — V2
+- [x] Job Object assigned BEFORE child processes (escape) — solved by construction: born in the job (PROC_THREAD_ATTRIBUTE_JOB_LIST)
 - [ ] Native addons never bundled in the SEA → files alongside — V2
 - [ ] SEA = CommonJS (esbuild build if ESM code) — V2
 - [ ] Local users: never Administrators, dedicated `PanelServers` group — V2

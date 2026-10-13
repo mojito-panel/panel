@@ -60,6 +60,7 @@ function NewServerPage() {
       recipeId: '',
       allocationId: '',
       memoryMb: 2048,
+      cpuCores: 2,
       variables: {} as Record<string, string | number | boolean>,
     },
     onSubmit: ({ value }) => mutation.mutate(value),
@@ -257,6 +258,31 @@ function NewServerPage() {
                     onChange={(e) => field.handleChange(Number(e.target.value))}
                     onBlur={field.handleBlur}
                   />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="cpuCores">
+              {(field) => (
+                <div className="space-y-2">
+                  <Label htmlFor="cpuCores">CPU (cœurs)</Label>
+                  <Input
+                    id="cpuCores"
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(Number(e.target.value))}
+                    onBlur={field.handleBlur}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Fractional values allowed (1.5) — 0 = unlimited.
+                  </p>
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">
                       {field.state.meta.errors[0]?.message}
