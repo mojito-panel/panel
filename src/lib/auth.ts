@@ -4,6 +4,7 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { Pool } from 'pg';
 import { APIError } from 'better-auth/api';
 import { initOrm } from '~/db';
+import { User } from '~/db/entities';
 import { isRegistrationEnabled } from '../server/settings';
 import { ac, PANEL_ROLES } from '~/lib/permissions';
 
@@ -41,6 +42,12 @@ export const auth = betterAuth({
       emailVerified: 'email_verified',
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+    },
+    additionalFields: {
+      // SFTP login (`{username}.{serverId}`) — validated by usernameSchema
+      // (~/validators/auth), lowercased by the callers, stored on the user
+      // row. Nullable: accounts created before the column existed have none.
+      username: { type: 'string', required: false },
     },
   },
   session: {
@@ -107,8 +114,8 @@ export const auth = betterAuth({
   hooks: {
     // Pelican "registration_enabled" equivalent: the /register toggle is
     // enforced at the better-auth layer, not just hidden in the UI. Only the
-    // sign-up endpoints are gated — admin user creation is direct MikroORM
-    // (server/functions/users.ts) and /setup is the first-run route.
+    // HTTP sign-up endpoints are gated — internal auth.api.* calls
+    // (admin user creation, first-run setup) skip hooks by design.
     before: async (ctx) => {
       // The sign-up endpoints are gated via the request path (the dispatch
       // context also carries `path`, but the static type only knows `request`).
@@ -117,6 +124,15 @@ export const auth = betterAuth({
       if (!(await isRegistrationEnabled(orm.em.fork()))) {
         throw new APIError('FORBIDDEN', {
           message: 'Les inscriptions sont désactivées par un administrateur',
+        });
+      }
+      // The SFTP username (user additional field) is unique — reject public
+      // registrations picking an existing one. Setup/admin creation check on
+      // their own side; the DB constraint is the last resort.
+      const username = (ctx as unknown as { body?: { username?: string } }).body?.username?.toLowerCase();
+      if (username && (await orm.em.fork().count(User, { username })) > 0) {
+        throw new APIError('CONFLICT', {
+          message: 'Ce nom d’utilisateur est déjà utilisé',
         });
       }
     },

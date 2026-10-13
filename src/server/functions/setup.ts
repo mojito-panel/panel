@@ -1,9 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { hashPassword } from 'better-auth/crypto';
 import { initOrm } from '~/db';
-import { Account, User } from '~/db/entities';
-import { nanoid } from '~/lib/nanoid';
+import { User } from '~/db/entities';
+import { auth } from '~/lib/auth';
 import { usernameSchema } from '~/validators/auth';
 import { HttpError } from '../session';
 
@@ -47,46 +46,25 @@ export const createFirstAdminFn = createServerFn({ method: 'POST' })
       throw new HttpError(403, 'La configuration initiale est déjà terminée');
     }
 
-    // Same creation pattern as createUserFn (server/functions/users.ts):
-    // direct MikroORM, scrypt password via better-auth/crypto. The
-    // credential account's accountId is the USER ID — better-auth's
-    // sign-in matches on accountId === user.id (same as its own sign-up).
-    const email = data.email.toLowerCase();
-    const username = data.username.toLowerCase();
-    const password = await hashPassword(data.password);
-    const now = new Date();
-    const user = em.create(User, {
-      id: nanoid(),
-      name: data.name,
-      username,
-      email,
-      emailVerified: true,
-      role: 'admin',
-      banned: false,
-      banReason: null,
-      banExpires: null,
-      createdAt: now,
-      updatedAt: now,
+    // better-auth's own registration builds the user + credential account
+    // (id generation, scrypt hash, accountId === user.id — see
+    // docs/concepts/users-accounts). The registration-gate hook only runs
+    // on HTTP sign-up calls, so the first-run setup can never be blocked.
+    const { user } = await auth.api.signUpEmail({
+      body: { name: data.name, email: data.email, password: data.password },
     });
-    em.persist(user);
-    em.persist(
-      em.create(Account, {
-        id: nanoid(),
-        accountId: user.id,
-        providerId: 'credential',
-        userId: user.id,
-        accessToken: null,
-        refreshToken: null,
-        idToken: null,
-        accessTokenExpiresAt: null,
-        refreshTokenExpiresAt: null,
-        scope: null,
-        password,
-        createdAt: now,
-        updatedAt: now,
-      }),
-    );
+
+    // Panel-specific fields better-auth's user model doesn't carry: the
+    // admin role for the first account, the SFTP username, a verified
+    // email (there is nobody to verify it with at first run).
+    const row = await em.findOne(User, { id: user.id });
+    if (!row) {
+      throw new HttpError(500, 'La création du compte administrateur a échoué');
+    }
+    row.role = 'admin';
+    row.username = data.username.toLowerCase();
+    row.emailVerified = true;
     await em.flush();
 
-    return { id: user.id, email: user.email, role: user.role };
+    return { id: row.id, email: row.email, role: row.role };
   });

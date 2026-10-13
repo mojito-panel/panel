@@ -1,6 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { hashPassword } from 'better-auth/crypto';
 import { initOrm } from '~/db';
 import { Account, Server, Session, ServerUser, User, PanelRole } from '~/db/entities';
 import {
@@ -8,19 +7,27 @@ import {
   requirePanelPermission,
   HttpError,
 } from '../session';
-import { nanoid } from '~/lib/nanoid';
+import { auth } from '~/lib/auth';
 import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, type PanelRoleName } from '~/lib/permissions';
 import { usernameSchema } from '~/validators/auth';
 
 /**
- * Admin panel user management — DIRECT MikroORM access (panel DB is the
- * source of truth, like everywhere else), NOT the better-auth endpoints:
- * permission checks must honor CUSTOM roles from the `role` table, and the
- * admin plugin's endpoint checks only know the static built-in roles.
+ * Admin panel user management. Roles and per-server grants live in the
+ * panel DB (source of truth), but ACCOUNT CREATION goes through
+ * better-auth's own endpoints (admin create-user / sign-up) — never
+ * hand-rolled rows: better-auth owns the user/account relationship
+ * (scrypt hash, credential accountId === user.id, see
+ * docs/concepts/users-accounts).
  *
- * The admin plugin still provides the model (role/banned/ban_* columns) and
- * enforces bans at session creation; its tables are managed by MikroORM —
- * the better-auth CLI NEVER generates a migration in this project.
+ * Authorization stays on the panel side (`requirePanelPermission`): it
+ * honors CUSTOM roles from the `role` table, which the admin plugin's
+ * endpoint checks (static built-in roles only) don't know — the creation
+ * endpoint is therefore called WITHOUT forwarding the actor's session.
+ *
+ * The admin plugin still provides the model (role/banned/ban_* columns)
+ * and enforces bans at session creation; its tables are managed by
+ * MikroORM — the better-auth CLI NEVER generates a migration in this
+ * project.
  */
 
 // ─── Guards (business rules) ────────────────────────────────────────────────
@@ -135,43 +142,29 @@ export const createUserFn = createServerFn({ method: 'POST' })
     const existingUsername = await em.findOne(User, { username });
     if (existingUsername) throw new HttpError(409, 'Ce nom d’utilisateur est déjà utilisé');
 
-    // Same password format as better-auth (scrypt) — the account can sign in
-    const password = await hashPassword(data.password);
-    const now = new Date();
-    const user = em.create(User, {
-      id: nanoid(),
-      name: data.name,
-      username,
-      email,
-      emailVerified: true,
-      role: data.role,
-      banned: false,
-      banReason: null,
-      banExpires: null,
-      createdAt: now,
-      updatedAt: now,
+    // better-auth's admin create-user endpoint builds the account rows
+    // itself (scrypt hash, credential accountId === user.id). Called
+    // WITHOUT forwarding the actor's session: authorization is the panel
+    // permission check above (custom roles), which the endpoint's own
+    // static built-in-role check doesn't know.
+    const { user } = await auth.api.createUser({
+      body: {
+        email,
+        password: data.password,
+        name: data.name,
+        data: { emailVerified: true, username },
+      },
     });
-    em.persist(user);
-    em.persist(
-      em.create(Account, {
-        id: nanoid(),
-        accountId: email,
-        providerId: 'credential',
-        userId: user.id,
-        accessToken: null,
-        refreshToken: null,
-        idToken: null,
-        accessTokenExpiresAt: null,
-        refreshTokenExpiresAt: null,
-        scope: null,
-        password,
-        createdAt: now,
-        updatedAt: now,
-      }),
-    );
+
+    // Panel-specific field better-auth's user model doesn't carry: `role`
+    // (the endpoint only accepts the static built-in role names, not
+    // custom role ids from the `role` table).
+    const target = await em.findOne(User, { id: user.id });
+    if (!target) throw new HttpError(500, 'La création du compte a échoué');
+    target.role = data.role;
     await em.flush();
 
-    return { id: user.id, email: user.email, role: user.role };
+    return { id: user.id, email: user.email, role: data.role };
   });
 
 // ─── Role change (promotion/demotion) ─────────────────────────────────────────
