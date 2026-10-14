@@ -4,9 +4,12 @@ import {
   STOP_SIGNALS,
   findToolFeatureErrors,
   safeParseRecipe,
+  safeParseRuntimeRecipe,
   validateBackupIncludePattern,
   type Recipe,
+  type RunnerAction,
   type RunnerActionInput,
+  type RuntimeRecipe,
   type StopSignal,
 } from '~/contract';
 
@@ -297,6 +300,92 @@ export type BackupValue = z.infer<typeof backupValueSchema>;
 
 // ─── Full editor value ───────────────────────────────────────────────────────
 
+/**
+ * Cross-field checks shared by the app and runtime editor schemas:
+ * duplicate variable envs, invalid variable patterns, runtime requires
+ * (valid slugs, no duplicates), duplicate export env keys, update URL.
+ */
+function refineEditorValue(
+  value: {
+    variables: RecipeVariableValue[];
+    requires: string[];
+    exportEnv: KvPair[];
+    updateUrl: string;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  // Duplicate recipe variable envs → error on each duplicate item
+  const seen = new Map<string, number>();
+  value.variables.forEach((variable, index) => {
+    if (!variable.env) return;
+    const first = seen.get(variable.env);
+    if (first !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['variables', index, 'env'],
+        message: `Variable « ${variable.env} » déjà définie`,
+      });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['variables', first, 'env'],
+        message: `Variable « ${variable.env} » déjà définie`,
+      });
+    } else {
+      seen.set(variable.env, index);
+    }
+    if (variable.pattern) {
+      try {
+        new RegExp(variable.pattern);
+      } catch {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['variables', index, 'pattern'],
+          message: 'Regex invalide',
+        });
+      }
+    }
+  });
+
+  // Runtime requires: valid slugs, no duplicates.
+  const seenRequires = new Set<string>();
+  value.requires.forEach((id, index) => {
+    if (!id) return;
+    if (!/^[a-z0-9-]+$/.test(id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['requires', index],
+        message: 'ID de runtime invalide (minuscules, chiffres, tirets)',
+      });
+    } else if (seenRequires.has(id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['requires', index],
+        message: `Runtime « ${id} » déjà requis`,
+      });
+    }
+    seenRequires.add(id);
+  });
+
+  // Duplicate keys in the export env
+  const exportKeys = new Set<string>();
+  value.exportEnv.forEach((pair, i) => {
+    if (!pair.key) return;
+    if (exportKeys.has(pair.key)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['exportEnv', i, 'key'],
+        message: `Clé « ${pair.key} » en double`,
+      });
+    }
+    exportKeys.add(pair.key);
+  });
+
+  // Update URL must be a valid URL when set
+  if (value.updateUrl && !z.url().safeParse(value.updateUrl).success) {
+    ctx.addIssue({ code: 'custom', path: ['updateUrl'], message: 'URL invalide' });
+  }
+}
+
 export const recipeEditorSchema = z
   .object({
     id: z
@@ -315,6 +404,9 @@ export const recipeEditorSchema = z
     runtime: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
     backup: backupValueSchema,
+    /** Runtime exports — used by the runtime editor only (apps have none). */
+    exportPath: z.boolean(),
+    exportEnv: z.array(kvPairSchema),
     variables: z.array(recipeVariableValueSchema),
     install: z.array(actionValueSchema),
     start: z.object({
@@ -326,57 +418,7 @@ export const recipeEditorSchema = z
     logs: logsValueSchema,
   })
   .superRefine((value, ctx) => {
-    // Duplicate recipe variable envs → error on each duplicate item
-    const seen = new Map<string, number>();
-    value.variables.forEach((variable, index) => {
-      if (!variable.env) return;
-      const first = seen.get(variable.env);
-      if (first !== undefined) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['variables', index, 'env'],
-          message: `Variable « ${variable.env} » déjà définie`,
-        });
-        ctx.addIssue({
-          code: 'custom',
-          path: ['variables', first, 'env'],
-          message: `Variable « ${variable.env} » déjà définie`,
-        });
-      } else {
-        seen.set(variable.env, index);
-      }
-      if (variable.pattern) {
-        try {
-          new RegExp(variable.pattern);
-        } catch {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['variables', index, 'pattern'],
-            message: 'Regex invalide',
-          });
-        }
-      }
-    });
-
-    // Runtime requires: valid slugs, no duplicates.
-    const seenRequires = new Set<string>();
-    value.requires.forEach((id, index) => {
-      if (!id) return;
-      if (!/^[a-z0-9-]+$/.test(id)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['requires', index],
-          message: 'ID de runtime invalide (minuscules, chiffres, tirets)',
-        });
-      } else if (seenRequires.has(id)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['requires', index],
-          message: `Runtime « ${id} » déjà requis`,
-        });
-      }
-      seenRequires.add(id);
-    });
+    refineEditorValue(value, ctx);
 
     // Duplicate keys in key/value lists
     const checkPairs = (pairs: KvPair[], path: (string | number)[]) => {
@@ -401,11 +443,6 @@ export const recipeEditorSchema = z
       ctx.addIssue({ code: 'custom', path: ['logs', 'file'], message: 'Fichier de log requis' });
     }
 
-    // Update URL must be a valid URL when set
-    if (value.updateUrl && !z.url().safeParse(value.updateUrl).success) {
-      ctx.addIssue({ code: 'custom', path: ['updateUrl'], message: 'URL invalide' });
-    }
-
     // Backup include patterns (contract validation, empty = whole dir)
     value.backup.include.forEach((pattern, index) => {
       if (!pattern) return;
@@ -417,6 +454,49 @@ export const recipeEditorSchema = z
   });
 
 export type RecipeEditorValue = z.infer<typeof recipeEditorSchema>;
+
+// ─── Runtime editor schema ───────────────────────────────────────────────────
+
+/**
+ * Validator of the RUNTIME recipe editor — the runtime-relevant fields
+ * plus the app-only ones (start/logs/backup/runtime/env) declared WITHOUT
+ * the app constraints: a runtime has none of them, they are carried in
+ * the form value for shape compatibility with the shared tab components,
+ * and never rendered nor emitted.
+ */
+export const runtimeEditorSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1, 'ID requis')
+      .regex(/^[a-z0-9-]+$/, 'Minuscules, chiffres et tirets uniquement'),
+    name: z.string().min(1, 'Nom requis'),
+    author: z.string().min(1, 'Auteur requis'),
+    description: z.string(),
+    tags: z.array(z.string()),
+    features: z.array(z.string()),
+    requires: z.array(z.string()),
+    updateUrl: z.string(),
+    requirements: requirementsValueSchema,
+    exportPath: z.boolean(),
+    exportEnv: z.array(kvPairSchema),
+    variables: z.array(recipeVariableValueSchema),
+    install: z.array(actionValueSchema),
+    // App-only fields, shape-checked but constraint-free (unused here)
+    runtime: z.array(kvPairSchema),
+    env: z.array(kvPairSchema),
+    backup: backupValueSchema,
+    start: z.object({
+      command: z.string(),
+      stop: stopValueSchema.nullable(),
+      ready: readyValueSchema.nullable(),
+      workingDirectory: z.string(),
+    }),
+    logs: logsValueSchema,
+  })
+  .superRefine((value, ctx) => {
+    refineEditorValue(value, ctx);
+  });
 
 // ─── Defaults (create) ────────────────────────────────────────────────────────
 
@@ -434,6 +514,8 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     runtime: [],
     env: [],
     backup: { include: [] },
+    exportPath: true,
+    exportEnv: [],
     variables: [],
     install: [],
     start: {
@@ -446,10 +528,114 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
   };
 }
 
+/** Same shape, pre-filled for a NEW runtime recipe (exports default on). */
+export function emptyRuntimeEditorValue(): RecipeEditorValue {
+  return { ...emptyRecipeEditorValue() };
+}
+
 // ─── Hydration (edit) ─────────────────────────────────────────────────────────
 
 function toPairs(record: Record<string, string> | undefined): KvPair[] {
   return Object.entries(record ?? {}).map(([key, value]) => ({ key, value }));
+}
+
+/** Contract variables → editor variables (defaults applied). */
+function contractVariablesToEditor(variables: Recipe['variables']): RecipeVariableValue[] {
+  return variables.map((variable) => ({
+    name: variable.name,
+    env: variable.env,
+    description: variable.description ?? '',
+    type: variable.type,
+    defaultValue: variable.defaultValue,
+    userViewable: variable.userViewable,
+    userEditable: variable.userEditable,
+    sort: variable.sort,
+    required: variable.required,
+    min: variable.min ?? 0,
+    max: variable.max ?? 0,
+    pattern: variable.pattern ?? '',
+    options: variable.options ?? [],
+  }));
+}
+
+/** Contract install steps → editor actions (flat union shape). */
+function contractActionsToEditor(install: RunnerAction[]): ActionValue[] {
+  return install.map((action): ActionValue => {
+    const base = newActionValue(action.action);
+    switch (action.action) {
+      case 'download':
+        return {
+          ...base,
+          action: 'download',
+          url: action.url,
+          dest: action.dest,
+          checksum: action.checksum ?? '',
+          headers: toPairs(action.headers),
+        };
+      case 'extract':
+        return {
+          ...base,
+          action: 'extract',
+          archive: action.archive,
+          dest: action.dest,
+          stripComponents: action.stripComponents ?? 0,
+        };
+      case 'write':
+        return { ...base, action: 'write', file: action.file, content: action.content };
+      case 'replace':
+        return {
+          ...base,
+          action: 'replace',
+          file: action.file,
+          find: action.find,
+          replace: action.replace,
+          regex: action.regex,
+        };
+      case 'configFile':
+        return {
+          ...base,
+          action: 'configFile',
+          file: action.file,
+          parser: action.parser,
+          configFind: toPairs(action.find),
+        };
+      case 'command':
+        return {
+          ...base,
+          action: 'command',
+          command: action.command,
+          cwd: action.cwd ?? '',
+          env: toPairs(action.env),
+          timeoutMs: action.timeoutMs ?? 0,
+          successCodes: (action.successCodes ?? []).map((code) => String(code)),
+          tail: action.tail
+            ? {
+                file: action.tail.file,
+                filter: action.tail.filter ?? '',
+                intervalMs: action.tail.intervalMs ?? 0,
+              }
+            : null,
+        };
+      case 'script':
+        return {
+          ...base,
+          action: 'script',
+          shell: action.shell,
+          content: action.content,
+          timeoutMs: action.timeoutMs ?? 0,
+        };
+    }
+  });
+}
+
+/** Contract requirements → editor requirements (0 = absent). */
+function contractRequirementsToEditor(requirements: Recipe['requirements']): RequirementsValue {
+  return {
+    minRamMb: requirements?.minRamMb ?? 0,
+    minDiskMb: requirements?.minDiskMb ?? 0,
+    minCpuPercent: requirements?.minCpuPercent ?? 0,
+    requiredCommands: requirements?.requiredCommands ?? [],
+  };
 }
 
 /** Parsed recipe (contract output — defaults applied) → editor value. */
@@ -463,96 +649,14 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     features: recipe.features ?? [],
     requires: recipe.requires ?? [],
     updateUrl: recipe.updateUrl ?? '',
-    requirements: {
-      minRamMb: recipe.requirements?.minRamMb ?? 0,
-      minDiskMb: recipe.requirements?.minDiskMb ?? 0,
-      minCpuPercent: recipe.requirements?.minCpuPercent ?? 0,
-      requiredCommands: recipe.requirements?.requiredCommands ?? [],
-    },
+    requirements: contractRequirementsToEditor(recipe.requirements),
     runtime: toPairs(recipe.runtime),
     env: toPairs(recipe.env),
     backup: { include: recipe.backup?.include ?? [] },
-    variables: recipe.variables.map((variable) => ({
-      name: variable.name,
-      env: variable.env,
-      description: variable.description ?? '',
-      type: variable.type,
-      defaultValue: variable.defaultValue,
-      userViewable: variable.userViewable,
-      userEditable: variable.userEditable,
-      sort: variable.sort,
-      required: variable.required,
-      min: variable.min ?? 0,
-      max: variable.max ?? 0,
-      pattern: variable.pattern ?? '',
-      options: variable.options ?? [],
-    })),
-    install: recipe.install.map((action): ActionValue => {
-      const base = newActionValue(action.action);
-      switch (action.action) {
-        case 'download':
-          return {
-            ...base,
-            action: 'download',
-            url: action.url,
-            dest: action.dest,
-            checksum: action.checksum ?? '',
-            headers: toPairs(action.headers),
-          };
-        case 'extract':
-          return {
-            ...base,
-            action: 'extract',
-            archive: action.archive,
-            dest: action.dest,
-            stripComponents: action.stripComponents ?? 0,
-          };
-        case 'write':
-          return { ...base, action: 'write', file: action.file, content: action.content };
-        case 'replace':
-          return {
-            ...base,
-            action: 'replace',
-            file: action.file,
-            find: action.find,
-            replace: action.replace,
-            regex: action.regex,
-          };
-        case 'configFile':
-          return {
-            ...base,
-            action: 'configFile',
-            file: action.file,
-            parser: action.parser,
-            configFind: toPairs(action.find),
-          };
-        case 'command':
-          return {
-            ...base,
-            action: 'command',
-            command: action.command,
-            cwd: action.cwd ?? '',
-            env: toPairs(action.env),
-            timeoutMs: action.timeoutMs ?? 0,
-            successCodes: (action.successCodes ?? []).map((code) => String(code)),
-            tail: action.tail
-              ? {
-                  file: action.tail.file,
-                  filter: action.tail.filter ?? '',
-                  intervalMs: action.tail.intervalMs ?? 0,
-                }
-              : null,
-          };
-        case 'script':
-          return {
-            ...base,
-            action: 'script',
-            shell: action.shell,
-            content: action.content,
-            timeoutMs: action.timeoutMs ?? 0,
-          };
-      }
-    }),
+    exportPath: true,
+    exportEnv: [],
+    variables: contractVariablesToEditor(recipe.variables),
+    install: contractActionsToEditor(recipe.install),
     start: {
       command: recipe.start.command,
       stop: recipe.start.stop
@@ -575,6 +679,26 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
   };
 }
 
+/** Parsed runtime recipe (contract output — defaults applied) → editor value. */
+export function runtimeRecipeToEditorValue(recipe: RuntimeRecipe): RecipeEditorValue {
+  return {
+    ...emptyRecipeEditorValue(),
+    id: recipe.id,
+    name: recipe.name,
+    author: recipe.author,
+    description: recipe.description ?? '',
+    tags: recipe.tags ?? [],
+    features: recipe.features ?? [],
+    requires: recipe.requires ?? [],
+    updateUrl: recipe.updateUrl ?? '',
+    requirements: contractRequirementsToEditor(recipe.requirements),
+    exportPath: recipe.export?.path ?? true,
+    exportEnv: toPairs(recipe.export?.env),
+    variables: contractVariablesToEditor(recipe.variables),
+    install: contractActionsToEditor(recipe.install),
+  };
+}
+
 // ─── Conversion (submit) ──────────────────────────────────────────────────────
 
 function pairsToRecord(pairs: KvPair[]): Record<string, string> | undefined {
@@ -583,16 +707,9 @@ function pairsToRecord(pairs: KvPair[]): Record<string, string> | undefined {
   return Object.fromEntries(filtered.map((pair) => [pair.key, pair.value]));
 }
 
-/**
- * Editor value → recipe JSON (contract input shape, empties stripped).
- * Returns `{ recipe }` on success, or `{ issues }` when the contract
- * schema rejects the value (final validation before send).
- */
-export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
-  recipe?: Recipe;
-  issues?: string[];
-} {
-  const variables = value.variables
+/** Editor variables → contract variables (empties stripped, sorted). */
+function editorVariablesToContract(variables: RecipeVariableValue[]) {
+  return variables
     .map((variable) => ({
       env: variable.env,
       name: variable.name,
@@ -609,8 +726,11 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
       options: variable.options.length > 0 ? variable.options : undefined,
     }))
     .sort((a, b) => a.sort - b.sort);
+}
 
-  const install = value.install.map((action): RunnerActionInput => {
+/** Editor actions → contract install steps (per-action shape). */
+function editorActionsToContract(actions: ActionValue[]): RunnerActionInput[] {
+  return actions.map((action): RunnerActionInput => {
     switch (action.action) {
       case 'download':
         return {
@@ -672,7 +792,33 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
         };
     }
   });
+}
 
+/** Editor requirements → contract requirements (0/empty = absent). */
+function editorRequirementsToContract(requirements: RequirementsValue) {
+  return requirements.minRamMb ||
+    requirements.minDiskMb ||
+    requirements.minCpuPercent ||
+    requirements.requiredCommands.length > 0
+    ? {
+        minRamMb: requirements.minRamMb || undefined,
+        minDiskMb: requirements.minDiskMb || undefined,
+        minCpuPercent: requirements.minCpuPercent || undefined,
+        requiredCommands:
+          requirements.requiredCommands.length > 0 ? requirements.requiredCommands : undefined,
+      }
+    : undefined;
+}
+
+/**
+ * Editor value → app recipe JSON (contract input shape, empties stripped).
+ * Returns `{ recipe }` on success, or `{ issues }` when the contract
+ * schema rejects the value (final validation before send).
+ */
+export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
+  recipe?: Recipe;
+  issues?: string[];
+} {
   const requires = value.requires.map((id) => id.trim()).filter(Boolean);
 
   const recipe = {
@@ -686,29 +832,15 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
     features: value.features,
     requires: requires.length > 0 ? requires : undefined,
     updateUrl: value.updateUrl || undefined,
-    requirements:
-      value.requirements.minRamMb ||
-      value.requirements.minDiskMb ||
-      value.requirements.minCpuPercent ||
-      value.requirements.requiredCommands.length > 0
-        ? {
-            minRamMb: value.requirements.minRamMb || undefined,
-            minDiskMb: value.requirements.minDiskMb || undefined,
-            minCpuPercent: value.requirements.minCpuPercent || undefined,
-            requiredCommands:
-              value.requirements.requiredCommands.length > 0
-                ? value.requirements.requiredCommands
-                : undefined,
-          }
-        : undefined,
+    requirements: editorRequirementsToContract(value.requirements),
     runtime: pairsToRecord(value.runtime),
     env: pairsToRecord(value.env),
     backup: (() => {
       const include = value.backup.include.map((p) => p.trim()).filter(Boolean);
       return include.length > 0 ? { include } : undefined;
     })(),
-    variables,
-    install,
+    variables: editorVariablesToContract(value.variables),
+    install: editorActionsToContract(value.install),
     start: {
       command: value.start.command,
       stop: value.start.stop
@@ -745,6 +877,48 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
   return {
     issues: parsed.error.issues.map(
       (issue) => `${issue.path.join('.') || 'recipe'} : ${issue.message}`,
+    ),
+  };
+}
+
+/**
+ * Runtime editor value → runtime recipe JSON (start/logs/backup are NOT
+ * part of a runtime and are dropped). Returns `{ recipe }` on success,
+ * or `{ issues }` when the contract rejects the value.
+ */
+export function runtimeEditorValueToRecipe(value: RecipeEditorValue): {
+  recipe?: RuntimeRecipe;
+  issues?: string[];
+} {
+  const requires = value.requires.map((id) => id.trim()).filter(Boolean);
+
+  const recipe = {
+    schemaVersion: 1,
+    type: 'runtime' as const,
+    id: value.id,
+    name: value.name,
+    author: value.author,
+    description: value.description || undefined,
+    tags: value.tags,
+    features: value.features,
+    requires: requires.length > 0 ? requires : undefined,
+    updateUrl: value.updateUrl || undefined,
+    requirements: editorRequirementsToContract(value.requirements),
+    variables: editorVariablesToContract(value.variables),
+    install: editorActionsToContract(value.install),
+    export: {
+      path: value.exportPath,
+      env: pairsToRecord(value.exportEnv),
+    },
+  };
+
+  const parsed = safeParseRuntimeRecipe(recipe);
+  if (parsed.success) {
+    return { recipe: parsed.data };
+  }
+  return {
+    issues: parsed.error.issues.map(
+      (issue) => `${issue.path.join('.') || 'runtime'} : ${issue.message}`,
     ),
   };
 }
@@ -787,6 +961,9 @@ export function findUnknownVariablesInEditorValue(value: RecipeEditorValue): str
     for (const pair of action.configFind) collect(pair.value);
     if (action.tail) collect(action.tail.file);
   }
+
+  // Runtime exports (runtime editor) — templated with the runtime's variables
+  for (const pair of value.exportEnv) collect(pair.value);
 
   return [...used].filter((name) => !declared.has(name));
 }

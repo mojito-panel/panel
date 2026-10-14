@@ -2,14 +2,16 @@ import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Download, Trash2 } from 'lucide-react';
-import { parseRecipe, isRuntimeRecipeJson } from '~/contract';
+import { parseRecipe, parseRuntimeRecipe, isRuntimeRecipeJson } from '~/contract';
 import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
 import { Button } from '~/components/ui/button';
 import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
-import { RuntimeJsonEditor } from '~/components/recipe-editor/runtime-json-editor';
+import { RuntimeRecipeEditor } from '~/components/recipe-editor/runtime-recipe-editor';
 import {
   recipeEditorValueToRecipe,
   recipeToEditorValue,
+  runtimeEditorValueToRecipe,
+  runtimeRecipeToEditorValue,
   type RecipeEditorValue,
 } from '~/validators/recipe-editor';
 
@@ -40,6 +42,19 @@ function EditRecipePage() {
     },
     onSuccess: async () => {
       // List only — ['recipe'] is NOT invalidated so the form keeps its state
+      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+    },
+  });
+
+  const updateRuntime = useMutation({
+    mutationFn: async (value: RecipeEditorValue) => {
+      const { recipe, issues } = runtimeEditorValueToRecipe(value);
+      if (!recipe) {
+        throw new Error(`Recette invalide : ${(issues ?? []).join(' · ')}`);
+      }
+      return updateRecipe({ data: { recipeId, json: JSON.stringify(recipe, null, 2) } });
+    },
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['recipes'] });
     },
   });
@@ -102,22 +117,19 @@ function EditRecipePage() {
     </>
   );
 
-  // Runtime recipes have no start/backup and a runtime-specific export
-  // section — the form editor is app-shaped, so they edit as raw JSON
-  // (validated client-side against the runtime schema, revalidated by the
-  // server on save).
+  // Runtime recipes get their own form editor — no start/backup, and the
+  // export section (PATH + env) replaces the app's process tabs.
   const parsed: unknown = JSON.parse(query.data.json);
   if (isRuntimeRecipeJson(parsed)) {
     return (
-      <RuntimeJsonEditor
+      <RuntimeRecipeEditor
         key={`${query.data.id}-${query.dataUpdatedAt}`}
         title={query.data.name}
-        initialJson={query.data.json}
+        initial={runtimeRecipeToEditorValue(parseRuntimeRecipe(parsed))}
+        onSubmit={(value) => updateRuntime.mutate(value)}
+        submitPending={updateRuntime.isPending}
+        submitError={updateRuntime.isError ? updateRuntime.error.message : null}
         headerActions={headerActions}
-        onSave={async (json: string) => {
-          await updateRecipe({ data: { recipeId, json } });
-          await queryClient.invalidateQueries({ queryKey: ['recipes'] });
-        }}
       />
     );
   }

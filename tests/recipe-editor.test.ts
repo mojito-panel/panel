@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { parseRecipe, safeParseRecipe } from '~/contract';
+import { parseRecipe, parseRuntimeRecipe, safeParseRecipe } from '~/contract';
 import {
   emptyRecipeEditorValue,
+  emptyRuntimeEditorValue,
   newActionValue,
   newVariableValue,
   recipeEditorValueToRecipe,
   recipeToEditorValue,
+  runtimeEditorSchema,
+  runtimeEditorValueToRecipe,
+  runtimeRecipeToEditorValue,
   findUnknownVariablesInEditorValue,
   recipeEditorSchema,
   type RecipeEditorValue,
@@ -26,6 +30,8 @@ function fullEditorValue(): RecipeEditorValue {
     runtime: [{ key: 'java', value: '>=21' }],
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],
     backup: { include: ['world', 'plugins/*', 'server.properties'] },
+    exportPath: true,
+    exportEnv: [],
     variables: [
       {
         ...newVariableValue(0),
@@ -290,5 +296,99 @@ describe('findUnknownVariablesInEditorValue', () => {
     const value = fullEditorValue();
     value.start.command = '.bin/java -jar {{SERVER_JARFILE}} {{SERVER_MEMORY}}';
     expect(findUnknownVariablesInEditorValue(value)).toEqual([]);
+  });
+});
+
+/** A complete, valid runtime editor value (java runtime-like). */
+function runtimeEditorValue(): RecipeEditorValue {
+  const value = fullEditorValue();
+  value.id = 'java';
+  value.tags = ['java', 'jdk', 'runtime'];
+  value.features = [];
+  value.requires = [];
+  value.variables = [
+    {
+      ...newVariableValue(0),
+      name: 'JDK',
+      env: 'JAVA_VERSION',
+      type: 'string',
+      defaultValue: '21',
+      options: ['11', '17', '21'],
+    },
+  ];
+  value.install = [
+    {
+      ...newActionValue('download'),
+      action: 'download',
+      url: 'https://aka.ms/jdk-{{JAVA_VERSION}}.zip',
+      dest: 'jdk.zip',
+    },
+    {
+      ...newActionValue('extract'),
+      action: 'extract',
+      archive: 'jdk.zip',
+      dest: '.',
+      stripComponents: 1,
+    },
+  ];
+  value.exportPath = true;
+  value.exportEnv = [{ key: 'JAVA_HOME', value: '{{RUNTIME_DIR}}' }];
+  return value;
+}
+
+describe('runtimeEditorValueToRecipe', () => {
+  it('converts a valid editor value into a contract-valid runtime recipe', () => {
+    const { recipe, issues } = runtimeEditorValueToRecipe(runtimeEditorValue());
+    expect(issues).toBeUndefined();
+    expect(recipe).toBeDefined();
+    expect(recipe?.schemaVersion).toBe(1);
+    expect(recipe?.type).toBe('runtime');
+    expect(recipe?.export?.path).toBe(true);
+    expect(recipe?.export?.env).toEqual({ JAVA_HOME: '{{RUNTIME_DIR}}' });
+    // The produced recipe passes the CONTRACT runtime schema (server-side check)
+    expect(() => parseRuntimeRecipe(recipe!)).not.toThrow();
+  });
+
+  it('drops the app-only fields (start, logs, backup are not part of a runtime)', () => {
+    const { recipe } = runtimeEditorValueToRecipe(runtimeEditorValue());
+    expect(recipe).not.toHaveProperty('start');
+    expect(recipe).not.toHaveProperty('logs');
+    expect(recipe).not.toHaveProperty('backup');
+  });
+
+  it('round-trips through runtimeRecipeToEditorValue without loss', () => {
+    const { recipe } = runtimeEditorValueToRecipe(runtimeEditorValue());
+    const back = runtimeRecipeToEditorValue(parseRuntimeRecipe(recipe!));
+    expect(runtimeEditorValueToRecipe(back).recipe).toEqual(recipe);
+  });
+
+  it('reports issues instead of a recipe when the contract rejects the value', () => {
+    const value = runtimeEditorValue();
+    value.id = 'UPPER CASE'; // invalid slug for the contract
+    const { recipe, issues } = runtimeEditorValueToRecipe(value);
+    expect(recipe).toBeUndefined();
+    expect(issues?.length).toBeGreaterThan(0);
+  });
+});
+
+describe('runtimeEditorSchema', () => {
+  it('rejects an empty runtime editor value (required fields)', () => {
+    const result = runtimeEditorSchema.safeParse(emptyRuntimeEditorValue());
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a complete runtime editor value (no start command required)', () => {
+    const value = runtimeEditorValue();
+    // The runtime form value carries empty app fields — they must not block it
+    expect(runtimeEditorSchema.safeParse(value).success).toBe(true);
+  });
+
+  it('rejects a duplicate export env key', () => {
+    const value = runtimeEditorValue();
+    value.exportEnv = [
+      { key: 'JAVA_HOME', value: 'a' },
+      { key: 'JAVA_HOME', value: 'b' },
+    ];
+    expect(runtimeEditorSchema.safeParse(value).success).toBe(false);
   });
 });

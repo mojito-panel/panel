@@ -4,10 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
 import { createRecipeFn } from '~/server/functions/admin';
 import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
-import {
-  RuntimeJsonEditor,
-  emptyRuntimeRecipeJson,
-} from '~/components/recipe-editor/runtime-json-editor';
+import { RuntimeRecipeEditor } from '~/components/recipe-editor/runtime-recipe-editor';
 import {
   Select,
   SelectContent,
@@ -18,6 +15,7 @@ import {
 import {
   emptyRecipeEditorValue,
   recipeEditorValueToRecipe,
+  runtimeEditorValueToRecipe,
   type RecipeEditorValue,
 } from '~/validators/recipe-editor';
 
@@ -52,7 +50,13 @@ function NewRecipePage() {
   });
 
   const createRuntime = useMutation({
-    mutationFn: (json: string) => createRecipe({ data: { json } }),
+    mutationFn: async (value: RecipeEditorValue) => {
+      const { recipe, issues } = runtimeEditorValueToRecipe(value);
+      if (!recipe) {
+        throw new Error(`Recette invalide : ${(issues ?? []).join(' · ')}`);
+      }
+      return createRecipe({ data: { json: JSON.stringify(recipe, null, 2) } });
+    },
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ['recipes'] });
       await navigate({
@@ -72,7 +76,7 @@ function NewRecipePage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="app">App (formulaire)</SelectItem>
-            <SelectItem value="runtime">Runtime (JSON)</SelectItem>
+            <SelectItem value="runtime">Runtime</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -86,12 +90,12 @@ function NewRecipePage() {
           submitError={createApp.isError ? createApp.error.message : null}
         />
       ) : (
-        <RuntimeJsonEditor
+        <RuntimeRecipeEditor
           title="Nouvelle recette runtime"
-          initialJson={emptyRuntimeRecipeJson()}
-          onSave={async (json) => {
-            await createRuntime.mutateAsync(json);
-          }}
+          initial={emptyRecipeEditorValue()}
+          onSubmit={(value) => createRuntime.mutate(value)}
+          submitPending={createRuntime.isPending}
+          submitError={createRuntime.isError ? createRuntime.error.message : null}
         />
       )}
     </div>
