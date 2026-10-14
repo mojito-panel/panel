@@ -154,7 +154,13 @@ function AdminOverviewPage() {
             {(data?.recentServers ?? []).map((server) => (
               <div key={server.id} className="flex items-center justify-between gap-4 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{server.name}</p>
+                  <Link
+                    to="/admin/servers/$serverId"
+                    params={{ serverId: server.id }}
+                    className="truncate font-medium hover:underline"
+                  >
+                    {server.name}
+                  </Link>
                   <p className="truncate text-sm text-muted-foreground">
                     {server.recipeName} · {server.nodeName} · {server.ownerEmail}
                   </p>

@@ -1,0 +1,484 @@
+import { createServerFn } from '@tanstack/react-start';
+import type { EntityManager } from '@mikro-orm/core';
+import { initOrm } from '~/db';
+import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db/entities';
+import {
+  requirePanelPermission,
+  HttpError,
+} from '../session';
+import {
+  agentGetServer,
+  agentServerAction,
+  agentReinstallServer,
+  agentInstallServer,
+  agentDeleteServer,
+  agentUpdateAllocation,
+  AgentError,
+} from '../agent/client';
+import {
+  listAdminServersSchema,
+  adminServerIdSchema,
+  updateAdminServerSchema,
+  setAdminServerSuspendedSchema,
+  adminServerAllocationActionSchema,
+} from '~/validators/admin-server';
+
+/**
+ * Admin-area server management (/admin/servers — Pelican admin "Servers"
+ * equivalent): every server of the installation, regardless of owner.
+ *
+ * Gates: `panel.servers` statements (read / update / delete). The
+ * per-server user pages keep their own `server.*` gates — these functions
+ * are the admin override path.
+ */
+
+/** Loads a server for the admin area — 404 when unknown. */
+async function loadServer(serverId: string) {
+  const orm = await initOrm();
+  const em = orm.em.fork();
+  const server = await em.findOne(Server, { id: serverId });
+  if (!server) throw new HttpError(404, 'Serveur introuvable');
+  return { orm, em, server };
+}
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+export const listAdminServersFn = createServerFn({ method: 'GET' })
+  .validator(listAdminServersSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['read'] });
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const [servers, nodes, recipes, users] = await Promise.all([
+      em.find(Server, {}),
+      em.find(Node, {}),
+      em.find(Recipe, {}),
+      em.find(User, {}),
+    ]);
+
+    const search = data.search?.toLowerCase() ?? '';
+    const ownerEmailById = new Map(users.map((user) => [user.id, user.email.toLowerCase()]));
+
+    const rows = servers
+      .filter((server) => {
+        if (data.nodeId && server.nodeId !== data.nodeId) return false;
+        if (data.status && server.status !== data.status) return false;
+        if (search) {
+          const ownerEmail = ownerEmailById.get(server.ownerId) ?? '';
+          if (
+            !server.name.toLowerCase().includes(search) &&
+            !ownerEmail.includes(search)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((server) => {
+        const owner = users.find((user) => user.id === server.ownerId);
+        return {
+          id: server.id,
+          name: server.name,
+          status: server.status,
+          suspended: server.suspended,
+          nodeId: server.nodeId,
+          nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
+          recipeName: recipes.find((r) => r.id === server.recipeId)?.name ?? '—',
+          ownerId: server.ownerId,
+          ownerName: owner?.name ?? null,
+          ownerEmail: owner?.email ?? '—',
+          createdAt: server.createdAt,
+        };
+      });
+
+    return { servers: rows };
+  });
+
+// ─── Detail (DB + live agent runtime state) ───────────────────────────────────
+
+export const getAdminServerFn = createServerFn({ method: 'GET' })
+  .validator(adminServerIdSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['read'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const [node, recipe, owner] = await Promise.all([
+      em.findOne(Node, { id: server.nodeId }),
+      em.findOne(Recipe, { id: server.recipeId }),
+      em.findOne(User, { id: server.ownerId }),
+    ]);
+    if (!node || !recipe) throw new HttpError(500, 'Configuration du serveur incomplète');
+
+    const allocations = (await em.find(Allocation, { serverId: server.id }))
+      .sort((a, b) => a.port - b.port)
+      .map(allocationDto);
+
+    // Actual runtime status (may differ from the DB — agent best-effort,
+    // an unreachable node must not break the page)
+    let runtimeStatus = server.status;
+    let runtimeState: string | null = null;
+    try {
+      const info = await agentGetServer(node, server.id);
+      runtimeStatus = info.status;
+      runtimeState = info.runtimeState ?? null;
+      // Sync the persisted status
+      if (runtimeStatus !== server.status) {
+        server.status = runtimeStatus;
+        await em.flush();
+      }
+    } catch {
+      // Agent unreachable → serve the DB state
+    }
+
+    const subuserCount = await em.count(ServerUser, { serverId: server.id });
+    const backupCount = await em.count(Backup, { serverId: server.id });
+
+    return {
+      id: server.id,
+      name: server.name,
+      status: runtimeStatus,
+      runtimeState,
+      suspended: server.suspended,
+      memoryMb: server.memoryMb,
+      cpuCores: Number(server.cpuCores),
+      backupLimit: server.backupLimit,
+      createdAt: server.createdAt,
+      updatedAt: server.updatedAt,
+      node: { id: node.id, name: node.name, fqdn: node.fqdn, sftpPort: node.sftpPort },
+      recipe: { id: recipe.id, name: recipe.name, slug: recipe.slug },
+      owner: owner
+        ? { id: owner.id, name: owner.name, email: owner.email }
+        : null,
+      allocations,
+      subuserCount,
+      backupCount,
+    };
+  });
+
+// ─── Update (name, owner transfer, limits) ────────────────────────────────────
+
+export const updateAdminServerFn = createServerFn({ method: 'POST' })
+  .validator(updateAdminServerSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    // Owner transfer: the target user must exist (Pelican owner select)
+    if (data.ownerId !== server.ownerId) {
+      const owner = await em.findOne(User, { id: data.ownerId });
+      if (!owner) throw new HttpError(404, 'Utilisateur propriétaire introuvable');
+      server.ownerId = data.ownerId;
+    }
+
+    server.name = data.name;
+    server.memoryMb = data.memoryMb;
+    server.cpuCores = data.cpuCores;
+    server.backupLimit = data.backupLimit;
+    await em.flush();
+
+    // NOTE: memory/CPU are enforced by the agent through its stored
+    // allocation — there is no sync endpoint in the contract (V1), so a
+    // limit change reaches the agent on the next full (re)install. The
+    // backup limit is panel-side only and applies immediately.
+    return { id: server.id, updated: true };
+  });
+
+// ─── Suspend / unsuspend (Pelican SuspensionService) ──────────────────────────
+
+export const setAdminServerSuspendedFn = createServerFn({ method: 'POST' })
+  .validator(setAdminServerSuspendedSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    if (data.suspended === server.suspended) {
+      return { id: server.id, suspended: server.suspended };
+    }
+
+    if (data.suspended) {
+      // Best-effort graceful stop, like wings' suspend (the panel-side flags
+      // remain the source of truth even when the agent is unreachable).
+      const node = await em.findOne(Node, { id: server.nodeId });
+      if (node) {
+        try {
+          const result = await agentServerAction(node, server.id, 'stop');
+          server.status = result.status;
+        } catch {
+          // Agent unreachable/out of sync — the start gate (serverActionFn)
+          // and the access gate (loadServerForViewer) still enforce the
+          // suspension on the panel side.
+        }
+      }
+      server.suspended = true;
+    } else {
+      server.suspended = false;
+    }
+
+    await em.flush();
+    return { id: server.id, suspended: server.suspended };
+  });
+
+// ─── Reinstall (admin variant of reinstallServerFn, panel-level gate) ─────────
+
+export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
+  .validator(adminServerIdSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    // The CURRENT recipe is sent — an update of the recipe JSON is picked
+    // up on reinstall, like an egg update in Pelican.
+    const recipe = await em.findOne(Recipe, { id: server.recipeId });
+    if (!recipe) throw new HttpError(500, 'Recette introuvable');
+
+    const allocation = (await em.find(Allocation, { serverId: server.id }))
+      .sort((a, b) => a.port - b.port)
+      .find((a) => a.primary);
+    if (!allocation) throw new HttpError(500, 'Allocation introuvable');
+
+    try {
+      const result = await agentReinstallServer(node, server.id, {
+        recipe: recipe.json,
+        variables: server.variables,
+      });
+      // The reinstall runs in the background — the admin follows it from
+      // the server's console page (live install panel)
+      server.status = 'installing';
+      await em.flush();
+      return { id: server.id, status: 'installing', message: result.message };
+    } catch (err) {
+      // The agent doesn't know the server (404): its store is only written
+      // on install SUCCESS, so a failed install — or a lost agent dataDir —
+      // leaves the panel DB and the agent out of sync. Fall back to a FULL
+      // install, rebuilt from the panel DB (same installDir convention).
+      if (err instanceof AgentError && err.statusCode === 404) {
+        try {
+          await agentInstallServer(node, {
+            serverId: server.id,
+            name: server.name,
+            recipe: recipe.json,
+            variables: server.variables,
+            installDir: `servers/${server.id}`,
+            allocation: {
+              port: allocation.port,
+              memoryMb: server.memoryMb,
+              cpuCores: Number(server.cpuCores),
+              ip: allocation.ip,
+            },
+          });
+          server.status = 'installing';
+          await em.flush();
+          return {
+            id: server.id,
+            status: 'installing',
+            message: 'Réinstallation démarrée (installation complète)',
+          };
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof AgentError) {
+            throw new HttpError(502, `Réinstallation refusée côté agent : ${fallbackErr.message}`);
+          }
+          throw fallbackErr;
+        }
+      }
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Réinstallation refusée côté agent : ${err.message}`);
+      }
+      throw err;
+    }
+  });
+
+// ─── Deletion (admin variant of deleteServerFn, panel-level gate) ────────────
+
+export const deleteAdminServerFn = createServerFn({ method: 'POST' })
+  .validator(adminServerIdSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['delete'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const node = await em.findOne(Node, { id: server.nodeId });
+
+    // Agent cleanup (tolerant: if the agent no longer knows the server, continue)
+    if (node) {
+      try {
+        await agentDeleteServer(node, server.id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!(err instanceof AgentError) || err.statusCode !== 404) {
+          throw new HttpError(502, `Suppression échouée côté agent : ${message}`);
+        }
+      }
+    }
+
+    // DB deletion — the server's allocations return to the node's free pool
+    const allocations = await em.find(Allocation, { serverId: server.id });
+    for (const allocation of allocations) {
+      allocation.serverId = null;
+      allocation.primary = false;
+    }
+    // Backups rows and sub-user grants die with the server
+    const backups = await em.find(Backup, { serverId: server.id });
+    em.remove(backups);
+    const grants = await em.find(ServerUser, { serverId: server.id });
+    em.remove(grants);
+    em.remove(server);
+    await em.flush();
+
+    return { deleted: true };
+  });
+
+// ─── Allocations (Pelican AllocationsRelationManager) ────────────────────────
+
+/**
+ * Pushes the server's primary allocation to the agent's cache — the new
+ * port/ip apply at the NEXT start. A 404 (agent out of sync) is tolerated:
+ * the panel DB remains the source of truth. Same semantics as the Network
+ * page's sync in servers.ts.
+ */
+async function pushPrimaryAllocation(
+  em: EntityManager,
+  server: { id: string; nodeId: string },
+): Promise<void> {
+  const node = await em.findOne(Node, { id: server.nodeId });
+  if (!node) return;
+  const primary = (await em.find(Allocation, { serverId: server.id })).find(
+    (a) => a.primary,
+  );
+  if (!primary) return;
+  try {
+    await agentUpdateAllocation(node, server.id, {
+      port: primary.port,
+      ip: primary.ip,
+    });
+  } catch (err) {
+    if (err instanceof AgentError && err.statusCode === 404) {
+      // tolerated — agent out of sync, DB remains the source of truth
+    } else {
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
+      }
+      throw err;
+    }
+  }
+}
+
+/** Serializable allocation DTO shared by the admin allocations queries. */
+function allocationDto(allocation: {
+  id: string;
+  ip: string;
+  port: number;
+  alias: string | null | undefined;
+  primary: boolean;
+}) {
+  return {
+    id: allocation.id,
+    ip: allocation.ip,
+    port: allocation.port,
+    alias: allocation.alias ?? null,
+    primary: allocation.primary,
+  };
+}
+
+/**
+ * Allocations of a server + the free ones of its node (Pelican
+ * AllocationsRelationManager list: claim from the pool, set primary,
+ * release).
+ */
+export const listAdminServerAllocationsFn = createServerFn({ method: 'GET' })
+  .validator(adminServerIdSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['read'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const assigned = await em.find(Allocation, { serverId: server.id });
+    const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
+    const byPort = (a: { port: number }, b: { port: number }) => a.port - b.port;
+
+    return {
+      allocations: assigned.sort(byPort).map(allocationDto),
+      free: free.sort(byPort).map(allocationDto),
+    };
+  });
+
+/** Claims a FREE allocation of the server's node and assigns it to the server. */
+export const addAdminServerAllocationFn = createServerFn({ method: 'POST' })
+  .validator(adminServerAllocationActionSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
+    if (allocation.serverId !== null) {
+      throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
+    }
+    if (allocation.nodeId !== server.nodeId) {
+      throw new HttpError(422, 'Cette allocation n’appartient pas au node du serveur');
+    }
+
+    // A server without any primary (legacy data) promotes the newcomer and
+    // syncs the agent — otherwise the primary is left untouched
+    const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
+      (a) => a.primary,
+    );
+    allocation.serverId = server.id;
+    allocation.primary = !hadPrimary;
+    await em.flush();
+
+    if (!hadPrimary) await pushPrimaryAllocation(em, server);
+    return { id: allocation.id };
+  });
+
+/**
+ * Releases a non-primary allocation — it returns to the node's free pool.
+ * The primary must be moved first (refuse otherwise, like Pelican).
+ */
+export const removeAdminServerAllocationFn = createServerFn({ method: 'POST' })
+  .validator(adminServerAllocationActionSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation || allocation.serverId !== server.id) {
+      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
+    }
+    if (allocation.primary) {
+      throw new HttpError(409, 'Définis une autre allocation principale avant de retirer celle-ci');
+    }
+
+    allocation.serverId = null;
+    allocation.primary = false;
+    await em.flush();
+
+    return { id: allocation.id };
+  });
+
+/**
+ * Sets the primary allocation (source of SERVER_PORT / SERVER_IP) and
+ * pushes it to the agent — the change applies at the next start.
+ */
+export const setPrimaryAdminServerAllocationFn = createServerFn({ method: 'POST' })
+  .validator(adminServerAllocationActionSchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    if (!allocation || allocation.serverId !== server.id) {
+      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
+    }
+
+    const assigned = await em.find(Allocation, { serverId: server.id });
+    for (const entry of assigned) {
+      entry.primary = entry.id === allocation.id;
+    }
+    await em.flush();
+
+    await pushPrimaryAllocation(em, server);
+    return { id: allocation.id };
+  });

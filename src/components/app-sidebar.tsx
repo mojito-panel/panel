@@ -84,7 +84,7 @@ const adminItems: Array<{
   permission: PermissionRequest;
 }> = [
   { title: 'Vue d’ensemble', url: '/admin', icon: LayoutDashboard, soon: false, permission: { 'panel.overview': ['read'] } },
-  { title: 'Serveurs', url: '/admin/servers', icon: Server, soon: true, permission: { 'panel.servers': ['read'] } },
+  { title: 'Serveurs', url: '/admin/servers', icon: Server, soon: false, permission: { 'panel.servers': ['read'] } },
   { title: 'Nodes', url: '/admin/nodes', icon: Network, soon: false, permission: { 'panel.nodes': ['read'] } },
   { title: 'Recettes', url: '/admin/recipes', icon: Puzzle, soon: false, permission: { 'panel.recipes': ['read'] } },
   { title: 'Utilisateurs', url: '/admin/users', icon: Users, soon: false, permission: { user: ['list'] } },
@@ -239,6 +239,21 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+            {canFromPermissions(permissions, { 'panel.servers': ['read'] }) && (
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <NavItem
+                      title="Ouvrir dans l’admin"
+                      url="/admin/servers/$serverId"
+                      icon={Shield}
+                      soon={false}
+                      params={serverParams}
+                    />
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
           </>
         ) : variant === 'admin' ? (
           <>

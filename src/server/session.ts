@@ -129,6 +129,13 @@ export async function loadServerForViewer(
 
   const isAdmin = user.role === 'admin';
   const isOwner = server.ownerId === user.id;
+
+  // Pelican semantics: a suspended server is completely hidden from its
+  // owner and sub-users — only an admin (from the admin area) can reach it.
+  if (server.suspended && !isAdmin) {
+    throw new HttpError(403, 'Ce serveur est suspendu par un administrateur');
+  }
+
   if (isAdmin || isOwner) {
     return { em, server, viewer: { isOwner, isAdmin, isSubuser: false, permissions: ALL_SERVER_PERMISSIONS } };
   }

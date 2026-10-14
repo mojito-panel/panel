@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
-import { Node, Recipe, Server, Allocation, ServerUser } from '~/db/entities';
+import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
 import type { IServer } from '~/db/types';
 import type { Recipe as RecipeContract } from '~/contract';
@@ -409,6 +409,12 @@ export const serverActionFn = createServerFn({ method: 'POST' })
       { 'server.power': [data.action] },
     );
 
+    // A suspended server can only be stopped/killed (Pelican semantics) —
+    // start/restart are refused until an admin reactivates it.
+    if (server.suspended && (data.action === 'start' || data.action === 'restart')) {
+      throw new HttpError(409, 'Ce serveur est suspendu — réactivation requise avant tout démarrage');
+    }
+
     const node = await em.findOne(Node, { id: server.nodeId });
     if (!node) throw new HttpError(500, 'Node introuvable');
 
@@ -680,9 +686,11 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
       allocation.serverId = null;
       allocation.primary = false;
     }
-    // The sub-user grants die with the server
+    // The sub-user grants and backup rows die with the server
     const grants = await em.find(ServerUser, { serverId: server.id });
     em.remove(grants);
+    const backups = await em.find(Backup, { serverId: server.id });
+    em.remove(backups);
     em.remove(server);
     await em.flush();
 

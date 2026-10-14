@@ -122,6 +122,7 @@ export const Server = defineEntity({
     recipeId: p.string().fieldName('recipe_id'),
     ownerId: p.string().fieldName('owner_id'),
     status: p.string().default('stopped'),
+    suspended: p.boolean().default(false),
     /** Memory limit (Mo) — source of SERVER_MEMORY, no host bridging in V1. */
     memoryMb: p.integer().fieldName('memory_mb').default(2048),
     /** CPU limit in cores (0 = unlimited, fractional OK — 1.5) — Job Object CPU rate. */
