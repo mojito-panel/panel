@@ -1,8 +1,20 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 import { createRecipeFn } from '~/server/functions/admin';
 import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
+import {
+  RuntimeJsonEditor,
+  emptyRuntimeRecipeJson,
+} from '~/components/recipe-editor/runtime-json-editor';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 import {
   emptyRecipeEditorValue,
   recipeEditorValueToRecipe,
@@ -18,7 +30,11 @@ function NewRecipePage() {
   const queryClient = useQueryClient();
   const createRecipe = useServerFn(createRecipeFn);
 
-  const mutation = useMutation({
+  // App recipes get the Pelican-style form editor; runtime recipes
+  // are technical artifacts authored as raw JSON.
+  const [kind, setKind] = useState<'app' | 'runtime'>('app');
+
+  const createApp = useMutation({
     mutationFn: async (value: RecipeEditorValue) => {
       const { recipe, issues } = recipeEditorValueToRecipe(value);
       if (!recipe) {
@@ -35,13 +51,49 @@ function NewRecipePage() {
     },
   });
 
+  const createRuntime = useMutation({
+    mutationFn: (json: string) => createRecipe({ data: { json } }),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await navigate({
+        to: '/admin/recipes/$recipeId',
+        params: { recipeId: result.id },
+      });
+    },
+  });
+
   return (
-    <RecipeEditor
-      title="Nouvelle recette"
-      initial={emptyRecipeEditorValue()}
-      onSubmit={(value) => mutation.mutate(value)}
-      submitPending={mutation.isPending}
-      submitError={mutation.isError ? mutation.error.message : null}
-    />
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Type de recette</span>
+        <Select value={kind} onValueChange={(value) => setKind(value as 'app' | 'runtime')}>
+          <SelectTrigger id="new-recipe-kind" className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="app">App (formulaire)</SelectItem>
+            <SelectItem value="runtime">Runtime (JSON)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {kind === 'app' ? (
+        <RecipeEditor
+          title="Nouvelle recette"
+          initial={emptyRecipeEditorValue()}
+          onSubmit={(value) => createApp.mutate(value)}
+          submitPending={createApp.isPending}
+          submitError={createApp.isError ? createApp.error.message : null}
+        />
+      ) : (
+        <RuntimeJsonEditor
+          title="Nouvelle recette runtime"
+          initialJson={emptyRuntimeRecipeJson()}
+          onSave={async (json) => {
+            await createRuntime.mutateAsync(json);
+          }}
+        />
+      )}
+    </div>
   );
 }

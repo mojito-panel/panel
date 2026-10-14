@@ -20,6 +20,7 @@ function fullEditorValue(): RecipeEditorValue {
     description: 'A test recipe',
     tags: ['minecraft'],
     features: ['eula'],
+    requires: [],
     updateUrl: 'https://example.com/recipe.json',
     requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: ['java'] },
     runtime: [{ key: 'java', value: '>=21' }],
@@ -217,6 +218,58 @@ describe('recipeEditorValueToRecipe', () => {
     const { recipe, issues } = recipeEditorValueToRecipe(value);
     expect(recipe).toBeDefined();
     expect(issues).toBeUndefined();
+  });
+
+  it('carries the required runtimes to the recipe JSON', () => {
+    const value = fullEditorValue();
+    value.requires = ['java'];
+    value.variables.push({
+      ...newVariableValue(2),
+      name: 'Java',
+      env: 'JAVA_VERSION',
+      type: 'string',
+      defaultValue: '21',
+    });
+    const { recipe, issues } = recipeEditorValueToRecipe(value);
+    expect(issues).toBeUndefined();
+    expect(recipe?.schemaVersion).toBe(1);
+    expect(recipe?.type).toBe('app');
+    expect(recipe?.requires).toEqual(['java']);
+    // The produced recipe passes the CONTRACT schema (server-side check)
+    expect(safeParseRecipe(recipe!).success).toBe(true);
+  });
+
+  it('always emits a v1 app recipe', () => {
+    const { recipe } = recipeEditorValueToRecipe(fullEditorValue());
+    expect(recipe?.schemaVersion).toBe(1);
+    expect(recipe?.type).toBe('app');
+  });
+
+  it('round-trips a recipe with requires through the editor value', () => {
+    const value = fullEditorValue();
+    value.requires = ['java'];
+    value.variables.push({
+      ...newVariableValue(2),
+      name: 'Java',
+      env: 'JAVA_VERSION',
+      type: 'string',
+      defaultValue: '21',
+    });
+    const { recipe } = recipeEditorValueToRecipe(value);
+    const back = recipeToEditorValue(parseRecipe(recipe!));
+    expect(recipeEditorValueToRecipe(back).recipe).toEqual(recipe);
+  });
+
+  it('rejects an invalid runtime id in the schema', () => {
+    const value = fullEditorValue();
+    value.requires = ['Bad ID'];
+    expect(recipeEditorSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('rejects a duplicate runtime id in the schema', () => {
+    const value = fullEditorValue();
+    value.requires = ['java', 'java'];
+    expect(recipeEditorSchema.safeParse(value).success).toBe(false);
   });
 });
 

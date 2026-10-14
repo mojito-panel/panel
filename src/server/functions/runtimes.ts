@@ -1,5 +1,5 @@
 /**
- * Runtime recipe resolution (contract v3): an app recipe's `requires` is a
+ * Runtime recipe resolution (contract): an app recipe's `requires` is a
  * list of runtime recipe ids (== their recipe slug). The panel resolves the
  * graph — transitively, cycle-checked — and pushes the resolved runtime
  * recipes with every install/reinstall request; the agent carries no

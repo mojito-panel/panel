@@ -118,7 +118,7 @@ export async function agentInstallServer(
     serverId: string;
     name: string;
     recipe: unknown;
-    /** v3: resolved runtime recipes (panel-side graph walk). */
+    /** Resolved runtime recipes (panel-side graph walk). */
     runtimes?: unknown[];
     variables: Record<string, string | number | boolean>;
     installDir: string;
@@ -155,7 +155,7 @@ export async function agentReinstallServer(
   serverId: string,
   body: {
     recipe: unknown;
-    /** v3: resolved runtime recipes (panel-side graph walk). */
+    /** Resolved runtime recipes (panel-side graph walk). */
     runtimes?: unknown[];
     variables: Record<string, string | number | boolean>;
   },

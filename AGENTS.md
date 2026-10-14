@@ -98,7 +98,7 @@ src/
 
 ## Contract conventions (src/contract)
 
-- **Recipe format v2** — feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first (no Docker, no mandatory bash script).
+- **Recipe format v1** — feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first (no Docker, no mandatory bash script).
 - **Variables**: `env` UPPERCASE (`MINECRAFT_VERSION`) + `{{ENV_VAR}}` templating everywhere. Fields: `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (regex validation, equivalent of Pelican's Laravel `rules`), `options`.
 - **Reserved system variables** (provided by the agent, not declarable): `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`.
 - **Runner actions**: `download`, `extract`, `write`, `replace`, `configFile` (`properties`/`ini`/`yaml`/`json` parsers — equivalent of Pelican's `config.files`), `command`, `script` (open fallback: `bash`/`powershell`/`cmd` shell).
@@ -110,7 +110,7 @@ src/
 - Templating resolution: system variables > server variables > recipe defaults > fixed env.
 - Unknown variable in a template = install-time error (`findUnknownVariables`).
 - Zod schemas for: panel ↔ agent API requests/responses, WS messages.
-- `schemaVersion` mandatory in every recipe JSON (v2 only).
+- `schemaVersion` mandatory in every recipe JSON (v1 only).
 
 ## Tests
 

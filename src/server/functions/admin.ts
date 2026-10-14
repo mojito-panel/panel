@@ -471,10 +471,10 @@ export const revokeAllocationFn = createServerFn({ method: 'POST' })
 
 // ─── Recipes ───────────────────────────────────────────────────────────────────
 
-/** Parses raw JSON and validates it against the contract (v2/v3 app or runtime). */
+/** Parses raw JSON and validates it against the contract (app or runtime recipe). */
 function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
   const parsed: unknown = JSON.parse(raw);
-  // v3 runtime recipes have their own schema (no start/backup) — dispatch
+  // Runtime recipes have their own schema (no start/backup) — dispatch
   // before the app schema, which rejects them (start is required there).
   if (isRuntimeRecipeJson(parsed)) {
     return parseRuntimeRecipe(parsed);
@@ -573,7 +573,7 @@ export const listRecipesFn = createServerFn({ method: 'GET' }).handler(async () 
       slug: recipe.slug,
       name: recipe.name,
       schemaVersion: recipe.schemaVersion,
-      /** v3 recipe kind — 'runtime' for runtimes, 'app' otherwise. */
+      /** Recipe kind — 'runtime' for runtimes, 'app' otherwise. */
       type: (recipe.json as { type?: 'app' | 'runtime' }).type ?? 'app',
       /** Variable definitions (auto-generated form at creation). */
       variables: def.variables ?? [],
@@ -642,7 +642,7 @@ export const getRecipeFn = createServerFn({ method: 'POST' })
 
 /**
  * Creates a new recipe from the editor UI (JSON payload validated against
- * the v2 contract). Unlike an import (upsert), a slug clash is REJECTED —
+ * the contract). Unlike an import (upsert), a slug clash is REJECTED —
  * the editor shows the conflict instead of silently overwriting.
  */
 export const createRecipeFn = createServerFn({ method: 'POST' })
@@ -681,7 +681,7 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
   });
 
 /**
- * Edits an existing recipe: the full JSON is revalidated against the v2 schema.
+ * Edits an existing recipe: the full JSON is revalidated against the contract schema.
  * The slug (id) can change — uniqueness is rechecked.
  */
 export const updateRecipeFn = createServerFn({ method: 'POST' })

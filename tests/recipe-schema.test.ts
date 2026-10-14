@@ -15,12 +15,13 @@ import {
 } from '../src/contract/recipe-schema';
 
 /**
- * Paper-style egg — covers all v2 features:
+ * Paper-style egg — covers all recipe features:
  * UPPERCASE env variables, system variables, configFile parser,
  * ready detection with strip, logs, runtime, fixed env.
  */
 const validPaperRecipe = {
-  schemaVersion: 2 as const,
+  schemaVersion: 1 as const,
+  type: 'app' as const,
   id: 'minecraft-paper',
   name: 'Paper',
   author: 'papermc',
@@ -85,14 +86,20 @@ const validPaperRecipe = {
   env: { JAVA_OPTS: '-XX:+UseG1GC' },
 };
 
-describe('recipeSchema v2', () => {
+describe('recipeSchema', () => {
   it('validates a complete Paper egg', () => {
     const result = recipeSchema.safeParse(validPaperRecipe);
     expect(result.success).toBe(true);
   });
 
   it('rejects an incorrect schemaVersion', () => {
-    const result = recipeSchema.safeParse({ ...validPaperRecipe, schemaVersion: 1 });
+    const result = recipeSchema.safeParse({ ...validPaperRecipe, schemaVersion: 2 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a missing type', () => {
+    const { type: _type, ...withoutType } = validPaperRecipe;
+    const result = recipeSchema.safeParse(withoutType);
     expect(result.success).toBe(false);
   });
 
@@ -139,7 +146,8 @@ describe('recipeSchema v2', () => {
 
   it('accepts a minimal recipe (no install, no variables)', () => {
     const minimal = {
-      schemaVersion: 2 as const,
+      schemaVersion: 1 as const,
+      type: 'app' as const,
       id: 'test',
       name: 'Test',
       author: 'me',
@@ -276,7 +284,8 @@ describe('findUnknownVariables', () => {
 
 describe('findToolFeatureErrors (java/steamcmd features interpreted by the agent)', () => {
   const base = {
-    schemaVersion: 2 as const,
+    schemaVersion: 1 as const,
+    type: 'app' as const,
     id: 'tool-recipe',
     name: 'Tools',
     author: 'me',
@@ -383,7 +392,8 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
 
 describe('backup config (recipe-declared archive contents)', () => {
   const base = {
-    schemaVersion: 2 as const,
+    schemaVersion: 1 as const,
+    type: 'app' as const,
     id: 'backup-recipe',
     name: 'Backup',
     author: 'me',

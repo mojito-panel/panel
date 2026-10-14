@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Zod schema of the recipe (egg) — v2 format.
+ * Zod schema of the recipe (egg) — v1 format (the only one).
  * Feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first:
  * no Docker, no mandatory bash script (`script` action as an open fallback).
  *
@@ -331,7 +331,7 @@ export function findToolFeatureErrors(recipe: Recipe): string[] {
   const errors: string[] = [];
   const declared = new Set(recipe.variables.map((v) => v.env));
   const hasFeature = (name: ToolFeature) => recipe.features.includes(name);
-  // v3: the same variables are consumed by the runtime recipes the app
+  // v1: the same variables are consumed by the runtime recipes the app
   // requires (the java runtime reads JAVA_VERSION, the app's own steam
   // install steps read STEAM_APP_ID) — no error then.
   const requiresRuntime = (id: string) => (recipe.requires ?? []).includes(id);
@@ -347,12 +347,12 @@ export function findToolFeatureErrors(recipe: Recipe): string[] {
       `Les variables « ${STEAM_APP_ID_ENV} »/« ${STEAM_MOD_ENV} » ne servent à rien sans la feature « steamcmd »`,
     );
   }
-  // v3: runtimes and tool features are two generations of the same
+  // Runtimes and tool features are two generations of the same
   // mechanism — a recipe must not carry both (the agent would provision
   // the same tool twice).
   if ((recipe.requires ?? []).length > 0 && (hasFeature('java') || hasFeature('steamcmd'))) {
     errors.push(
-      '« requires » (runtimes v3) et les features « java »/« steamcmd » (v2) sont exclusives',
+      '« requires » (runtimes) et les features « java »/« steamcmd » sont exclusives',
     );
   }
   return errors;
@@ -382,16 +382,16 @@ export type StartConfig = z.infer<typeof startConfigSchema>;
 // ─── Full recipe ───────────────────────────────────────────────────────────
 
 export const recipeSchema = z.object({
-  // v2 = the original app recipe; v3 = app recipe with runtime requires.
-  schemaVersion: z.union([z.literal(2), z.literal(3)]),
+  /** Recipe format version — v1 is the only supported one. */
+  schemaVersion: z.literal(1),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
   /**
-   * Recipe kind. v3 introduces runtime recipes (tools like java/steamcmd,
-   * installed inside the app's install, no start/backup) — an APP recipe
-   * may declare `type: 'app'` explicitly; absent = v2 app (back-compat).
-   * Runtime recipes are validated by `runtimeRecipeSchema`, never here.
+   * Recipe kind: 'app' (a game server, with start/backup) or 'runtime'
+   * (a tool like java/steamcmd installed inside the app's install, no
+   * start/backup). Runtime recipes are validated by `runtimeRecipeSchema`,
+   * never here.
    */
-  type: z.literal('app').optional(),
+  type: z.literal('app'),
   name: z.string().min(1),
   author: z.string().min(1),
   description: z.string().optional(),
@@ -411,7 +411,7 @@ export const recipeSchema = z.object({
   /** Fixed environment variables injected at spawn. */
   env: z.record(z.string(), z.string()).optional(),
   /**
-   * v3: runtime recipes this app requires (by their recipe id/slug) —
+   * Runtime recipes this app requires (by their recipe id/slug) —
    * needed at INSTALL *and* RUN (any recipe change re-installs the
    * server, so there is no separate install-time-only lifecycle).
    * The panel resolves the ids against its recipe table and pushes the
@@ -428,7 +428,7 @@ export type RecipeInput = z.input<typeof recipeSchema>;
 /** Input type of a runner action (fields with optional defaults). */
 export type RunnerActionInput = z.input<typeof runnerActionSchema>;
 
-// ─── Runtime recipes (v3) ────────────────────────────────────────────────────
+// ─── Runtime recipes ────────────────────────────────────────────────────────
 
 /**
  * What a runtime recipe exports to its dependents (the app and the other
@@ -445,7 +445,7 @@ export const runtimeExportSchema = z.object({
 export type RuntimeExport = z.infer<typeof runtimeExportSchema>;
 
 /**
- * A RUNTIME recipe (v3): a tool (java, steamcmd…) provisioned inside the
+ * A RUNTIME recipe: a tool (java, steamcmd…) provisioned inside the
  * app's install by the SAME runner, under the SAME job limits and sandbox
  * as the app's steps — the agent carries no tool-specific code. Minimal
  * by contract: install steps + variables only, NO start/logs/backup, no
@@ -456,7 +456,7 @@ export type RuntimeExport = z.infer<typeof runtimeExportSchema>;
  * declares the fallback default; the agent merges server > runtime.
  */
 export const runtimeRecipeSchema = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(1),
   type: z.literal('runtime'),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
   name: z.string().min(1),

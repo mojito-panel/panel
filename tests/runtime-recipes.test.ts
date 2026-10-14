@@ -26,12 +26,12 @@ function recipeFiles(dir: string, acc: Array<[string, unknown]> = []): Array<[st
 
 const FILES = recipeFiles(join(import.meta.dirname, '..', '..', 'recipes'));
 
-describe('recipes tree (contract v3)', () => {
+describe('recipes tree', () => {
   it('has files', () => {
     expect(FILES.length).toBeGreaterThanOrEqual(5);
   });
 
-  it('validates every runtime recipe against the v3 runtime schema', () => {
+  it('validates every runtime recipe against the runtime schema', () => {
     const runtimes = FILES.filter(([, json]) => isRuntimeRecipeJson(json));
     expect(runtimes.length).toBe(2); // java + steamcmd
     for (const [path, json] of runtimes) {
@@ -45,13 +45,13 @@ describe('recipes tree (contract v3)', () => {
     }
   });
 
-  it('validates every app recipe against the app schema (v2 or v3)', () => {
+  it('validates every app recipe against the app schema', () => {
     const apps = FILES.filter(([path, json]) => !isRuntimeRecipeJson(json) && !path.includes('runtimes'));
     expect(apps.length).toBe(3); // vanilla, icarus, ricochet
     for (const [, json] of apps) {
       const recipe: Recipe = parseRecipe(json);
       expect(findToolFeatureErrors(recipe)).toEqual([]);
-      // v3 apps requiring runtimes must not mix with tool features.
+      // Apps requiring runtimes must not mix with tool features.
       if ((recipe.requires ?? []).length > 0) {
         expect(recipe.features).not.toContain('java');
         expect(recipe.features).not.toContain('steamcmd');

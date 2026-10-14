@@ -308,6 +308,8 @@ export const recipeEditorSchema = z
     description: z.string(),
     tags: z.array(z.string()),
     features: z.array(z.string()),
+    /** Runtime recipe ids required by this app (java, steamcmd…). */
+    requires: z.array(z.string()),
     updateUrl: z.string(),
     requirements: requirementsValueSchema,
     runtime: z.array(kvPairSchema),
@@ -354,6 +356,26 @@ export const recipeEditorSchema = z
           });
         }
       }
+    });
+
+    // Runtime requires: valid slugs, no duplicates.
+    const seenRequires = new Set<string>();
+    value.requires.forEach((id, index) => {
+      if (!id) return;
+      if (!/^[a-z0-9-]+$/.test(id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['requires', index],
+          message: 'ID de runtime invalide (minuscules, chiffres, tirets)',
+        });
+      } else if (seenRequires.has(id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['requires', index],
+          message: `Runtime « ${id} » déjà requis`,
+        });
+      }
+      seenRequires.add(id);
     });
 
     // Duplicate keys in key/value lists
@@ -406,6 +428,7 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     description: '',
     tags: [],
     features: [],
+    requires: [],
     updateUrl: '',
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     runtime: [],
@@ -438,6 +461,7 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     description: recipe.description ?? '',
     tags: recipe.tags ?? [],
     features: recipe.features ?? [],
+    requires: recipe.requires ?? [],
     updateUrl: recipe.updateUrl ?? '',
     requirements: {
       minRamMb: recipe.requirements?.minRamMb ?? 0,
@@ -649,14 +673,18 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
     }
   });
 
+  const requires = value.requires.map((id) => id.trim()).filter(Boolean);
+
   const recipe = {
-    schemaVersion: 2,
+    schemaVersion: 1,
+    type: 'app' as const,
     id: value.id,
     name: value.name,
     author: value.author,
     description: value.description || undefined,
     tags: value.tags,
     features: value.features,
+    requires: requires.length > 0 ? requires : undefined,
     updateUrl: value.updateUrl || undefined,
     requirements:
       value.requirements.minRamMb ||

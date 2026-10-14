@@ -164,6 +164,25 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
         description="Contraintes vérifiées par l'agent avant installation/démarrage (équivalent des images Docker de Pelican)."
       >
         <div className="space-y-4">
+          <form.Field name="requires">
+            {(field) => (
+              <FieldShell
+                id="recipe-requires"
+                label="Runtimes requis"
+                hint="IDs des recettes runtime (ex : java, steamcmd) installées par l'agent dans le .bin du serveur, avant l'application. Exclusif avec les features java/steamcmd."
+                errors={field.state.meta.errors}
+              >
+                <TagsInput
+                  id="recipe-requires"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  onBlur={field.handleBlur}
+                  placeholder="java"
+                />
+              </FieldShell>
+            )}
+          </form.Field>
+
           <form.Field name="runtime">
             {(field) => (
               <FieldShell

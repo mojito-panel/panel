@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Zod schemas for the recipe server functions (import/edit/export).
- * The recipe JSON itself is validated by the contract's `parseRecipe` (v2 schema).
+ * The recipe JSON itself is validated by the contract's `parseRecipe` (v1 schema).
  */
 
 export const importRecipesSchema = z

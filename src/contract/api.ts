@@ -45,10 +45,10 @@ export const installServerRequestSchema = z.object({
   name: z.string().min(1),
   recipe: z.unknown(), // Recipe validated on the panel side, passed as-is
   /**
-   * v3: the runtime recipes resolved from the app's `requires` (panel
+   * The runtime recipes resolved from the app's `requires` (panel
    * side, transitively, in no particular order) — the agent re-sorts
-   * them topologically and validates the graph closure. Empty = v2
-   * recipe (agent-managed tool features).
+   * them topologically and validates the graph closure. Empty = no
+   * runtime (agent-managed tool features).
    */
   runtimes: z.array(z.unknown()).optional(),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
@@ -67,7 +67,7 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
 export const reinstallServerRequestSchema = z.object({
   serverId: idSchema,
   recipe: z.unknown(), // Recipe validated by the agent, passed as-is
-  /** v3: resolved runtime recipes — same as the install request. */
+  /** Resolved runtime recipes — same as the install request. */
   runtimes: z.array(z.unknown()).optional(),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });

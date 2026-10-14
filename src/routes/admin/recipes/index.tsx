@@ -42,7 +42,7 @@ function AdminRecipesPage() {
 
   // Pelican-style layout: the import panel only shows behind the header button
   const [showImport, setShowImport] = useState(false);
-  /** v3 recipe kind filter — apps and runtimes live in the same list. */
+  /** Recipe kind filter — apps and runtimes live in the same list. */
   const [typeFilter, setTypeFilter] = useState<'all' | 'app' | 'runtime'>('all');
 
   /** Batch import: textarea + .json files + URL (each optional). */
@@ -93,7 +93,7 @@ function AdminRecipesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Recettes</h1>
           <p className="text-muted-foreground">
-            Eggs (format v2, compatible Pelican-like) installables sur les serveurs.
+            Eggs (format v1, compatible Pelican-like) installables sur les serveurs.
           </p>
         </div>
         <div className="flex gap-2">
@@ -122,7 +122,7 @@ function AdminRecipesPage() {
                   id="recipeJson"
                   name="recipeJson"
                   rows={8}
-                  placeholder={'{\n  "schemaVersion": 2,\n  "id": "ma-recette",\n  …'}
+                  placeholder={'{\n  "schemaVersion": 1,\n  "type": "app",\n  "id": "ma-recette",\n  …'}
                   className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
                 />
               </div>
