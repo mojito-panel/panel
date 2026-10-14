@@ -6,7 +6,14 @@ import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
-import { parseRecipe, DEFAULT_SFTP_PORT, type Recipe as RecipeDefinition } from '~/contract';
+import {
+  parseRecipe,
+  parseRuntimeRecipe,
+  isRuntimeRecipeJson,
+  DEFAULT_SFTP_PORT,
+  type Recipe as RecipeDefinition,
+  type RuntimeRecipe,
+} from '~/contract';
 import { requireUser, requirePanelPermission, HttpError } from '../session';
 import { encryptSecret, decryptSecret } from '../crypto';
 import { agentHealth, agentGetStats, agentUpdateAllocation, AgentError } from '../agent/client';
@@ -464,9 +471,15 @@ export const revokeAllocationFn = createServerFn({ method: 'POST' })
 
 // ─── Recipes ───────────────────────────────────────────────────────────────────
 
-/** Parses raw JSON and validates it against the contract's v2 schema. */
-function parseRecipeJson(raw: string): RecipeDefinition {
-  return parseRecipe(JSON.parse(raw));
+/** Parses raw JSON and validates it against the contract (v2/v3 app or runtime). */
+function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
+  const parsed: unknown = JSON.parse(raw);
+  // v3 runtime recipes have their own schema (no start/backup) — dispatch
+  // before the app schema, which rejects them (start is required there).
+  if (isRuntimeRecipeJson(parsed)) {
+    return parseRuntimeRecipe(parsed);
+  }
+  return parseRecipe(parsed);
 }
 
 /** Readable error message (ZodError → list of fields in error). */
@@ -520,7 +533,7 @@ async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
  */
 async function upsertRecipe(
   em: EntityManager,
-  recipeJson: RecipeDefinition,
+  recipeJson: RecipeDefinition | RuntimeRecipe,
 ): Promise<{ slug: string; name: string; created: boolean }> {
   const existing = await em.findOne(Recipe, { slug: recipeJson.id });
   const now = new Date();
@@ -637,7 +650,7 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    let recipeJson: RecipeDefinition;
+    let recipeJson: RecipeDefinition | RuntimeRecipe;
     try {
       recipeJson = parseRecipeJson(data.json);
     } catch (err) {
@@ -679,7 +692,7 @@ export const updateRecipeFn = createServerFn({ method: 'POST' })
     const recipe = await em.findOne(Recipe, { id: data.recipeId });
     if (!recipe) throw new HttpError(404, 'Recette introuvable');
 
-    let recipeJson: RecipeDefinition;
+    let recipeJson: RecipeDefinition | RuntimeRecipe;
     try {
       recipeJson = parseRecipeJson(data.json);
     } catch (err) {

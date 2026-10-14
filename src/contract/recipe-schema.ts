@@ -18,6 +18,12 @@ export const RESERVED_ENV_NAMES = [
   'SERVER_PORT',
   'SERVER_IP',
   'SERVER_INSTALL_DIR',
+  // Runtime-scoped: injected by the agent ONLY while a runtime recipe's
+  // install steps run (and when resolving its export env) — it points at
+  // the runtime's own directory (.bin/<runtime-id>). Never declared as a
+  // recipe variable; app recipes receive its effect through the exported
+  // env (e.g. JAVA_HOME), never raw.
+  'RUNTIME_DIR',
 ] as const;
 
 export type ReservedEnvName = (typeof RESERVED_ENV_NAMES)[number];
@@ -325,16 +331,28 @@ export function findToolFeatureErrors(recipe: Recipe): string[] {
   const errors: string[] = [];
   const declared = new Set(recipe.variables.map((v) => v.env));
   const hasFeature = (name: ToolFeature) => recipe.features.includes(name);
+  // v3: the same variables are consumed by the runtime recipes the app
+  // requires (the java runtime reads JAVA_VERSION, the app's own steam
+  // install steps read STEAM_APP_ID) — no error then.
+  const requiresRuntime = (id: string) => (recipe.requires ?? []).includes(id);
 
   if (hasFeature('java') && !declared.has(JAVA_VERSION_ENV)) {
     errors.push(`La feature « java » requiert une variable « ${JAVA_VERSION_ENV} » déclarée`);
   }
-  if (!hasFeature('java') && declared.has(JAVA_VERSION_ENV)) {
+  if (!hasFeature('java') && !requiresRuntime('java') && declared.has(JAVA_VERSION_ENV)) {
     errors.push(`La variable « ${JAVA_VERSION_ENV} » ne sert à rien sans la feature « java »`);
   }
-  if (!hasFeature('steamcmd') && (declared.has(STEAM_APP_ID_ENV) || declared.has(STEAM_MOD_ENV))) {
+  if (!hasFeature('steamcmd') && !requiresRuntime('steamcmd') && (declared.has(STEAM_APP_ID_ENV) || declared.has(STEAM_MOD_ENV))) {
     errors.push(
       `Les variables « ${STEAM_APP_ID_ENV} »/« ${STEAM_MOD_ENV} » ne servent à rien sans la feature « steamcmd »`,
+    );
+  }
+  // v3: runtimes and tool features are two generations of the same
+  // mechanism — a recipe must not carry both (the agent would provision
+  // the same tool twice).
+  if ((recipe.requires ?? []).length > 0 && (hasFeature('java') || hasFeature('steamcmd'))) {
+    errors.push(
+      '« requires » (runtimes v3) et les features « java »/« steamcmd » (v2) sont exclusives',
     );
   }
   return errors;
@@ -364,8 +382,16 @@ export type StartConfig = z.infer<typeof startConfigSchema>;
 // ─── Full recipe ───────────────────────────────────────────────────────────
 
 export const recipeSchema = z.object({
-  schemaVersion: z.literal(2),
+  // v2 = the original app recipe; v3 = app recipe with runtime requires.
+  schemaVersion: z.union([z.literal(2), z.literal(3)]),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
+  /**
+   * Recipe kind. v3 introduces runtime recipes (tools like java/steamcmd,
+   * installed inside the app's install, no start/backup) — an APP recipe
+   * may declare `type: 'app'` explicitly; absent = v2 app (back-compat).
+   * Runtime recipes are validated by `runtimeRecipeSchema`, never here.
+   */
+  type: z.literal('app').optional(),
   name: z.string().min(1),
   author: z.string().min(1),
   description: z.string().optional(),
@@ -384,6 +410,14 @@ export const recipeSchema = z.object({
   backup: backupConfigSchema.optional(),
   /** Fixed environment variables injected at spawn. */
   env: z.record(z.string(), z.string()).optional(),
+  /**
+   * v3: runtime recipes this app requires (by their recipe id/slug) —
+   * needed at INSTALL *and* RUN (any recipe change re-installs the
+   * server, so there is no separate install-time-only lifecycle).
+   * The panel resolves the ids against its recipe table and pushes the
+   * resolved runtime recipes with the install request.
+   */
+  requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')).default([]),
 });
 
 export type Recipe = z.infer<typeof recipeSchema>;
@@ -393,6 +427,71 @@ export type RecipeInput = z.input<typeof recipeSchema>;
 
 /** Input type of a runner action (fields with optional defaults). */
 export type RunnerActionInput = z.input<typeof runnerActionSchema>;
+
+// ─── Runtime recipes (v3) ────────────────────────────────────────────────────
+
+/**
+ * What a runtime recipe exports to its dependents (the app and the other
+ * runtimes that require it), templated with the runtime's own resolved
+ * variables — `{{RUNTIME_DIR}}` points at the runtime's install dir.
+ */
+export const runtimeExportSchema = z.object({
+  /** Prepend the runtime's dir to PATH (default true — java/steamcmd binaries). */
+  path: z.boolean().default(true),
+  /** Fixed env exported to the dependents (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
+  env: z.record(z.string(), z.string()).optional(),
+});
+
+export type RuntimeExport = z.infer<typeof runtimeExportSchema>;
+
+/**
+ * A RUNTIME recipe (v3): a tool (java, steamcmd…) provisioned inside the
+ * app's install by the SAME runner, under the SAME job limits and sandbox
+ * as the app's steps — the agent carries no tool-specific code. Minimal
+ * by contract: install steps + variables only, NO start/logs/backup, no
+ * power actions of its own. A runtime may require other runtimes.
+ *
+ * Variable resolution: SERVER variables win over the runtime's own
+ * defaults — the app declares the user-facing JAVA_VERSION, the runtime
+ * declares the fallback default; the agent merges server > runtime.
+ */
+export const runtimeRecipeSchema = z.object({
+  schemaVersion: z.literal(3),
+  type: z.literal('runtime'),
+  id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
+  name: z.string().min(1),
+  author: z.string().min(1),
+  description: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  features: z.array(z.string()).default([]),
+  updateUrl: z.string().url().optional(),
+  requirements: recipeRequirementsSchema.optional(),
+  requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')).default([]),
+  variables: z.array(recipeVariableSchema).default([]),
+  install: z.array(runnerActionSchema).default([]),
+  export: runtimeExportSchema.optional(),
+});
+
+export type RuntimeRecipe = z.infer<typeof runtimeRecipeSchema>;
+
+/** Detects a runtime recipe BEFORE schema validation (dispatches the parse). */
+export function isRuntimeRecipeJson(data: unknown): boolean {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as Record<string, unknown>).type === 'runtime'
+  );
+}
+
+/** Validates a raw JSON object as a runtime recipe. Throws a ZodError. */
+export function parseRuntimeRecipe(data: unknown): RuntimeRecipe {
+  return runtimeRecipeSchema.parse(data);
+}
+
+/** Validates a raw JSON object as a runtime recipe, without throwing. */
+export function safeParseRuntimeRecipe(data: unknown) {
+  return runtimeRecipeSchema.safeParse(data);
+}
 
 // ─── Validation helpers ────────────────────────────────────────────────────
 

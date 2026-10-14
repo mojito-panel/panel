@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db/entities';
+import { resolveRuntimeRecipes } from './runtimes';
 import {
   requirePanelPermission,
   HttpError,
@@ -244,6 +245,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
     try {
       const result = await agentReinstallServer(node, server.id, {
         recipe: recipe.json,
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
       });
       // The reinstall runs in the background — the admin follows it from
@@ -262,6 +264,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
             serverId: server.id,
             name: server.name,
             recipe: recipe.json,
+            runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
             allocation: {

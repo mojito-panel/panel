@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
+import { resolveRuntimeRecipes } from './runtimes';
 import { nanoid } from '~/lib/nanoid';
 import type { IServer } from '~/db/types';
 import type { Recipe as RecipeContract } from '~/contract';
@@ -179,6 +180,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
         serverId,
         name: data.name,
         recipe: recipe.json,
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: data.variables,
         installDir: `servers/${serverId}`,
         allocation: {
@@ -291,6 +293,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
         serverId: server.id,
         name: server.name,
         recipe: recipe.json,
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
         installDir: `servers/${server.id}`,
         allocation: {
@@ -458,6 +461,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     try {
       const result = await agentReinstallServer(node, server.id, {
         recipe: recipe.json,
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
       });
       // The reinstall now runs in the background — the console shows the
@@ -476,6 +480,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
             serverId: server.id,
             name: server.name,
             recipe: recipe.json,
+            runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
             allocation: {
