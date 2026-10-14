@@ -5,7 +5,6 @@ import {
   parseRecipe,
   parseRuntimeRecipe,
   isRuntimeRecipeJson,
-  findToolFeatureErrors,
   validateBackupIncludePattern,
   type Recipe,
   type RuntimeRecipe,
@@ -50,11 +49,9 @@ describe('recipes tree', () => {
     expect(apps.length).toBe(3); // vanilla, icarus, ricochet
     for (const [, json] of apps) {
       const recipe: Recipe = parseRecipe(json);
-      expect(findToolFeatureErrors(recipe)).toEqual([]);
-      // Apps requiring runtimes must not mix with tool features.
-      if ((recipe.requires ?? []).length > 0) {
-        expect(recipe.features).not.toContain('java');
-        expect(recipe.features).not.toContain('steamcmd');
+      // Apps requiring runtimes resolve their ids as recipe slugs.
+      for (const id of recipe.requires ?? []) {
+        expect(id).toMatch(/^[a-z0-9-]+$/);
       }
     }
   });

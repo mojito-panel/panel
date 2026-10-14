@@ -23,11 +23,9 @@ function fullEditorValue(): RecipeEditorValue {
     author: 'steader@example.com',
     description: 'A test recipe',
     tags: ['minecraft'],
-    features: ['eula'],
     requires: [],
     updateUrl: 'https://example.com/recipe.json',
     requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: ['java'] },
-    runtime: [{ key: 'java', value: '>=21' }],
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],
     backup: { include: ['world', 'plugins/*', 'server.properties'] },
     exportPath: true,
@@ -144,7 +142,6 @@ describe('recipeEditorValueToRecipe', () => {
     expect(recipe?.variables).toHaveLength(2);
     expect(recipe?.variables[0].options).toEqual(['1.20.4', '1.21']);
     expect(recipe?.variables[1].min).toBe(512);
-    expect(recipe?.runtime).toEqual({ java: '>=21' });
     expect(recipe?.env).toEqual({ SERVER_JARFILE: 'server.jar' });
     expect(recipe?.install).toHaveLength(3);
     expect(recipe?.install[0]).toMatchObject({
@@ -199,31 +196,6 @@ describe('recipeEditorValueToRecipe', () => {
     value.backup = { include: ['../secrets'] };
     const result = recipeEditorSchema.safeParse(value);
     expect(result.success).toBe(false);
-  });
-
-  it('reports the java feature without a JAVA_VERSION variable (agent validation)', () => {
-    const value = fullEditorValue();
-    value.features = ['java'];
-    const { recipe, issues } = recipeEditorValueToRecipe(value);
-    expect(recipe).toBeUndefined();
-    expect(issues?.length).toBe(1);
-    expect(issues?.[0]).toContain('JAVA_VERSION');
-  });
-
-  it('accepts the java feature when the JAVA_VERSION variable is declared', () => {
-    const value = fullEditorValue();
-    value.features = ['eula', 'java'];
-    value.variables.push({
-      ...newVariableValue(2),
-      name: 'Java',
-      env: 'JAVA_VERSION',
-      type: 'string',
-      defaultValue: '21',
-      options: ['17', '21'],
-    });
-    const { recipe, issues } = recipeEditorValueToRecipe(value);
-    expect(recipe).toBeDefined();
-    expect(issues).toBeUndefined();
   });
 
   it('carries the required runtimes to the recipe JSON', () => {
@@ -304,7 +276,6 @@ function runtimeEditorValue(): RecipeEditorValue {
   const value = fullEditorValue();
   value.id = 'java';
   value.tags = ['java', 'jdk', 'runtime'];
-  value.features = [];
   value.requires = [];
   value.variables = [
     {

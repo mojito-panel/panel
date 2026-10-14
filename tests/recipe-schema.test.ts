@@ -5,12 +5,8 @@ import {
   safeParseRecipe,
   extractTemplateVars,
   findUnknownVariables,
-  findToolFeatureErrors,
   validateVariableValue,
   validateBackupIncludePattern,
-  JAVA_VERSION_ENV,
-  STEAM_APP_ID_ENV,
-  STEAM_MOD_ENV,
   type Recipe,
 } from '../src/contract/recipe-schema';
 
@@ -27,8 +23,6 @@ const validPaperRecipe = {
   author: 'papermc',
   description: 'High performance Spigot fork.',
   tags: ['minecraft', 'java'],
-  features: ['eula', 'java_version'],
-  runtime: { java: '>=21' },
   requirements: { minRamMb: 512, requiredCommands: ['java'] },
   variables: [
     {
@@ -159,7 +153,6 @@ describe('recipeSchema', () => {
       expect(result.data.variables).toEqual([]);
       expect(result.data.install).toEqual([]);
       expect(result.data.tags).toEqual([]);
-      expect(result.data.features).toEqual([]);
     }
   });
 
@@ -279,73 +272,6 @@ describe('findUnknownVariables', () => {
       ],
     });
     expect(findUnknownVariables(recipe)).toEqual(['NOT_DECLARED']);
-  });
-});
-
-describe('findToolFeatureErrors (java/steamcmd features interpreted by the agent)', () => {
-  const base = {
-    schemaVersion: 1 as const,
-    type: 'app' as const,
-    id: 'tool-recipe',
-    name: 'Tools',
-    author: 'me',
-    start: { command: 'java -jar app.jar' },
-  };
-
-  it('accepts the java feature with the JAVA_VERSION variable declared', () => {
-    const recipe = parseRecipe({
-      ...base,
-      features: ['java'],
-      variables: [{ env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' }],
-    });
-    expect(findToolFeatureErrors(recipe)).toEqual([]);
-  });
-
-  it('rejects the java feature without the JAVA_VERSION variable', () => {
-    const recipe = parseRecipe({ ...base, features: ['java'] });
-    const errors = findToolFeatureErrors(recipe);
-    expect(errors.length).toBe(1);
-    expect(errors[0]).toContain(JAVA_VERSION_ENV);
-  });
-
-  it('reports a JAVA_VERSION variable without the java feature', () => {
-    const recipe = parseRecipe({
-      ...base,
-      variables: [{ env: JAVA_VERSION_ENV, name: 'Java', type: 'string', defaultValue: '21' }],
-    });
-    expect(findToolFeatureErrors(recipe).length).toBe(1);
-  });
-
-  it('accepts the steamcmd feature with STEAM_APP_ID and STEAM_MOD declared', () => {
-    const recipe = parseRecipe({
-      ...base,
-      features: ['steamcmd'],
-      variables: [
-        { env: STEAM_APP_ID_ENV, name: 'App', type: 'string', defaultValue: '90' },
-        { env: STEAM_MOD_ENV, name: 'Mod', type: 'string', defaultValue: 'ricochet' },
-      ],
-    });
-    expect(findToolFeatureErrors(recipe)).toEqual([]);
-  });
-
-  it('accepts the steamcmd feature alone (binary on PATH, no auto-install)', () => {
-    const recipe = parseRecipe({ ...base, features: ['steamcmd'] });
-    expect(findToolFeatureErrors(recipe)).toEqual([]);
-  });
-
-  it('reports STEAM_APP_ID without the steamcmd feature', () => {
-    const recipe = parseRecipe({
-      ...base,
-      variables: [{ env: STEAM_APP_ID_ENV, name: 'App', type: 'string', defaultValue: '90' }],
-    });
-    const errors = findToolFeatureErrors(recipe);
-    expect(errors.length).toBe(1);
-    expect(errors[0]).toContain('steamcmd');
-  });
-
-  it('reports nothing for a recipe without features or tool variables', () => {
-    const recipe = parseRecipe({ ...base, features: ['eula'] });
-    expect(findToolFeatureErrors(recipe)).toEqual([]);
   });
 });
 

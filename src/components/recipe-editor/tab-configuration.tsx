@@ -2,12 +2,12 @@ import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { FieldShell, KvRows, TagsInput } from './fields';
+import { RuntimePicker } from './runtime-picker';
 import type { RecipeForm } from './recipe-editor';
 
 /**
- * Tab « Configuration » — identity, features and host requirements.
- * `runtime` (KeyValue) replaces Pelican's `docker_images`: no Docker here,
- * the constraints are checked by the agent on the host (e.g. java → >=21).
+ * Tab « Configuration » of an app recipe — identity, required runtimes
+ * and host requirements.
  */
 
 /** Row-level errors of a key/value list (`prefix[i].key` from the form errorMap). */
@@ -137,110 +137,62 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-
-          <form.Field name="features">
-            {(field) => (
-              <FieldShell
-                id="recipe-features"
-                label="Features"
-                hint="Flags à la Pelican (eula…). « java » et « steamcmd » sont interprétés par l'agent : outil préchargé dans le .bin du serveur, injecté dans le PATH (variables JAVA_VERSION / STEAM_APP_ID / STEAM_MOD)."
-                errors={field.state.meta.errors}
-              >
-                <TagsInput
-                  id="recipe-features"
-                  value={field.state.value}
-                  onChange={field.handleChange}
-                  onBlur={field.handleBlur}
-                  placeholder="eula, java_version"
-                />
-              </FieldShell>
-            )}
-          </form.Field>
         </div>
       </CardSection>
 
       <CardSection
-        title="Runtime hôte"
-        description="Contraintes vérifiées par l'agent avant installation/démarrage (équivalent des images Docker de Pelican)."
+        title="Runtimes"
+        description="Outils (java, steamcmd…) installés par l'agent dans le .bin du serveur avant l'application — le seul mécanisme d'outillage."
       >
-        <div className="space-y-4">
-          <form.Field name="requires">
-            {(field) => (
-              <FieldShell
-                id="recipe-requires"
-                label="Runtimes requis"
-                hint="IDs des recettes runtime (ex : java, steamcmd) installées par l'agent dans le .bin du serveur, avant l'application. Exclusif avec les features java/steamcmd."
-                errors={field.state.meta.errors}
-              >
-                <TagsInput
-                  id="recipe-requires"
-                  value={field.state.value}
-                  onChange={field.handleChange}
-                  onBlur={field.handleBlur}
-                  placeholder="java"
-                />
-              </FieldShell>
-            )}
-          </form.Field>
+        <form.Field name="requires">
+          {(field) => (
+            <FieldShell
+              id="recipe-requires"
+              label="Runtimes requis"
+              errors={field.state.meta.errors}
+            >
+              <RuntimePicker
+                value={field.state.value}
+                onChange={field.handleChange}
+                onBlur={field.handleBlur}
+              />
+            </FieldShell>
+          )}
+        </form.Field>
+      </CardSection>
 
-          <form.Field name="runtime">
-            {(field) => (
-              <FieldShell
-                id="recipe-runtime"
-                label="Outils requis (outil → contrainte)"
-                hint="Ex : java → « >=21 ». Les outils embarqués (.bin/java) comptent aussi."
-                errors={field.state.meta.errors}
+      <CardSection
+        title="Environnement fixe"
+        description="Variables injectées au spawn du serveur — utilisables dans les templates {{VAR}}."
+      >
+        <form.Field name="env">
+          {(field) => (
+            <FieldShell
+              id="recipe-env"
+              label="Variables d'environnement"
+              hint="Ex : SERVER_JARFILE → server.jar."
+              errors={field.state.meta.errors}
+            >
+              <form.Subscribe
+                selector={(s) =>
+                  (s.errorMap.onChange as { fields?: Record<string, readonly unknown[]> } | undefined)
+                    ?.fields ?? {}
+                }
               >
-                <form.Subscribe
-                  selector={(s) =>
-                    (s.errorMap.onChange as { fields?: Record<string, readonly unknown[]> } | undefined)
-                      ?.fields ?? {}
-                  }
-                >
-                  {(errorFields) => (
-                    <KvRows
-                      pairs={field.state.value}
-                      onChange={field.handleChange}
-                      keyPlaceholder="java"
-                      valuePlaceholder=">=21"
-                      addLabel="Ajouter un outil"
-                      errors={pairErrors('runtime', errorFields)}
-                    />
-                  )}
-                </form.Subscribe>
-              </FieldShell>
-            )}
-          </form.Field>
-
-          <form.Field name="env">
-            {(field) => (
-              <FieldShell
-                id="recipe-env"
-                label="Environnement fixe"
-                hint="Variables injectées au spawn — utilisables dans les templates {{VAR}}."
-                errors={field.state.meta.errors}
-              >
-                <form.Subscribe
-                  selector={(s) =>
-                    (s.errorMap.onChange as { fields?: Record<string, readonly unknown[]> } | undefined)
-                      ?.fields ?? {}
-                  }
-                >
-                  {(errorFields) => (
-                    <KvRows
-                      pairs={field.state.value}
-                      onChange={field.handleChange}
-                      keyPlaceholder="SERVER_JARFILE"
-                      valuePlaceholder="server.jar"
-                      addLabel="Ajouter une variable"
-                      errors={pairErrors('env', errorFields)}
-                    />
-                  )}
-                </form.Subscribe>
-              </FieldShell>
-            )}
-          </form.Field>
-        </div>
+                {(errorFields) => (
+                  <KvRows
+                    pairs={field.state.value}
+                    onChange={field.handleChange}
+                    keyPlaceholder="SERVER_JARFILE"
+                    valuePlaceholder="server.jar"
+                    addLabel="Ajouter une variable"
+                    errors={pairErrors('env', errorFields)}
+                  />
+                )}
+              </form.Subscribe>
+            </FieldShell>
+          )}
+        </form.Field>
       </CardSection>
 
       <CardSection

@@ -48,7 +48,7 @@ export const installServerRequestSchema = z.object({
    * The runtime recipes resolved from the app's `requires` (panel
    * side, transitively, in no particular order) — the agent re-sorts
    * them topologically and validates the graph closure. Empty = no
-   * runtime (agent-managed tool features).
+   * runtime required.
    */
   runtimes: z.array(z.unknown()).optional(),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),

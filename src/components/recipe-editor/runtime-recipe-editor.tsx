@@ -13,6 +13,7 @@ import {
   type RecipeEditorValue,
 } from '~/validators/recipe-editor';
 import { FieldShell, KvRows, TagsInput } from './fields';
+import { RuntimePicker } from './runtime-picker';
 import type { RecipeForm } from './recipe-editor';
 import { VariablesTab } from './tab-variables';
 import { InstallTab } from './tab-install';
@@ -288,25 +289,6 @@ function RuntimeConfigurationTab({ form }: { form: RuntimeForm }) {
               </FieldShell>
             )}
           </form.Field>
-
-          <form.Field name="features">
-            {(field) => (
-              <FieldShell
-                id="runtime-features"
-                label="Features"
-                hint="Flags à la Pelican (descriptifs — un runtime n'a pas de features d'outils)."
-                errors={field.state.meta.errors}
-              >
-                <TagsInput
-                  id="runtime-features"
-                  value={field.state.value}
-                  onChange={field.handleChange}
-                  onBlur={field.handleBlur}
-                  placeholder="eula"
-                />
-              </FieldShell>
-            )}
-          </form.Field>
         </div>
       </CardSection>
 
@@ -318,16 +300,14 @@ function RuntimeConfigurationTab({ form }: { form: RuntimeForm }) {
           {(field) => (
             <FieldShell
               id="runtime-requires"
-              label="IDs des runtimes dépendances"
+              label="Dépendances"
               hint="Ex : java pour un runtime qui a besoin d'un JDK."
               errors={field.state.meta.errors}
             >
-              <TagsInput
-                id="runtime-requires"
+              <RuntimePicker
                 value={field.state.value}
                 onChange={field.handleChange}
                 onBlur={field.handleBlur}
-                placeholder="java"
               />
             </FieldShell>
           )}

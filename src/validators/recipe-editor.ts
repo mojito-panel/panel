@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   RESERVED_ENV_NAMES,
   STOP_SIGNALS,
-  findToolFeatureErrors,
   safeParseRecipe,
   safeParseRuntimeRecipe,
   validateBackupIncludePattern,
@@ -396,12 +395,10 @@ export const recipeEditorSchema = z
     author: z.string().min(1, 'Auteur requis'),
     description: z.string(),
     tags: z.array(z.string()),
-    features: z.array(z.string()),
     /** Runtime recipe ids required by this app (java, steamcmd…). */
     requires: z.array(z.string()),
     updateUrl: z.string(),
     requirements: requirementsValueSchema,
-    runtime: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
     backup: backupValueSchema,
     /** Runtime exports — used by the runtime editor only (apps have none). */
@@ -435,7 +432,6 @@ export const recipeEditorSchema = z
         keys.add(pair.key);
       });
     };
-    checkPairs(value.runtime, ['runtime']);
     checkPairs(value.env, ['env']);
 
     // Logs file required when following a file
@@ -474,7 +470,6 @@ export const runtimeEditorSchema = z
     author: z.string().min(1, 'Auteur requis'),
     description: z.string(),
     tags: z.array(z.string()),
-    features: z.array(z.string()),
     requires: z.array(z.string()),
     updateUrl: z.string(),
     requirements: requirementsValueSchema,
@@ -483,7 +478,6 @@ export const runtimeEditorSchema = z
     variables: z.array(recipeVariableValueSchema),
     install: z.array(actionValueSchema),
     // App-only fields, shape-checked but constraint-free (unused here)
-    runtime: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
     backup: backupValueSchema,
     start: z.object({
@@ -507,11 +501,9 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     author: '',
     description: '',
     tags: [],
-    features: [],
     requires: [],
     updateUrl: '',
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
-    runtime: [],
     env: [],
     backup: { include: [] },
     exportPath: true,
@@ -646,11 +638,9 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     author: recipe.author,
     description: recipe.description ?? '',
     tags: recipe.tags ?? [],
-    features: recipe.features ?? [],
     requires: recipe.requires ?? [],
     updateUrl: recipe.updateUrl ?? '',
     requirements: contractRequirementsToEditor(recipe.requirements),
-    runtime: toPairs(recipe.runtime),
     env: toPairs(recipe.env),
     backup: { include: recipe.backup?.include ?? [] },
     exportPath: true,
@@ -688,7 +678,6 @@ export function runtimeRecipeToEditorValue(recipe: RuntimeRecipe): RecipeEditorV
     author: recipe.author,
     description: recipe.description ?? '',
     tags: recipe.tags ?? [],
-    features: recipe.features ?? [],
     requires: recipe.requires ?? [],
     updateUrl: recipe.updateUrl ?? '',
     requirements: contractRequirementsToEditor(recipe.requirements),
@@ -829,11 +818,9 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
     author: value.author,
     description: value.description || undefined,
     tags: value.tags,
-    features: value.features,
     requires: requires.length > 0 ? requires : undefined,
     updateUrl: value.updateUrl || undefined,
     requirements: editorRequirementsToContract(value.requirements),
-    runtime: pairsToRecord(value.runtime),
     env: pairsToRecord(value.env),
     backup: (() => {
       const include = value.backup.include.map((p) => p.trim()).filter(Boolean);
@@ -867,11 +854,6 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
 
   const parsed = safeParseRecipe(recipe);
   if (parsed.success) {
-    // Tool features (java, steamcmd) — same upfront check the agent runs at install
-    const toolErrors = findToolFeatureErrors(parsed.data);
-    if (toolErrors.length > 0) {
-      return { issues: toolErrors };
-    }
     return { recipe: parsed.data };
   }
   return {
@@ -900,7 +882,6 @@ export function runtimeEditorValueToRecipe(value: RecipeEditorValue): {
     author: value.author,
     description: value.description || undefined,
     tags: value.tags,
-    features: value.features,
     requires: requires.length > 0 ? requires : undefined,
     updateUrl: value.updateUrl || undefined,
     requirements: editorRequirementsToContract(value.requirements),
