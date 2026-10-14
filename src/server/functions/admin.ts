@@ -573,6 +573,8 @@ export const listRecipesFn = createServerFn({ method: 'GET' }).handler(async () 
       slug: recipe.slug,
       name: recipe.name,
       schemaVersion: recipe.schemaVersion,
+      /** v3 recipe kind — 'runtime' for runtimes, 'app' otherwise. */
+      type: (recipe.json as { type?: 'app' | 'runtime' }).type ?? 'app',
       /** Variable definitions (auto-generated form at creation). */
       variables: def.variables ?? [],
       /** Update URL (re-import) if defined by the recipe. */

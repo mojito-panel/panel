@@ -42,6 +42,8 @@ function AdminRecipesPage() {
 
   // Pelican-style layout: the import panel only shows behind the header button
   const [showImport, setShowImport] = useState(false);
+  /** v3 recipe kind filter — apps and runtimes live in the same list. */
+  const [typeFilter, setTypeFilter] = useState<'all' | 'app' | 'runtime'>('all');
 
   /** Batch import: textarea + .json files + URL (each optional). */
   const onImportSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -192,7 +194,36 @@ function AdminRecipesPage() {
       {/* ─── Recipe list ─── */}
       <Card>
         <CardContent className="space-y-4">
-          {(query.data ?? []).length > 0 ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Type
+            </p>
+            <div className="flex gap-1">
+              {(
+                [
+                  ['all', 'Toutes'],
+                  ['app', 'Applications'],
+                  ['runtime', 'Runtimes'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTypeFilter(value)}
+                  className={
+                    'rounded-md px-3 py-1 text-xs transition-colors ' +
+                    (typeFilter === value
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80')
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(query.data ?? []).filter((recipe) => typeFilter === 'all' || recipe.type === typeFilter)
+            .length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -204,7 +235,9 @@ function AdminRecipesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {(query.data ?? []).map((recipe) => (
+                  {(query.data ?? [])
+                    .filter((recipe) => typeFilter === 'all' || recipe.type === typeFilter)
+                    .map((recipe) => (
                     <tr key={recipe.id}>
                       <td className="py-2 pr-4">
                         <Link
@@ -214,6 +247,11 @@ function AdminRecipesPage() {
                         >
                           {recipe.name}
                         </Link>
+                        {recipe.type === 'runtime' && (
+                          <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            runtime
+                          </span>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           {recipe.slug} · v{recipe.schemaVersion}
                         </p>
