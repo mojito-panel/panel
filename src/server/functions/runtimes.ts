@@ -7,6 +7,7 @@
  */
 import type { EntityManager } from '@mikro-orm/core';
 import { Recipe } from '~/db/entities';
+import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 
 export class RuntimeResolutionError extends Error {}
 
@@ -41,7 +42,8 @@ export async function resolveRuntimeRecipes(
         `La recette « ${id} » n'est pas un runtime (type: ${String(json?.type)})`,
       );
     }
-    resolved.push(json);
+    // Stored v3 runtime rows are upgraded to v1 before the agent push.
+    resolved.push(normalizeStoredRecipe(json));
     if (Array.isArray(json.requires)) {
       queue.push(...(json.requires as string[]));
     }

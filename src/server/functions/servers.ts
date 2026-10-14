@@ -3,6 +3,7 @@ import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
 import { resolveRuntimeRecipes } from './runtimes';
+import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import { nanoid } from '~/lib/nanoid';
 import type { IServer } from '~/db/types';
 import type { Recipe as RecipeContract } from '~/contract';
@@ -179,7 +180,7 @@ export const installServerFn = createServerFn({ method: 'POST' })
       await agentInstallServer(node, {
         serverId,
         name: data.name,
-        recipe: recipe.json,
+        recipe: normalizeStoredRecipe(recipe.json),
         runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: data.variables,
         installDir: `servers/${serverId}`,
@@ -292,7 +293,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
       await agentInstallServer(node, {
         serverId: server.id,
         name: server.name,
-        recipe: recipe.json,
+        recipe: normalizeStoredRecipe(recipe.json),
         runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
         installDir: `servers/${server.id}`,
@@ -460,7 +461,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
 
     try {
       const result = await agentReinstallServer(node, server.id, {
-        recipe: recipe.json,
+        recipe: normalizeStoredRecipe(recipe.json),
         runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
       });
@@ -479,7 +480,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
           await agentInstallServer(node, {
             serverId: server.id,
             name: server.name,
-            recipe: recipe.json,
+            recipe: normalizeStoredRecipe(recipe.json),
             runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,

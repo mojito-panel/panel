@@ -6,6 +6,7 @@ import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
+import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import {
   parseRecipe,
   parseRuntimeRecipe,
@@ -636,7 +637,7 @@ export const getRecipeFn = createServerFn({ method: 'POST' })
       name: recipe.name,
       schemaVersion: recipe.schemaVersion,
       /** Pretty-printed raw JSON — used for editing AND export. */
-      json: JSON.stringify(recipe.json, null, 2),
+      json: JSON.stringify(normalizeStoredRecipe(recipe.json), null, 2),
     };
   });
 
