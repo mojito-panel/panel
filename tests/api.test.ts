@@ -76,6 +76,56 @@ describe('installServerRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts a fractional cpuCores and defaults it to 0', () => {
+    const fractional = installServerRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'my-server',
+      recipe: {},
+      variables: {},
+      installDir: '/tmp',
+      allocation: { port: 25565, memoryMb: 4096, cpuCores: 1.5 },
+    });
+    expect(fractional.success).toBe(true);
+    if (fractional.success) {
+      expect(fractional.data.allocation.cpuCores).toBe(1.5);
+    }
+
+    const omitted = installServerRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'my-server',
+      recipe: {},
+      variables: {},
+      installDir: '/tmp',
+      allocation: { port: 25565, memoryMb: 4096 },
+    });
+    expect(omitted.success).toBe(true);
+    if (omitted.success) {
+      expect(omitted.data.allocation.cpuCores).toBe(0); // 0 = unlimited
+    }
+  });
+
+  it('rejects a negative or oversized cpuCores', () => {
+    const base = {
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'my-server',
+      recipe: {},
+      variables: {},
+      installDir: '/tmp',
+    };
+    expect(
+      installServerRequestSchema.safeParse({
+        ...base,
+        allocation: { port: 25565, memoryMb: 4096, cpuCores: -0.5 },
+      }).success,
+    ).toBe(false);
+    expect(
+      installServerRequestSchema.safeParse({
+        ...base,
+        allocation: { port: 25565, memoryMb: 4096, cpuCores: 2048 },
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects an empty serverId', () => {
     const result = installServerRequestSchema.safeParse({
       serverId: '',
@@ -360,6 +410,9 @@ describe('consoleServerMessageSchema', () => {
 
   it('validates a status and an error', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'running' }).success).toBe(true);
+    // Every runtime status flows over the WS — starting/stopping included.
+    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'starting' }).success).toBe(true);
+    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'stopping' }).success).toBe(true);
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(true);
   });
 

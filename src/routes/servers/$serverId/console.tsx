@@ -138,6 +138,10 @@ function ServerConsolePage() {
 
   const server = query.data;
   const isRunning = server?.status === 'running';
+  // Process up (starting / running / stopping) — stop/kill make sense in
+  // all three (a server stuck in "starting" must be stoppable), commands
+  // reach the stdin of a live process.
+  const isAlive = isRunning || server?.status === 'starting' || server?.status === 'stopping';
 
   // Per-server grants (sub-users) — hide what the viewer may not do. The
   // console JWT carries the same permissions: the agent refuses anyway.
@@ -206,7 +210,7 @@ function ServerConsolePage() {
           {canStart && (
             <Button
               onClick={() => runAction('start')}
-              disabled={action.isPending || isRunning}
+              disabled={action.isPending || isAlive}
             >
               <Play />
               Démarrer
@@ -216,7 +220,7 @@ function ServerConsolePage() {
             <Button
               variant="secondary"
               onClick={() => runAction('stop')}
-              disabled={action.isPending || !isRunning}
+              disabled={action.isPending || !isAlive}
             >
               <Square />
               Arrêter
@@ -226,7 +230,7 @@ function ServerConsolePage() {
             <Button
               variant="outline"
               onClick={() => runAction('restart')}
-              disabled={action.isPending || !isRunning}
+              disabled={action.isPending || !isAlive}
             >
               <RotateCw />
               Redémarrer
@@ -238,7 +242,7 @@ function ServerConsolePage() {
               onClick={() => {
                 if (confirm('Forcer l’arrêt du process ?')) runAction('kill');
               }}
-              disabled={action.isPending || !isRunning}
+              disabled={action.isPending || !isAlive}
             >
               <Skull />
               Kill
@@ -254,7 +258,7 @@ function ServerConsolePage() {
       <Card>
         <CardHeader>
           <CardTitle>Console</CardTitle>
-          <CardDescription>{consoleCaption(consoleMode, installActive, isRunning)}</CardDescription>
+          <CardDescription>{consoleCaption(consoleMode, installActive, isAlive)}</CardDescription>
         </CardHeader>
         <CardContent>
           <XtermConsole
@@ -271,12 +275,12 @@ function ServerConsolePage() {
           <CardFooter>
             <form onSubmit={handleCommand} className="flex w-full gap-2">
               <Input
-                placeholder={isRunning ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
+                placeholder={isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                disabled={!isRunning || submitCommand.isPending}
+                disabled={!isAlive || submitCommand.isPending}
               />
-              <Button type="submit" disabled={!isRunning || submitCommand.isPending || !command.trim()}>
+              <Button type="submit" disabled={!isAlive || submitCommand.isPending || !command.trim()}>
                 <Send />
                 Envoyer
               </Button>

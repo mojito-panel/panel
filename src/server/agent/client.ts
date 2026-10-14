@@ -76,7 +76,7 @@ export interface AgentInstallResponse {
 export interface AgentServerInfo {
   serverId: string;
   name: string;
-  status: 'installing' | 'stopped' | 'running' | 'crashed';
+  status: 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
   runtimeState?: string;
   logs?: string[];
 }
@@ -85,7 +85,7 @@ export interface AgentLogsChunk {
   serverId: string;
   lines: string[];
   next: number;
-  status: 'installing' | 'stopped' | 'running' | 'crashed';
+  status: 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
   runtimeState?: string;
 }
 
@@ -120,7 +120,7 @@ export async function agentInstallServer(
     recipe: unknown;
     variables: Record<string, string | number | boolean>;
     installDir: string;
-    allocation: { port: number; memoryMb: number; ip?: string };
+    allocation: { port: number; memoryMb: number; cpuCores: number; ip?: string };
   },
 ): Promise<AgentInstallResponse> {
   return agentCall(node, '/servers/install', { method: 'POST', body });

@@ -13,6 +13,11 @@ export const createServerSchema = z.object({
     .int()
     .min(512, 'La RAM doit être >= 512 Mo')
     .max(65536, 'La RAM doit être <= 65536 Mo'),
+  /** CPU limit in cores — floats allowed (1.5), 0 = unlimited. */
+  cpuCores: z
+    .number()
+    .min(0, 'Le CPU doit être >= 0 cœurs (0 = illimité)')
+    .max(1024, 'Le CPU doit être <= 1024 cœurs'),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 

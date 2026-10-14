@@ -115,7 +115,7 @@ function ServerVariablesPage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="space-y-6">
       {/* ─── Editable variables (Pelican: "Startup" > variable list) ─── */}
       <Card>
         <CardHeader>

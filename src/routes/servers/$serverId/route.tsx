@@ -4,7 +4,6 @@ import { useServerFn } from '@tanstack/react-start';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { AppSidebar, type PanelServerStatus } from '~/components/app-sidebar';
-import { StatusBadge } from '~/components/status-badge';
 import { AppShell } from '~/components/app-shell';
 import { getServerFn } from '~/server/functions/servers';
 
@@ -53,7 +52,7 @@ function ServerLayout() {
           header={
             <>
               <span className="text-sm font-medium">{server?.name ?? '…'}</span>
-              {status && <StatusBadge status={status} />}
+              <span className="text-sm text-muted-foreground">· {server?.recipe?.name ?? ''}</span>
             </>
           }
         >

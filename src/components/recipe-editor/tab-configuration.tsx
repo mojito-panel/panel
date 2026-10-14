@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { FieldShell, KvRows, TagsInput } from './fields';
@@ -26,13 +26,12 @@ export function pairErrors(
 
 export function ConfigurationTab({ form }: { form: RecipeForm }) {
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Identité</CardTitle>
-          <CardDescription>Nom, auteur et description de la recette.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+    <div className="divide-y">
+      <CardSection
+        title="Identité"
+        description="Nom, auteur et description de la recette."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
           <form.Field name="id">
             {(field) => (
               <FieldShell
@@ -157,18 +156,14 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Runtime hôte</CardTitle>
-          <CardDescription>
-            Contraintes vérifiées par l'agent avant installation/démarrage
-            (équivalent des images Docker de Pelican).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Runtime hôte"
+        description="Contraintes vérifiées par l'agent avant installation/démarrage (équivalent des images Docker de Pelican)."
+      >
+        <div className="space-y-4">
           <form.Field name="runtime">
             {(field) => (
               <FieldShell
@@ -226,17 +221,14 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Prérequis</CardTitle>
-          <CardDescription>
-            Refusés par l'agent si la machine ne convient pas (0 = aucun).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <CardSection
+        title="Prérequis"
+        description="Refusés par l'agent si la machine ne convient pas (0 = aucun)."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
           <form.Field name="requirements.minRamMb">
             {(field) => (
               <FieldShell id="recipe-min-ram" label="RAM minimale (Mo)" errors={field.state.meta.errors}>
@@ -297,20 +289,14 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sauvegardes</CardTitle>
-          <CardDescription>
-            Motifs d'inclusion (globs relatifs à la racine du serveur) du
-            contenu des sauvegardes. Vide = tout le serveur ; le dossier .bin
-            de l'agent est toujours exclu.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form.Field name="backup.include">
+      <CardSection
+        title="Sauvegardes"
+        description="Motifs d'inclusion (globs relatifs à la racine du serveur) du contenu des sauvegardes. Vide = tout le serveur ; le dossier .bin de l'agent est toujours exclu."
+      >
+        <form.Field name="backup.include">
             {(field) => (
               <FieldShell
                 id="recipe-backup-include"
@@ -328,8 +314,7 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+      </CardSection>
     </div>
   );
 }

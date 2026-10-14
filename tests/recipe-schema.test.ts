@@ -173,6 +173,28 @@ describe('recipeSchema v2', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts a signal stop with a known signal', () => {
+    for (const value of ['SIGINT', 'SIGTERM', 'SIGKILL']) {
+      const result = recipeSchema.safeParse({
+        ...validPaperRecipe,
+        start: { ...validPaperRecipe.start, stop: { type: 'signal', value } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.start.stop?.value).toBe(value);
+        expect(result.data.start.stop?.timeoutMs).toBe(30000);
+      }
+    }
+  });
+
+  it('rejects a signal stop with an unknown signal', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
+      start: { ...validPaperRecipe.start, stop: { type: 'signal', value: 'SIGSTOP' } },
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('applies Pelican-style defaults to variables', () => {
     const result = recipeSchema.safeParse({
       ...validPaperRecipe,

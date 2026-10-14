@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { AlertTriangle, Save } from 'lucide-react';
 import { Button } from '~/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { TabsCard } from '~/components/tabs-card';
 import {
   findUnknownVariablesInEditorValue,
   recipeEditorSchema,
@@ -133,27 +133,15 @@ export function RecipeEditor({
         }}
       </form.Subscribe>
 
-      <Tabs defaultValue="configuration">
-        <TabsList>
-          <TabsTrigger value="configuration">Configuration</TabsTrigger>
-          <TabsTrigger value="process">Démarrage</TabsTrigger>
-          <TabsTrigger value="variables">Variables</TabsTrigger>
-          <TabsTrigger value="install">Installation</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="configuration" className="mt-4">
-          <ConfigurationTab form={form} />
-        </TabsContent>
-        <TabsContent value="process" className="mt-4">
-          <ProcessTab form={form} />
-        </TabsContent>
-        <TabsContent value="variables" className="mt-4">
-          <VariablesTab form={form} />
-        </TabsContent>
-        <TabsContent value="install" className="mt-4">
-          <InstallTab form={form} />
-        </TabsContent>
-      </Tabs>
+      <TabsCard
+        defaultValue="configuration"
+        tabs={[
+          { value: 'configuration', label: 'Configuration', content: <ConfigurationTab form={form} /> },
+          { value: 'process', label: 'Démarrage', content: <ProcessTab form={form} /> },
+          { value: 'variables', label: 'Variables', content: <VariablesTab form={form} /> },
+          { value: 'install', label: 'Installation', content: <InstallTab form={form} /> },
+        ]}
+      />
     </div>
   );
 }

@@ -69,7 +69,7 @@ export const Verification = defineEntity({
   },
 });
 
-// ─── Business domain (MikroORM migrations, phase 3) ────────────────────────────────────
+// ─── Business domain (Node, Recipe, Server, Allocation — migrations managed by MikroORM) ──
 
 export const Node = defineEntity({
   name: 'node',
@@ -124,6 +124,8 @@ export const Server = defineEntity({
     status: p.string().default('stopped'),
     /** Memory limit (Mo) — source of SERVER_MEMORY, no host bridging in V1. */
     memoryMb: p.integer().fieldName('memory_mb').default(2048),
+    /** CPU limit in cores (0 = unlimited, fractional OK — 1.5) — Job Object CPU rate. */
+    cpuCores: p.double().fieldName('cpu_cores').default(0),
     /** Max non-failed backups kept for this server (0 = backups disabled). */
     backupLimit: p.integer().fieldName('backup_limit').default(5),
     variables: p.json<Record<string, string | number | boolean>>(),

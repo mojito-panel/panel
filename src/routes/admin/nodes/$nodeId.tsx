@@ -17,7 +17,7 @@ import type { NodeScheme } from '~/validators/node';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { CardSection, TabsCard } from '~/components/tabs-card';
 import {
   Select,
   SelectContent,
@@ -25,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Trash2 } from 'lucide-react';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
@@ -34,9 +33,10 @@ export const Route = createFileRoute('/admin/nodes/$nodeId')({
 
 /**
  * Node edit page — Pelican panel layout (Filament NodeResource): a record
- * page with tabs. Overview (live agent version + counters) / basic settings
- * (name, fqdn, port) / config file (generated shard.yml + token reset,
- * since the token is encrypted at rest and only displayable once).
+ * page with tabs in the card header. Overview (live agent version +
+ * counters) / basic settings (name, fqdn, port) / config file (generated
+ * shard.yml + token reset, since the token is encrypted at rest and only
+ * displayable once).
  */
 function AdminNodeEditPage() {
   const { nodeId } = Route.useParams();
@@ -98,108 +98,115 @@ function AdminNodeEditPage() {
       </p>
 
       {/* ─── Tabs (Pelican detailTabs: overview / basic settings / allocations / config) ── */}
-      <Tabs defaultValue="overview" className="mt-6">
-        <TabsList>
-          <TabsTrigger value="overview">Vue d’ensemble</TabsTrigger>
-          <TabsTrigger value="settings">Paramètres de base</TabsTrigger>
-          <TabsTrigger value="allocations">Allocations</TabsTrigger>
-          <TabsTrigger value="config">Fichier de config</TabsTrigger>
-        </TabsList>
+      <TabsCard
+        defaultValue="overview"
+        className="mt-6"
+        tabs={[
+          /* ── Overview tab (Pelican "node_info" fieldset) ─────────────── */
+          {
+            value: 'overview',
+            label: 'Vue d’ensemble',
+            content: (
+              <CardSection title="Informations du node">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <InfoEntry
+                    label="Version de l'agent"
+                    value={node.agentVersion ?? 'injoignable'}
+                    muted={!node.agentVersion}
+                  />
+                  <InfoEntry label="Serveurs installés" value={String(node.serverCount)} />
+                  <InfoEntry
+                    label="Dernier contact"
+                    value={node.lastSeenAt ? new Date(node.lastSeenAt).toLocaleString('fr-FR') : 'jamais'}
+                    muted={!node.lastSeenAt}
+                  />
+                  <InfoEntry
+                    label="Créé le"
+                    value={new Date(node.createdAt).toLocaleString('fr-FR')}
+                  />
+                </div>
+              </CardSection>
+            ),
+          },
 
-        {/* ── Overview tab (Pelican "node_info" fieldset) ─────────────────── */}
-        <TabsContent value="overview" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Informations du node</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <InfoEntry
-                label="Version de l'agent"
-                value={node.agentVersion ?? 'injoignable'}
-                muted={!node.agentVersion}
+          /* ── Basic settings tab (Pelican "basic_settings") ───────────── */
+          {
+            value: 'settings',
+            label: 'Paramètres de base',
+            /* Mounted only once the node is loaded — useForm initializes its
+               defaultValues at mount, so it must NOT live in the loading
+               skeleton (empty fields would freeze in the form). */
+            content: (
+              <NodeSettingsForm
+                node={{ id: node.id, name: node.name, fqdn: node.fqdn, scheme: node.scheme as NodeScheme, agentPort: node.agentPort, publicPort: node.publicPort, sftpPort: node.sftpPort }}
               />
-              <InfoEntry label="Serveurs installés" value={String(node.serverCount)} />
-              <InfoEntry
-                label="Dernier contact"
-                value={node.lastSeenAt ? new Date(node.lastSeenAt).toLocaleString('fr-FR') : 'jamais'}
-                muted={!node.lastSeenAt}
-              />
-              <InfoEntry
-                label="Créé le"
-                value={new Date(node.createdAt).toLocaleString('fr-FR')}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
+            ),
+          },
 
-        {/* ── Basic settings tab (Pelican "basic_settings") ───────────────── */}
-        <TabsContent value="settings" className="mt-4">
-          {/* Mounted only once the node is loaded — useForm initializes its
-              defaultValues at mount, so it must NOT live in the loading
-              skeleton (empty fields would freeze in the form). */}
-          <NodeSettingsCard
-            node={{ id: node.id, name: node.name, fqdn: node.fqdn, scheme: node.scheme as NodeScheme, agentPort: node.agentPort, publicPort: node.publicPort, sftpPort: node.sftpPort }}
-          />
-        </TabsContent>
+          /* ── Allocations tab (Pelican NodeResource "Allocations") ────── */
+          {
+            value: 'allocations',
+            label: 'Allocations',
+            content: <NodeAllocationsPanel nodeId={node.id} />,
+          },
 
-        {/* ── Allocations tab (Pelican NodeResource "Allocations") ─────────── */}
-        <TabsContent value="allocations" className="mt-4">
-          <NodeAllocationsCard nodeId={node.id} />
-        </TabsContent>
-
-        {/* ── Config file tab (Pelican "config_file" + reset token) ───────── */}
-        <TabsContent value="config" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>shard.yml</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Placer ce fichier à côté de <code>shard.exe</code> sur le node
-                (ou démarrer avec <code>shard.exe --config &lt;chemin&gt;</code>).
-                Le token est chiffré côté panel et affiché une seule fois :{' '}
-                {freshToken
-                  ? 'voici la configuration complète avec le token fraîchement régénéré.'
-                  : 'régénère le token pour afficher une configuration complète.'}
-              </p>
-              <pre className="overflow-x-auto rounded bg-muted p-2 text-xs">{configYaml}</pre>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!freshToken}
-                  onClick={() => {
-                    void navigator.clipboard
-                      .writeText(configYaml)
-                      .then(() => toast.success('Configuration shard.yml copiée'))
-                      .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
-                  }}
-                >
-                  Copier la configuration
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={reset.isPending}
-                  onClick={() => {
-                    if (
-                      confirm(
-                        'Régénérer le token ? L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son shard.yml n’est pas mis à jour.',
-                      )
-                    ) {
-                      reset.mutate();
-                    }
-                  }}
-                >
-                  {reset.isPending ? 'Régénération…' : 'Réinitialiser le token'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          /* ── Config file tab (Pelican "config_file" + reset token) ───── */
+          {
+            value: 'config',
+            label: 'Fichier de config',
+            content: (
+              <CardSection
+                title="shard.yml"
+                description={
+                  <>
+                    Placer ce fichier à côté de <code>shard.exe</code> sur le node
+                    (ou démarrer avec <code>shard.exe --config &lt;chemin&gt;</code>).
+                    Le token est chiffré côté panel et affiché une seule fois :{' '}
+                    {freshToken
+                      ? 'voici la configuration complète avec le token fraîchement régénéré.'
+                      : 'régénère le token pour afficher une configuration complète.'}
+                  </>
+                }
+              >
+                <pre className="overflow-x-auto rounded bg-muted p-2 text-xs">{configYaml}</pre>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!freshToken}
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(configYaml)
+                        .then(() => toast.success('Configuration shard.yml copiée'))
+                        .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
+                    }}
+                  >
+                    Copier la configuration
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={reset.isPending}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          'Régénérer le token ? L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son shard.yml n’est pas mis à jour.',
+                        )
+                      ) {
+                        reset.mutate();
+                      }
+                    }}
+                  >
+                    {reset.isPending ? 'Régénération…' : 'Réinitialiser le token'}
+                  </Button>
+                </div>
+              </CardSection>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -219,7 +226,7 @@ function InfoEntry({ label, value, muted }: { label: string; value: string; mute
  * loaded node values as defaultValues (the parent renders it only once
  * the query resolved).
  */
-function NodeSettingsCard({
+function NodeSettingsForm({
   node,
 }: {
   node: { id: string; name: string; fqdn: string; scheme: NodeScheme; agentPort: number; publicPort: number; sftpPort: number };
@@ -253,151 +260,144 @@ function NodeSettingsCard({
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Paramètres de base</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            form.handleSubmit();
-          }}
-          className="space-y-4"
-        >
-          <form.Field name="name">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="node-edit-name">Nom d'affichage</Label>
-                <Input
-                  id="node-edit-name"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+      className="space-y-4"
+    >
+      <form.Field name="name">
+        {(field) => (
+          <div className="space-y-2">
+            <Label htmlFor="node-edit-name">Nom d'affichage</Label>
+            <Input
+              id="node-edit-name"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+            />
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-sm text-destructive">
+                {field.state.meta.errors[0]?.message}
+              </p>
             )}
-          </form.Field>
+          </div>
+        )}
+      </form.Field>
 
-          <form.Field name="fqdn">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="node-edit-fqdn">FQDN / IP</Label>
-                <Input
-                  id="node-edit-fqdn"
-                  placeholder="node1.example.com ou 192.168.1.10"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
+      <form.Field name="fqdn">
+        {(field) => (
+          <div className="space-y-2">
+            <Label htmlFor="node-edit-fqdn">FQDN / IP</Label>
+            <Input
+              id="node-edit-fqdn"
+              placeholder="node1.example.com ou 192.168.1.10"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(e.target.value)}
+              onBlur={field.handleBlur}
+            />
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-sm text-destructive">
+                {field.state.meta.errors[0]?.message}
+              </p>
             )}
-          </form.Field>
+          </div>
+        )}
+      </form.Field>
 
-          <form.Field name="agentPort">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="node-edit-port">Port d’écoute</Label>
-                <Input
-                  id="node-edit-port"
-                  type="number"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                  onBlur={field.handleBlur}
-                />
-                <p className="text-xs text-muted-foreground">Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>) — après modification, régénère la configuration.</p>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
+      <form.Field name="agentPort">
+        {(field) => (
+          <div className="space-y-2">
+            <Label htmlFor="node-edit-port">Port d’écoute</Label>
+            <Input
+              id="node-edit-port"
+              type="number"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(Number(e.target.value))}
+              onBlur={field.handleBlur}
+            />
+            <p className="text-xs text-muted-foreground">Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>) — après modification, régénère la configuration.</p>
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-sm text-destructive">
+                {field.state.meta.errors[0]?.message}
+              </p>
             )}
-          </form.Field>
+          </div>
+        )}
+      </form.Field>
 
-          <form.Field name="publicPort">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="node-edit-public-port">Port accessible</Label>
-                <Input
-                  id="node-edit-public-port"
-                  type="number"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                  onBlur={field.handleBlur}
-                />
-                <p className="text-xs text-muted-foreground">Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port d’écoute.</p>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
+      <form.Field name="publicPort">
+        {(field) => (
+          <div className="space-y-2">
+            <Label htmlFor="node-edit-public-port">Port accessible</Label>
+            <Input
+              id="node-edit-public-port"
+              type="number"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(Number(e.target.value))}
+              onBlur={field.handleBlur}
+            />
+            <p className="text-xs text-muted-foreground">Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port d’écoute.</p>
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-sm text-destructive">
+                {field.state.meta.errors[0]?.message}
+              </p>
             )}
-          </form.Field>
+          </div>
+        )}
+      </form.Field>
 
-          <form.Field name="scheme">
-            {(field) => (
-              <div className="space-y-2">
-                <p id="node-edit-scheme" className="text-sm font-medium leading-none">
-                  Communication SSL
-                </p>
-                <NodeSchemeField
-                  id="node-edit-scheme"
-                  value={field.state.value}
-                  onChange={(value) => field.handleChange(value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Protocole utilisé par le panel ET les navigateurs (console, santé)
-                  pour joindre l’agent, sur le port accessible. Derrière un reverse
-                  proxy qui termine le TLS : l’agent reste en HTTP sur son port
-                  d’écoute.
-                </p>
-              </div>
+      <form.Field name="scheme">
+        {(field) => (
+          <div className="space-y-2">
+            <p id="node-edit-scheme" className="text-sm font-medium leading-none">
+              Communication SSL
+            </p>
+            <NodeSchemeField
+              id="node-edit-scheme"
+              value={field.state.value}
+              onChange={(value) => field.handleChange(value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Protocole utilisé par le panel ET les navigateurs (console, santé)
+              pour joindre l’agent, sur le port accessible. Derrière un reverse
+              proxy qui termine le TLS : l’agent reste en HTTP sur son port
+              d’écoute.
+            </p>
+          </div>
+        )}
+      </form.Field>
+
+      <form.Field name="sftpPort">
+        {(field) => (
+          <div className="space-y-2">
+            <Label htmlFor="node-edit-sftp-port">Port SFTP</Label>
+            <Input
+              id="node-edit-sftp-port"
+              type="number"
+              value={field.state.value}
+              onChange={(e) => field.handleChange(Number(e.target.value))}
+              onBlur={field.handleBlur}
+            />
+            <p className="text-xs text-muted-foreground">
+              Port d’écoute SFTP de l’agent (shard.yml <code>sftp.port</code>)
+              — après modification, régénère la configuration.
+            </p>
+            {field.state.meta.errors.length > 0 && (
+              <p className="text-sm text-destructive">
+                {field.state.meta.errors[0]?.message}
+              </p>
             )}
-          </form.Field>
+          </div>
+        )}
+      </form.Field>
 
-          <form.Field name="sftpPort">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor="node-edit-sftp-port">Port SFTP</Label>
-                <Input
-                  id="node-edit-sftp-port"
-                  type="number"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                  onBlur={field.handleBlur}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Port d’écoute SFTP de l’agent (shard.yml <code>sftp.port</code>)
-                  — après modification, régénère la configuration.
-                </p>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
-
-          <Button type="submit" disabled={update.isPending}>
-            {update.isPending ? 'Enregistrement…' : 'Enregistrer'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      <Button type="submit" disabled={update.isPending}>
+        {update.isPending ? 'Enregistrement…' : 'Enregistrer'}
+      </Button>
+    </form>
   );
 }
 
@@ -405,7 +405,7 @@ function NodeSettingsCard({
  * Allocations tab — Pelican node allocation management: create IP:port
  * entries (single port or range), assign them to servers, revoke, delete.
  */
-function NodeAllocationsCard({ nodeId }: { nodeId: string }) {
+function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
   const queryClient = useQueryClient();
   const listAllocations = useServerFn(listNodeAllocationsFn);
   const createAllocations = useServerFn(createNodeAllocationsFn);
@@ -483,198 +483,187 @@ function NodeAllocationsCard({ nodeId }: { nodeId: string }) {
   const nodeServers = (serversQuery.data ?? []).filter((s) => s.nodeId === nodeId);
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Pool d'allocations</CardTitle>
-          <CardDescription>
-            IP:port disponibles pour les serveurs de ce node ({freeCount} libre
-            / {allocations.length} au total).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              form.handleSubmit();
-            }}
-            className="flex flex-wrap items-start gap-2"
-          >
-            <form.Field name="ip">
-              {(field) => (
-                <div className="space-y-1">
-                  <Label htmlFor="alloc-ip">IP</Label>
-                  <Input
-                    id="alloc-ip"
-                    className="w-40"
-                    placeholder="0.0.0.0"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
-                      {field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            </form.Field>
+    <div className="divide-y">
+      <CardSection
+        title="Pool d'allocations"
+        description={`IP:port disponibles pour les serveurs de ce node (${freeCount} libre / ${allocations.length} au total).`}
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="flex flex-wrap items-start gap-2"
+        >
+          <form.Field name="ip">
+            {(field) => (
+              <div className="space-y-1">
+                <Label htmlFor="alloc-ip">IP</Label>
+                <Input
+                  id="alloc-ip"
+                  className="w-40"
+                  placeholder="0.0.0.0"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
 
-            <form.Field name="ports">
-              {(field) => (
-                <div className="space-y-1">
-                  <Label htmlFor="alloc-ports">Ports</Label>
-                  <Input
-                    id="alloc-ports"
-                    className="w-64"
-                    placeholder="25565 ou 25570-25575, 25599"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
-                      {field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            </form.Field>
+          <form.Field name="ports">
+            {(field) => (
+              <div className="space-y-1">
+                <Label htmlFor="alloc-ports">Ports</Label>
+                <Input
+                  id="alloc-ports"
+                  className="w-64"
+                  placeholder="25565 ou 25570-25575, 25599"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
 
-            <form.Field name="alias">
-              {(field) => (
-                <div className="space-y-1">
-                  <Label htmlFor="alloc-alias">Alias (optionnel)</Label>
-                  <Input
-                    id="alloc-alias"
-                    className="w-48"
-                    placeholder="jeu.example.com"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                  />
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
-                      {field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            </form.Field>
+          <form.Field name="alias">
+            {(field) => (
+              <div className="space-y-1">
+                <Label htmlFor="alloc-alias">Alias (optionnel)</Label>
+                <Input
+                  id="alloc-alias"
+                  className="w-48"
+                  placeholder="jeu.example.com"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
 
-            <Button type="submit" className="mt-6" disabled={create.isPending}>
-              {create.isPending ? 'Création…' : 'Créer'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          <Button type="submit" className="mt-6" disabled={create.isPending}>
+            {create.isPending ? 'Création…' : 'Créer'}
+          </Button>
+        </form>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Allocations du node</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {query.isPending ? (
-            <p className="text-sm text-muted-foreground">Chargement…</p>
-          ) : allocations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Aucune allocation — crée-en ci-dessus pour pouvoir installer des
-              serveurs sur ce node.
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-4 font-medium">Adresse</th>
-                  <th className="py-2 pr-4 font-medium">Alias</th>
-                  <th className="py-2 pr-4 font-medium">Serveur</th>
-                  <th className="py-2 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {allocations.map((allocation) => (
-                  <tr key={allocation.id}>
-                    <td className="py-2 pr-4 font-mono">
-                      {allocation.ip}:{allocation.port}
-                    </td>
-                    <td className="py-2 pr-4">{allocation.alias ?? '—'}</td>
-                    <td className="py-2 pr-4">
-                      {allocation.serverId === null ? (
-                        <span className="text-muted-foreground">libre</span>
-                      ) : (
-                        <>
-                          {allocation.serverName}
-                          {allocation.primary && (
-                            <span className="ml-2 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                              principale
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td className="py-2 text-right">
-                      {allocation.serverId === null ? (
-                        <div className="flex items-center justify-end gap-2">
-                          {nodeServers.length > 0 && (
-                            <Select
-                              value=""
-                              onValueChange={(serverId) =>
-                                serverId !== null &&
-                                assign.mutate({ allocationId: allocation.id, serverId })
-                              }
-                            >
-                              <SelectTrigger size="sm" className="w-44">
-                                <SelectValue placeholder="— Affecter à —" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {nodeServers.map((server) => (
-                                  <SelectItem key={server.id} value={server.id}>
-                                    {server.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={remove.isPending}
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Supprimer l’allocation ${allocation.ip}:${allocation.port} ?`,
-                                )
-                              ) {
-                                remove.mutate(allocation.id);
-                              }
-                            }}
+      <CardSection title="Allocations du node">
+        {query.isPending ? (
+          <p className="text-sm text-muted-foreground">Chargement…</p>
+        ) : allocations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Aucune allocation — crée-en ci-dessus pour pouvoir installer des
+            serveurs sur ce node.
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-4 font-medium">Adresse</th>
+                <th className="py-2 pr-4 font-medium">Alias</th>
+                <th className="py-2 pr-4 font-medium">Serveur</th>
+                <th className="py-2 text-right font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {allocations.map((allocation) => (
+                <tr key={allocation.id}>
+                  <td className="py-2 pr-4 font-mono">
+                    {allocation.ip}:{allocation.port}
+                  </td>
+                  <td className="py-2 pr-4">{allocation.alias ?? '—'}</td>
+                  <td className="py-2 pr-4">
+                    {allocation.serverId === null ? (
+                      <span className="text-muted-foreground">libre</span>
+                    ) : (
+                      <>
+                        {allocation.serverName}
+                        {allocation.primary && (
+                          <span className="ml-2 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                            principale
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    {allocation.serverId === null ? (
+                      <div className="flex items-center justify-end gap-2">
+                        {nodeServers.length > 0 && (
+                          <Select
+                            value=""
+                            onValueChange={(serverId) =>
+                              serverId !== null &&
+                              assign.mutate({ allocationId: allocation.id, serverId })
+                            }
                           >
-                            <Trash2 />
-                            Supprimer
-                          </Button>
-                        </div>
-                      ) : (
+                            <SelectTrigger size="sm" className="w-44">
+                              <SelectValue placeholder="— Affecter à —" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {nodeServers.map((server) => (
+                                <SelectItem key={server.id} value={server.id}>
+                                  {server.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={revoke.isPending}
-                          onClick={() => revoke.mutate(allocation.id)}
+                          disabled={remove.isPending}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Supprimer l’allocation ${allocation.ip}:${allocation.port} ?`,
+                              )
+                            ) {
+                              remove.mutate(allocation.id);
+                            }
+                          }}
                         >
-                          Révoquer
+                          <Trash2 />
+                          Supprimer
                         </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={revoke.isPending}
+                        onClick={() => revoke.mutate(allocation.id)}
+                      >
+                        Révoquer
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </CardSection>
     </div>
   );
 }

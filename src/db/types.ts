@@ -30,7 +30,7 @@ export interface IBackup extends InferEntity<typeof Backup> {}
 export interface ISetting extends InferEntity<typeof Setting> {}
 
 export type NodeStatus = INode['status'];
-export type ServerStatus = 'installing' | 'stopped' | 'running' | 'crashed';
+export type ServerStatus = 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
 
 // ─── better-auth session (serializable DTOs) ──────────────────────────────────
 

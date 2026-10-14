@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
 import {
   Select,
@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
+import { STOP_SIGNALS, type StopSignal } from '~/contract';
 import { FieldShell } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
@@ -18,16 +19,17 @@ import type { RecipeForm } from './recipe-editor';
 
 export function ProcessTab({ form }: { form: RecipeForm }) {
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Commande de démarrage</CardTitle>
-          <CardDescription>
+    <div className="divide-y">
+      <CardSection
+        title="Commande de démarrage"
+        description={
+          <>
             Templating {'{{VAR}}'} : variables système &gt; variables du serveur &gt;{' '}
             defaults de la recette &gt; environnement fixe.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </>
+        }
+      >
+        <div className="space-y-4">
           <form.Field name="start.command">
             {(field) => (
               <FieldShell
@@ -66,18 +68,14 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Arrêt gracieux</CardTitle>
-          <CardDescription>
-            Envoyé avant un kill forcé après le délai (commande envoyée au
-            process, ou signal Windows).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Arrêt gracieux"
+        description="Envoyé avant un kill forcé après le délai : commande écrite sur le stdin du serveur, ou signal (SIGINT/SIGTERM/SIGKILL) envoyé au process."
+      >
+        <div className="space-y-4">
           <form.Field name="start.stop">
             {(field) => {
               const stop = field.state.value;
@@ -92,7 +90,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                         } else {
                           field.handleChange({
                             type: mode as 'command' | 'signal',
-                            value: '',
+                            value: mode === 'signal' ? 'SIGTERM' : '',
                             timeoutMs: 30000,
                           });
                         }
@@ -104,7 +102,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                       <SelectContent>
                         <SelectItem value="none">Aucun (kill direct)</SelectItem>
                         <SelectItem value="command">Commande (ex : stop)</SelectItem>
-                        <SelectItem value="signal">Signal (ex : CTRL_C_EVENT)</SelectItem>
+                        <SelectItem value="signal">Signal (SIGINT/SIGTERM/SIGKILL)</SelectItem>
                       </SelectContent>
                     </Select>
                   </FieldShell>
@@ -116,16 +114,39 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                           <FieldShell
                             id="stop-value"
                             label={stop.type === 'command' ? 'Commande d\u2019arrêt' : 'Signal'}
+                            hint={
+                              stop.type === 'signal'
+                                ? 'SIGINT : Ctrl+C gracieux — SIGTERM : arrêt du process — SIGKILL : kill immédiat de l\u2019arbre.'
+                                : undefined
+                            }
                             errors={valueField.state.meta.errors}
                           >
-                            <Input
-                              id="stop-value"
-                              className="font-mono"
-                              value={valueField.state.value ?? ''}
-                              onChange={(e) => valueField.handleChange(e.target.value)}
-                              onBlur={valueField.handleBlur}
-                              placeholder={stop.type === 'command' ? 'stop' : 'CTRL_C_EVENT'}
-                            />
+                            {stop.type === 'signal' ? (
+                              <Select
+                                value={valueField.state.value as StopSignal}
+                                onValueChange={(signal) => valueField.handleChange(signal)}
+                              >
+                                <SelectTrigger id="stop-value" className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {STOP_SIGNALS.map((signal) => (
+                                    <SelectItem key={signal} value={signal}>
+                                      {signal}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                id="stop-value"
+                                className="font-mono"
+                                value={valueField.state.value ?? ''}
+                                onChange={(e) => valueField.handleChange(e.target.value)}
+                                onBlur={valueField.handleBlur}
+                                placeholder="stop"
+                              />
+                            )}
                           </FieldShell>
                         )}
                       </form.Field>
@@ -153,18 +174,14 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               );
             }}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Détection de démarrage</CardTitle>
-          <CardDescription>
-            Le serveur passe « running » quand une ligne de log correspond au
-            pattern (équivalent du config.startup de Pelican).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Détection de démarrage"
+        description="Le serveur passe « running » quand une ligne de log correspond au pattern (équivalent du config.startup de Pelican)."
+      >
+        <div className="space-y-4">
           <form.Field name="start.ready">
             {(field) => (
               <>
@@ -225,15 +242,14 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               </>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Logs</CardTitle>
-          <CardDescription>Source des logs affichés dans la console.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CardSection
+        title="Logs"
+        description="Source des logs affichés dans la console."
+      >
+        <div className="space-y-4">
           <form.Field name="logs.mode">
             {(field) => (
               <FieldShell id="logs-mode" label="Source" errors={field.state.meta.errors}>
@@ -293,8 +309,8 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
               </div>
             )}
           </form.Field>
-        </CardContent>
-      </Card>
+        </div>
+      </CardSection>
     </div>
   );
 }

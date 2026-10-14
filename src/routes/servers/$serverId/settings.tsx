@@ -110,6 +110,16 @@ function ServerSettingsPage() {
             label="Mémoire allouée"
             value={server?.allocation ? `${server.allocation.memoryMb} Mo` : '—'}
           />
+          <InfoRow
+            label="CPU alloué"
+            value={
+              server?.allocation
+                ? Number(server.allocation.cpuCores) > 0
+                  ? `${Number(server.allocation.cpuCores)} cœur(s)`
+                  : 'Illimité'
+                : '—'
+            }
+          />
           <InfoRow label="Statut" value={server?.status ?? '…'} />
           <InfoRow
             label="Créé le"

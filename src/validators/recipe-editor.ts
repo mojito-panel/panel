@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import {
   RESERVED_ENV_NAMES,
+  STOP_SIGNALS,
   findToolFeatureErrors,
   safeParseRecipe,
   validateBackupIncludePattern,
   type Recipe,
   type RunnerActionInput,
+  type StopSignal,
 } from '~/contract';
 
 /**
@@ -239,11 +241,21 @@ export function newActionValue(action: ActionType): ActionValue {
 
 // ─── Stop / ready / logs ─────────────────────────────────────────────────────
 
-export const stopValueSchema = z.object({
-  type: z.enum(['command', 'signal']),
-  value: z.string().min(1, 'Commande/signal requis'),
-  timeoutMs: z.number().int().min(0),
-});
+export const stopValueSchema = z
+  .object({
+    type: z.enum(['command', 'signal']),
+    value: z.string().min(1, 'Commande/signal requis'),
+    timeoutMs: z.number().int().min(0),
+  })
+  .superRefine((stop, ctx) => {
+    if (stop.type === 'signal' && !STOP_SIGNALS.includes(stop.value as StopSignal)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: 'Signal invalide (SIGINT, SIGTERM ou SIGKILL)',
+      });
+    }
+  });
 
 export type StopValue = z.infer<typeof stopValueSchema>;
 

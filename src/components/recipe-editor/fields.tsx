@@ -199,27 +199,6 @@ export function CollapseCard({
   );
 }
 
-/** Card-based section used inside tabs. */
-export function SectionCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border p-4">
-      <p className="font-semibold">{title}</p>
-      {description && (
-        <p className="mb-4 mt-1 text-sm text-muted-foreground">{description}</p>
-      )}
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
 /** Action buttons for repeater items (move up/down, delete). */
 export function ItemActions({
   onMoveUp,
