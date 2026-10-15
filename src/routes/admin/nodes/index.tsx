@@ -21,7 +21,14 @@ import { buildAgentConfig } from '~/lib/agent-config';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { NodeSchemeField } from '~/components/node-scheme-field';
 import type { NodeScheme } from '~/validators/node';
 
@@ -118,19 +125,37 @@ function AdminNodesPage() {
 
   return (
     <div className="space-y-6">
-      {/* ─── Header ─── */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Nodes</h1>
-          <p className="text-muted-foreground">Machines hébergeant un agent Mojito.</p>
-        </div>
-        <Button onClick={() => setShowCreate((v) => !v)}>
-          <Plus />
-          {showCreate ? 'Fermer' : 'Ajouter un node'}
-        </Button>
-      </div>
+      {/* ─── Node list — filtering/sorting/pagination run in the database ─── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Nodes</CardTitle>
+          <CardDescription>
+            Machines hébergeant un agent Mojito.
+          </CardDescription>
+          <CardAction>
+            <Button onClick={() => setShowCreate((v) => !v)}>
+              <Plus />
+              {showCreate ? 'Fermer' : 'Ajouter un node'}
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={adminNodesList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            emptyMessage="Aucun node enregistré."
+            rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
+          />
+        </CardContent>
+      </Card>
 
-      {/* ─── Create a node (hidden behind the header button) ─── */}
+      {/* ─── Create a node (hidden behind the list card's action button) ─── */}
       {showCreate && (
         <Card>
           <CardHeader>
@@ -326,20 +351,6 @@ function AdminNodesPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* ─── Node list — filtering/sorting/pagination run in the database ─── */}
-      <DataTable
-        list={adminNodesList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        emptyMessage="Aucun node enregistré."
-        rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
-      />
     </div>
   );
 }

@@ -3,7 +3,9 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useServerFn } from '@tanstack/react-start';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { DataTable } from '~/components/data-table/data-table';
+
 import { Button } from '~/components/ui/button';
 import { useAuth } from '~/contexts/use-auth';
 import { mergeQuery, type ListQuery } from '~/lists/define';
@@ -65,50 +67,54 @@ function ServersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Mes serveurs</h1>
-          <p className="text-muted-foreground">
+      {/* ─── Server list — filtering/sorting/pagination run in the database ─── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Mes serveurs</CardTitle>
+          <CardDescription>
             {user?.role === 'admin'
               ? 'Vue administrateur — tous les serveurs'
               : 'Tes serveurs de jeu'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {user?.role === 'admin' && (
-            <>
-              <Button
-                variant="outline"
-                render={<Link to="/admin/nodes" search={adminNodesList.defaultSearch} />}
-              >
-                Nodes
+          </CardDescription>
+          <CardAction>
+            <div className="flex gap-2">
+              {user?.role === 'admin' && (
+                <>
+                  <Button
+                    variant="outline"
+                    render={<Link to="/admin/nodes" search={adminNodesList.defaultSearch} />}
+                  >
+                    Nodes
+                  </Button>
+                  <Button
+                    variant="outline"
+                    render={<Link to="/admin/recipes" search={adminRecipesList.defaultSearch} />}
+                  >
+                    Recettes
+                  </Button>
+                </>
+              )}
+              <Button render={<Link to="/servers/new" />}>
+                <Plus />
+                Nouveau serveur
               </Button>
-              <Button
-                variant="outline"
-                render={<Link to="/admin/recipes" search={adminRecipesList.defaultSearch} />}
-              >
-                Recettes
-              </Button>
-            </>
-          )}
-          <Button render={<Link to="/servers/new" />}>
-            <Plus />
-            Nouveau serveur
-          </Button>
-        </div>
-      </div>
-
-      <DataTable
-        list={userServersList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        rowContext={{ deleting: remove.isPending, onDelete }}
-      />
+            </div>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={userServersList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            rowContext={{ deleting: remove.isPending, onDelete }}
+          />
+        </CardContent>
+      </Card>
 
       <p>
         <Button variant="ghost" render={<Link to="/" />}>

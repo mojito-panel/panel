@@ -24,7 +24,14 @@ import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
 
@@ -129,27 +136,49 @@ function AdminRecipesPage() {
 
   return (
     <div className="space-y-6">
-      {/* ─── Header ─── */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Recettes</h1>
-          <p className="text-muted-foreground">
+      {/* ─── Recipe list — filtering/sorting/pagination run in the database ─── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recettes</CardTitle>
+          <CardDescription>
             Eggs (format v1, compatible Pelican-like) installables sur les serveurs.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowImport((v) => !v)}>
-            <Upload />
-            {showImport ? 'Fermer' : 'Importer'}
-          </Button>
-          <Button render={<Link to="/admin/recipes/new" />}>
-            <Plus />
-            Créer une recette
-          </Button>
-        </div>
-      </div>
+          </CardDescription>
+          <CardAction>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowImport((v) => !v)}>
+                <Upload />
+                {showImport ? 'Fermer' : 'Importer'}
+              </Button>
+              <Button render={<Link to="/admin/recipes/new" />}>
+                <Plus />
+                Créer une recette
+              </Button>
+            </div>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={adminRecipesList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            emptyMessage="Aucune recette importée."
+            rowContext={{
+              importing: importMutation.isPending,
+              deleting: remove.isPending,
+              onUpdateFromUrl: (url) => updateFromUrl(url),
+              onExport: (recipe) => void exportRecipe(recipe),
+              onDelete,
+            }}
+          />
+        </CardContent>
+      </Card>
 
-      {/* ─── Import panel (hidden behind the header button) ─── */}
+      {/* ─── Import panel (hidden behind the list card's action button) ─── */}
       {showImport && (
         <Card>
           <CardHeader>
@@ -231,26 +260,6 @@ function AdminRecipesPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* ─── Recipe list ─── */}
-      <DataTable
-        list={adminRecipesList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        emptyMessage="Aucune recette importée."
-        rowContext={{
-          importing: importMutation.isPending,
-          deleting: remove.isPending,
-          onUpdateFromUrl: (url) => updateFromUrl(url),
-          onExport: (recipe) => void exportRecipe(recipe),
-          onDelete,
-        }}
-      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { toast } from 'sonner';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { DataTable } from '~/components/data-table/data-table';
 import { useAuth } from '~/contexts/use-auth';
 import { canFromPermissions } from '~/lib/permissions';
@@ -73,27 +74,31 @@ function AdminServersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Serveurs</h1>
-        <p className="text-muted-foreground">
-          Tous les serveurs de l’installation, tous propriétaires confondus.
-        </p>
-      </div>
-
-      <DataTable
-        list={adminServersList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        filterOptions={{
-          node: (nodesQuery.data ?? []).map((node) => ({ value: node.id, label: node.name })),
-        }}
-        rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
-      />
+      {/* ─── Server list — filtering/sorting/pagination run in the database ─── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Serveurs</CardTitle>
+          <CardDescription>
+            Tous les serveurs de l’installation, tous propriétaires confondus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={adminServersList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            filterOptions={{
+              node: (nodesQuery.data ?? []).map((node) => ({ value: node.id, label: node.name })),
+            }}
+            rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
