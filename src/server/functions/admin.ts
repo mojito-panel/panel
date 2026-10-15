@@ -165,10 +165,11 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
   });
 
 /**
- * Node detail (Pelican EditNode/ViewNode equivalent): stored fields,
- * server count, and a LIVE agent version ping (non-fatal — the agent may
- * be down, that is what the status column is for). The token is NEVER
- * returned (encrypted at rest, shown once at creation/reset).
+ * Node detail (Pelican EditNode/ViewNode equivalent): stored fields and
+ * server count — DB ONLY, always fast. The LIVE agent status/version is a
+ * separate best-effort query (`getNodeHealthFn`, polled by the page), so
+ * an offline agent never blocks the page. The token is NEVER returned
+ * (encrypted at rest, shown once at creation/reset).
  */
 export const getNodeFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
@@ -190,9 +191,36 @@ export const getNodeFn = createServerFn({ method: 'GET' })
       lastSeenAt: node.lastSeenAt,
       createdAt: node.createdAt,
       serverCount,
-      agentVersion: await agentVersionOf(node),
       // Panel URL for the (re)generated agent configuration.
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
+    };
+  });
+
+/**
+ * Live node health — one agent ping (short timeout), syncing
+ * status/lastSeenAt in DB like the dashboard's ping. The version is null
+ * when the agent is unreachable (never an error — the badge shows
+ * "Inconnu" then). Polled by the node page at a regular interval.
+ */
+export const getNodeHealthFn = createServerFn({ method: 'GET' })
+  .validator(nodeIdSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({'panel.nodes':['read']});
+    const node = await requireNode(data.nodeId);
+
+    const agentVersion = await agentVersionOf(node);
+    if (agentVersion) {
+      node.status = 'online';
+      node.lastSeenAt = new Date();
+    } else {
+      node.status = 'offline';
+    }
+    await orm.em.flush();
+
+    return {
+      status: node.status as 'online' | 'offline',
+      agentVersion,
     };
   });
 

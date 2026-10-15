@@ -91,10 +91,15 @@ export async function deleteNode(node: INode): Promise<void> {
   await em.flush();
 }
 
+/** Timeout of one agent healthcheck — a detail page must stay snappy. */
+const AGENT_PING_TIMEOUT_MS = 2500;
+
 /** Best-effort live agent version (null when the agent is unreachable). */
 export async function agentVersionOf(node: INode): Promise<string | null> {
   try {
-    const health = await agentHealth(node);
+    const health = await agentHealth(node, {
+      signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS),
+    });
     return health.version;
   } catch {
     return null;

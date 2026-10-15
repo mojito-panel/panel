@@ -9,7 +9,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { getNodeFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, listFreeNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
+import { getNodeFn, getNodeHealthFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, listFreeNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
 import { listServerOptionsFn } from '~/server/functions/servers';
 import {
   updateNodeSchema,
@@ -27,6 +27,8 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { CardSection, TabsCard } from '~/components/tabs-card';
+import { Skeleton } from '~/components/ui/skeleton';
+import { StatusBadge } from '~/components/status-badge';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
   component: AdminNodeEditPage,
@@ -42,13 +44,21 @@ export const Route = createFileRoute('/admin/nodes/$nodeId')({
 function AdminNodeEditPage() {
   const { nodeId } = Route.useParams();
   const queryClient = useQueryClient();
-
   const getNode = useServerFn(getNodeFn);
+  const getNodeHealth = useServerFn(getNodeHealthFn);
   const resetToken = useServerFn(resetNodeTokenFn);
-
+  // DB record (fast) — the page renders from this alone.
   const query = useQuery({
     queryKey: ['node', nodeId],
     queryFn: () => getNode({ data: { nodeId } }),
+  });
+
+  // LIVE agent health — polled at a regular interval; pending → the badge
+  // and the agent version show a skeleton, never block the page.
+  const healthQuery = useQuery({
+    queryKey: ['node-health', nodeId],
+    queryFn: () => getNodeHealth({ data: { nodeId } }),
+    refetchInterval: 5000,
   });
 
   const reset = useMutation({
@@ -85,14 +95,23 @@ function AdminNodeEditPage() {
     ? buildAgentConfig({ ...configNode, agentToken: freshToken })
     : buildAgentConfigWithoutToken(configNode);
 
+  // LIVE health — the badge and the agent version entry follow the ping,
+  // with a skeleton while it is in flight (the DB status is the fallback
+  // until the first answer arrives).
+  const health = healthQuery.data;
+  const liveStatus = health?.status ?? node.status;
+  const agentVersion = health ? health.agentVersion : null;
+
   return (
     <div>
       {/* ─── Record header (Filament EditNode heading) ─────────────────── */}
       <div className="flex items-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{node.name}</h1>
-        <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-          {node.status}
-        </span>
+        {healthQuery.isPending ? (
+          <Skeleton className="h-6 w-24 rounded-full" />
+        ) : (
+          <StatusBadge status={liveStatus} />
+        )}
       </div>
       <p className="text-muted-foreground">
         {node.scheme}://{node.fqdn}:{node.publicPort}
@@ -112,14 +131,22 @@ function AdminNodeEditPage() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <InfoEntry
                     label="Version de l'agent"
-                    value={node.agentVersion ?? 'injoignable'}
-                    muted={!node.agentVersion}
+                    value={healthQuery.isPending ? '…' : (agentVersion ?? 'injoignable')}
+                    muted={!agentVersion}
                   />
                   <InfoEntry label="Serveurs installés" value={String(node.serverCount)} />
                   <InfoEntry
                     label="Dernier contact"
-                    value={node.lastSeenAt ? new Date(node.lastSeenAt).toLocaleString('fr-FR') : 'jamais'}
-                    muted={!node.lastSeenAt}
+                    value={
+                      healthQuery.isPending
+                        ? '…'
+                        : health && health.status === 'online'
+                          ? new Date().toLocaleString('fr-FR')
+                          : node.lastSeenAt
+                            ? new Date(node.lastSeenAt).toLocaleString('fr-FR')
+                            : 'jamais'
+                    }
+                    muted={!(health?.status === 'online')}
                   />
                   <InfoEntry
                     label="Créé le"
