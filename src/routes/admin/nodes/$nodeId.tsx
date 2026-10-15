@@ -22,13 +22,14 @@ import { NodeSchemeField } from '~/components/node-scheme-field';
 import type { NodeScheme } from '~/validators/node';
 import { DataTable } from '~/components/data-table/data-table';
 import { mergeQuery, type ListQuery } from '~/lists/define';
-import { nodeAllocationsList } from '~/lists/allocations';
+import { nodeAllocationsList, type NodeAllocationRow } from '~/lists/allocations';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { CardSection, TabsCard } from '~/components/tabs-card';
 import { Skeleton } from '~/components/ui/skeleton';
 import { StatusBadge } from '~/components/status-badge';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
   component: AdminNodeEditPage,
@@ -61,6 +62,7 @@ function AdminNodeEditPage() {
     refetchInterval: 5000,
   });
 
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
   const reset = useMutation({
     mutationFn: async () => {
       const result = await resetToken({ data: { nodeId } });
@@ -208,15 +210,7 @@ function AdminNodeEditPage() {
                     variant="destructive"
                     size="sm"
                     disabled={reset.isPending}
-                    onClick={() => {
-                      if (
-                        confirm(
-                          'Régénérer le token ? L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son shard.yml n’est pas mis à jour.',
-                        )
-                      ) {
-                        reset.mutate();
-                      }
-                    }}
+                    onClick={() => setTokenDialogOpen(true)}
                   >
                     {reset.isPending ? 'Régénération…' : 'Réinitialiser le token'}
                   </Button>
@@ -225,6 +219,20 @@ function AdminNodeEditPage() {
             ),
           },
         ]}
+      />
+      <ConfirmDialog
+        open={tokenDialogOpen}
+        onOpenChange={setTokenDialogOpen}
+        onConfirm={() => {
+          reset.mutate();
+          setTokenDialogOpen(false);
+        }}
+        title="Régénérer le token ?"
+        description="L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son shard.yml n’est pas mis à jour."
+        confirmLabel="Régénérer"
+        cancelLabel="Annuler"
+        destructive
+        pending={reset.isPending}
       />
     </div>
   );
@@ -521,6 +529,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
   const freeCount = freeQuery.data?.length ?? 0;
   const total = totalQuery.data?.rowCount ?? 0;
   const nodeServers = serversQuery.data ?? [];
+  const [allocationToDelete, setAllocationToDelete] = useState<NodeAllocationRow | null>(null);
 
   return (
     <div className="divide-y">
@@ -621,15 +630,26 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
             busy: remove.isPending || revoke.isPending || assign.isPending,
             onAssign: (allocation, serverId) =>
               assign.mutate({ allocationId: allocation.id, serverId }),
-            onDelete: (allocation) => {
-              if (confirm(`Supprimer l’allocation ${allocation.ip}:${allocation.port} ?`)) {
-                remove.mutate(allocation.id);
-              }
-            },
+            onDelete: setAllocationToDelete,
             onRevoke: (allocation) => revoke.mutate(allocation.id),
           }}
         />
       </CardSection>
+      {allocationToDelete && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && setAllocationToDelete(null)}
+          onConfirm={() => {
+            remove.mutate(allocationToDelete.id);
+            setAllocationToDelete(null);
+          }}
+          title={`Supprimer l’allocation ${allocationToDelete.ip}:${allocationToDelete.port} ?`}
+          confirmLabel="Supprimer"
+          cancelLabel="Annuler"
+          destructive
+          pending={remove.isPending}
+        />
+      )}
     </div>
   );
 }

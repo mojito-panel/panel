@@ -24,6 +24,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Label } from '~/components/ui/label';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Dialog,
   DialogContent,
@@ -86,6 +87,8 @@ function ServerUsersPage() {
 
   // Sub-user whose permissions are being edited (null = dialog closed).
   const [editing, setEditing] = useState<ServerSubuserRow | null>(null);
+  // Sub-user whose removal is pending confirmation (null = dialog closed).
+  const [toRemove, setToRemove] = useState<ServerSubuserRow | null>(null);
 
   // Shared server query (cached) — viewer grants gate the page controls
   const serverQuery = useQuery({
@@ -159,14 +162,6 @@ function ServerUsersPage() {
   // require the raw params type): the page resets below are part of the patch.
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
-
-  const onEdit = (subuser: ServerSubuserRow) => setEditing(subuser);
-
-  const onRemove = (subuser: ServerSubuserRow) => {
-    if (confirm(`Retirer l’accès de « ${subuser.email} » à ce serveur ?`)) {
-      remove.mutate({ userId: subuser.userId });
-    }
-  };
 
   // Only deny once the viewer grants are known — while the server query is
   // in flight the table below renders its own skeleton
@@ -274,8 +269,8 @@ function ServerUsersPage() {
         rowContext={{
           canManage: canUpdate || canRemove,
           removing: update.isPending || remove.isPending,
-          onEdit,
-          onRemove,
+          onEdit: setEditing,
+          onRemove: setToRemove,
         }}
       />
 
@@ -290,6 +285,19 @@ function ServerUsersPage() {
         onSubmit={(statements) => {
           if (editing) update.mutate({ userId: editing.userId, permissions: statements });
         }}
+      />
+      <ConfirmDialog
+        open={toRemove !== null}
+        onOpenChange={(open) => !open && setToRemove(null)}
+        onConfirm={() => {
+          if (toRemove) remove.mutate({ userId: toRemove.userId });
+          setToRemove(null);
+        }}
+        title={toRemove ? `Retirer l’accès de « ${toRemove.email} » à ce serveur ?` : ''}
+        confirmLabel="Retirer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
       />
     </div>
   );

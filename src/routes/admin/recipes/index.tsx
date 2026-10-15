@@ -20,6 +20,7 @@ import {
   getRecipeFn,
   deleteRecipeFn,
 } from '~/server/functions/admin';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -87,11 +88,8 @@ function AdminRecipesPage() {
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
 
-  const onDelete = (recipe: AdminRecipeRow) => {
-    if (confirm(`Supprimer la recette « ${recipe.name} » ?`)) {
-      remove.mutate(recipe.id);
-    }
-  };
+  const [recipeToDelete, setRecipeToDelete] = useState<AdminRecipeRow | null>(null);
+
 
   /** Batch import: textarea + .json files + URL (each optional). */
   const onImportSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -172,11 +170,27 @@ function AdminRecipesPage() {
               deleting: remove.isPending,
               onUpdateFromUrl: (url) => updateFromUrl(url),
               onExport: (recipe) => void exportRecipe(recipe),
-              onDelete,
+              onDelete: setRecipeToDelete,
             }}
           />
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={recipeToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setRecipeToDelete(null);
+        }}
+        onConfirm={() => {
+          if (recipeToDelete) remove.mutate(recipeToDelete.id);
+          setRecipeToDelete(null);
+        }}
+        title={`Supprimer la recette « ${recipeToDelete?.name} » ?`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
 
       {/* ─── Import panel (hidden behind the list card's action button) ─── */}
       {showImport && (

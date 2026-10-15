@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { toast } from 'sonner';
@@ -66,11 +68,9 @@ function AdminServersPage() {
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
 
-  const onDelete = (server: AdminServerRow) => {
-    if (confirm(`Supprimer « ${server.name} » ? Le dossier sera effacé sur le node.`)) {
-      remove.mutate(server);
-    }
-  };
+  // Pending deletion target — the ConfirmDialog renders on top of it.
+  const [serverToDelete, setServerToDelete] = useState<AdminServerRow | null>(null);
+
 
   return (
     <div className="space-y-6">
@@ -95,10 +95,27 @@ function AdminServersPage() {
             filterOptions={{
               node: (nodesQuery.data ?? []).map((node) => ({ value: node.id, label: node.name })),
             }}
-            rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
+            rowContext={{ canDelete, deleting: remove.isPending, onDelete: setServerToDelete }}
           />
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={serverToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setServerToDelete(null);
+        }}
+        onConfirm={() => {
+          if (serverToDelete) remove.mutate(serverToDelete);
+          setServerToDelete(null);
+        }}
+        title={`Supprimer « ${serverToDelete?.name} » ?`}
+        description="Le dossier sera effacé sur le node."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }

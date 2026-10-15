@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import {
   getServerFn,
@@ -11,6 +12,7 @@ import { serverCan } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
 import { ErrorState, PageSkeleton } from '~/components/error/error-state';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Card,
   CardContent,
@@ -38,6 +40,8 @@ function ServerSettingsPage() {
   const { serverId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [askReinstall, setAskReinstall] = useState(false);
+  const [askDelete, setAskDelete] = useState(false);
   const getServer = useServerFn(getServerFn);
   const reinstall = useServerFn(reinstallServerFn);
   const deleteServer = useServerFn(deleteServerFn);
@@ -71,18 +75,6 @@ function ServerSettingsPage() {
   const viewer = server?.viewer;
   const canReinstall = !!viewer && serverCan(viewer.permissions, { 'server.settings': ['update'] });
   const canDelete = !!viewer && (viewer.isOwner || viewer.isAdmin);
-
-  const confirmReinstall = () => {
-    // Pelican wording: some files may be deleted/modified — explicit confirm
-    if (
-      !confirm(
-        'Es-tu sûr de vouloir réinstaller le serveur ? Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à sauvegarder tes données.',
-      )
-    ) {
-      return;
-    }
-    reinstallMutation.mutate();
-  };
 
   return (
     <div className="space-y-6">
@@ -151,7 +143,7 @@ function ServerSettingsPage() {
           <CardFooter className="gap-2">
             <Button
               variant="destructive"
-              onClick={confirmReinstall}
+              onClick={() => setAskReinstall(true)}
               disabled={reinstallMutation.isPending}
             >
               <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
@@ -180,11 +172,7 @@ function ServerSettingsPage() {
           <CardFooter>
             <Button
               variant="destructive"
-              onClick={() => {
-                if (confirm(`Supprimer « ${server?.name} » ? Le dossier sera effacé.`)) {
-                  remove.mutate();
-                }
-              }}
+              onClick={() => setAskDelete(true)}
               disabled={remove.isPending}
             >
               <Trash2 />
@@ -201,6 +189,34 @@ function ServerSettingsPage() {
           </CardFooter>
         </Card>
       )}
+      <ConfirmDialog
+        open={askReinstall}
+        onOpenChange={setAskReinstall}
+        onConfirm={() => {
+          reinstallMutation.mutate();
+          setAskReinstall(false);
+        }}
+        title="Es-tu sûr de vouloir réinstaller le serveur ?"
+        description="Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à sauvegarder tes données."
+        confirmLabel="Réinstaller"
+        cancelLabel="Annuler"
+        destructive
+        pending={reinstallMutation.isPending}
+      />
+      <ConfirmDialog
+        open={askDelete}
+        onOpenChange={setAskDelete}
+        onConfirm={() => {
+          remove.mutate();
+          setAskDelete(false);
+        }}
+        title={server ? `Supprimer « ${server.name} » ?` : ''}
+        description="Le dossier sera effacé."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }

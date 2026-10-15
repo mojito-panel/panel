@@ -23,10 +23,11 @@ import {
   adminServerAllocationActionSchema,
   type UpdateAdminServerFormDto,
 } from '~/validators/admin-server';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataPicker } from '~/components/data-table/data-picker';
 import { DataTable } from '~/components/data-table/data-table';
 import { mergeQuery, type ListQuery } from '~/lists/define';
-import { serverAllocationsList } from '~/lists/allocations';
+import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
 import { adminServersList } from '~/lists/servers';
 import { adminUsersList } from '~/lists/users';
 import { canFromPermissions } from '~/lib/permissions';
@@ -524,6 +525,7 @@ function AdminServerAllocationsPanel({
   });
 
   const free = freeQuery.data ?? [];
+  const [allocationToRevoke, setAllocationToRevoke] = useState<ServerAllocationRow | null>(null);
 
   return (
     <div className="divide-y">
@@ -545,15 +547,7 @@ function AdminServerAllocationsPanel({
             canEdit: canUpdate,
             busy: primary.isPending || remove.isPending,
             onSetPrimary: (allocation) => primary.mutate(allocation.id),
-            onRevoke: (allocation) => {
-              if (
-                confirm(
-                  `Retirer l’allocation ${allocation.ip}:${allocation.port} ? Elle retournera dans le pool du node.`,
-                )
-              ) {
-                remove.mutate(allocation.id);
-              }
-            },
+            onRevoke: setAllocationToRevoke,
           }}
         />
       </CardSection>
@@ -620,6 +614,23 @@ function AdminServerAllocationsPanel({
           </p>
         )}
       </CardSection>
+
+      <ConfirmDialog
+        open={allocationToRevoke !== null}
+        onOpenChange={(open) => {
+          if (!open) setAllocationToRevoke(null);
+        }}
+        onConfirm={() => {
+          if (allocationToRevoke) remove.mutate(allocationToRevoke.id);
+          setAllocationToRevoke(null);
+        }}
+        title={`Retirer l’allocation ${allocationToRevoke?.ip}:${allocationToRevoke?.port} ?`}
+        description="Elle retournera dans le pool du node."
+        confirmLabel="Retirer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }
@@ -689,6 +700,12 @@ function ServerActionsPanel({
     onError: (error) => toast.error(error.message),
   });
 
+  // Suspend asks for confirmation only when the server is NOT already
+  // suspended — reactivation is immediate.
+  const [confirmSuspendOpen, setConfirmSuspendOpen] = useState(false);
+  const [confirmReinstallOpen, setConfirmReinstallOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
   if (!canUpdate && !canDelete) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -713,13 +730,11 @@ function ServerActionsPanel({
             variant={suspended ? 'outline' : 'destructive'}
             disabled={suspend.isPending}
             onClick={() => {
-              if (
-                !suspended &&
-                !confirm(`Suspendre « ${name} » ? Le serveur sera arrêté et son propriétaire perdra l’accès.`)
-              ) {
-                return;
+              if (suspended) {
+                suspend.mutate(false);
+              } else {
+                setConfirmSuspendOpen(true);
               }
-              suspend.mutate(!suspended);
             }}
           >
             {suspend.isPending
@@ -742,16 +757,7 @@ function ServerActionsPanel({
             <Button
               variant="destructive"
               disabled={reinstallMutation.isPending}
-              onClick={() => {
-                if (
-                  !confirm(
-                    'Es-tu sûr de vouloir réinstaller ce serveur ? Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à sauvegarder les données.',
-                  )
-                ) {
-                  return;
-                }
-                reinstallMutation.mutate();
-              }}
+              onClick={() => setConfirmReinstallOpen(true)}
             >
               <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
               {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
@@ -771,11 +777,7 @@ function ServerActionsPanel({
             <Button
               variant="destructive"
               disabled={remove.isPending}
-              onClick={() => {
-                if (confirm(`Supprimer « ${name} » ? Le dossier sera effacé.`)) {
-                  remove.mutate();
-                }
-              }}
+              onClick={() => setConfirmDeleteOpen(true)}
             >
               <Trash2 />
               {remove.isPending ? 'Suppression…' : 'Supprimer'}
@@ -783,6 +785,51 @@ function ServerActionsPanel({
           </CardSection>
         </>
       )}
+      <ConfirmDialog
+        open={confirmSuspendOpen}
+        onOpenChange={setConfirmSuspendOpen}
+        onConfirm={() => {
+          suspend.mutate(true);
+          setConfirmSuspendOpen(false);
+        }}
+        title={`Suspendre « ${name} » ?`}
+        description="Le serveur sera arrêté et son propriétaire perdra l’accès."
+        confirmLabel="Suspendre"
+        cancelLabel="Annuler"
+        destructive
+        pending={suspend.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmReinstallOpen}
+        onOpenChange={setConfirmReinstallOpen}
+        onConfirm={() => {
+          reinstallMutation.mutate();
+          setConfirmReinstallOpen(false);
+        }}
+        title="Es-tu sûr de vouloir réinstaller ce serveur ?"
+        description="Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à sauvegarder les données."
+        confirmLabel="Réinstaller"
+        cancelLabel="Annuler"
+        destructive
+        pending={reinstallMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => {
+          remove.mutate();
+          setConfirmDeleteOpen(false);
+        }}
+        title={`Supprimer « ${name} » ?`}
+        description="Le dossier sera effacé."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }
+

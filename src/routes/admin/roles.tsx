@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
@@ -28,6 +29,7 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 
 /** /admin/roles — rôles du panel (Pelican-style) : rôles intégrés + rôles personnalisés. */
 export const Route = createFileRoute('/admin/roles')({
@@ -58,6 +60,7 @@ function checkedToStatements(checked: Record<string, boolean>): PermissionStatem
 }
 
 function AdminRolesPage() {
+  const [roleToDelete, setRoleToDelete] = useState<RoleDto | null>(null);
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
   const queryClient = useQueryClient();
@@ -293,15 +296,7 @@ function AdminRolesPage() {
               permissions: value.permissions,
             })
           }
-          onRemove={() => {
-            if (
-              confirm(
-                `Supprimer le rôle « ${role.name} » ? ${role.userCount > 0 ? 'Il est encore attribué à des utilisateurs.' : ''}`,
-              )
-            ) {
-              remove.mutate({ roleId: role.id });
-            }
-          }}
+          onRemove={() => setRoleToDelete(role)}
           pending={update.isPending || remove.isPending}
         />
       ))}
@@ -311,6 +306,28 @@ function AdminRolesPage() {
           Aucun rôle personnalisé pour l’instant.
         </p>
       )}
+
+      <ConfirmDialog
+        open={roleToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setRoleToDelete(null);
+        }}
+        onConfirm={() => {
+          if (roleToDelete) {
+            remove.mutate({ roleId: roleToDelete.id });
+          }
+          setRoleToDelete(null);
+        }}
+        title={`Supprimer le rôle « ${roleToDelete?.name ?? ''} » ?`}
+        description={
+          roleToDelete && roleToDelete.userCount > 0
+            ? 'Il est encore attribué à des utilisateurs.'
+            : 'Cette action est irréversible.'
+        }
+        confirmLabel="Supprimer"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }

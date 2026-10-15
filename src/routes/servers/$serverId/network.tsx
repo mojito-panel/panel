@@ -1,6 +1,7 @@
 import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import {
@@ -15,8 +16,9 @@ import { serverAllocationActionSchema } from '~/validators/server';
 import { serverCan } from '~/lib/permissions';
 import { DataTable } from '~/components/data-table/data-table';
 import { mergeQuery, type ListQuery } from '~/lists/define';
-import { serverAllocationsList } from '~/lists/allocations';
+import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
 import { Button } from '~/components/ui/button';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Card,
   CardContent,
@@ -47,6 +49,7 @@ function ServerNetworkPage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
+  const [toRevoke, setToRevoke] = useState<ServerAllocationRow | null>(null);
 
   const listAllocations = useServerFn(listServerAllocationsFn);
   const listFree = useServerFn(listServerFreeAllocationsFn);
@@ -152,15 +155,7 @@ function ServerNetworkPage() {
               canEdit,
               busy: primary.isPending || remove.isPending,
               onSetPrimary: (allocation) => primary.mutate(allocation.id),
-              onRevoke: (allocation) => {
-                if (
-                  confirm(
-                    `Retirer l’allocation ${allocation.ip}:${allocation.port} ? Elle retournera dans le pool du node.`,
-                  )
-                ) {
-                  remove.mutate(allocation.id);
-                }
-              },
+              onRevoke: setToRevoke,
             }}
           />
         </CardContent>
@@ -230,6 +225,20 @@ function ServerNetworkPage() {
           </CardContent>
         )}
       </Card>
+      <ConfirmDialog
+        open={toRevoke !== null}
+        onOpenChange={(open) => !open && setToRevoke(null)}
+        onConfirm={() => {
+          if (toRevoke) remove.mutate(toRevoke.id);
+          setToRevoke(null);
+        }}
+        title={toRevoke ? `Retirer l’allocation ${toRevoke.ip}:${toRevoke.port} ?` : ''}
+        description="Elle retournera dans le pool du node."
+        confirmLabel="Retirer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }

@@ -1,12 +1,14 @@
 import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import { HardDriveDownload } from 'lucide-react';
 import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Card,
   CardContent,
@@ -50,6 +52,9 @@ function ServerBackupsPage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
+  // Pending restore: which backup and whether it truncates the folder.
+  const [toRestore, setToRestore] = useState<{ backup: ServerBackupRow; truncate: boolean } | null>(null);
+  const [toDelete, setToDelete] = useState<ServerBackupRow | null>(null);
 
   const getServer = useServerFn(getServerFn);
   const listBackups = useServerFn(listBackupsFn);
@@ -146,18 +151,7 @@ function ServerBackupsPage() {
   };
 
   const onRestore = (backup: ServerBackupRow, truncate: boolean) => {
-    const confirmed = confirm(
-      truncate
-        ? `Restaurer « ${backup.name} » en REMPLAÇANT tout le dossier du serveur ? Tout fichier absent de l’archive sera DÉFINITIVEMENT PERDU.`
-        : `Restaurer « ${backup.name} » ? Les fichiers de l’archive écrasent les fichiers actuels ; le serveur sera arrêté.`,
-    );
-    if (confirmed) restore.mutate({ backupId: backup.id, truncate });
-  };
-
-  const onDelete = (backup: ServerBackupRow) => {
-    if (confirm(`Supprimer « ${backup.name} » ?`)) {
-      remove.mutate({ backupId: backup.id });
-    }
+    setToRestore({ backup, truncate });
   };
 
   // Only deny once the viewer grants are known: while the server query is in
@@ -241,8 +235,43 @@ function ServerBackupsPage() {
           deleting: remove.isPending,
           onDownload,
           onRestore,
-          onDelete,
+          onDelete: setToDelete,
         }}
+      />
+      <ConfirmDialog
+        open={toRestore !== null}
+        onOpenChange={(open) => !open && setToRestore(null)}
+        onConfirm={() => {
+          if (toRestore) restore.mutate({ backupId: toRestore.backup.id, truncate: toRestore.truncate });
+          setToRestore(null);
+        }}
+        title={
+          toRestore?.truncate
+            ? `Restaurer « ${toRestore.backup.name} » en REMPLAÇANT tout le dossier du serveur ?`
+            : `Restaurer « ${toRestore?.backup.name ?? ''} » ?`
+        }
+        description={
+          toRestore?.truncate
+            ? 'Tout fichier absent de l’archive sera DÉFINITIVEMENT PERDU.'
+            : 'Les fichiers de l’archive écrasent les fichiers actuels ; le serveur sera arrêté.'
+        }
+        confirmLabel="Restaurer"
+        cancelLabel="Annuler"
+        destructive
+        pending={restore.isPending}
+      />
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        onConfirm={() => {
+          if (toDelete) remove.mutate({ backupId: toDelete.id });
+          setToDelete(null);
+        }}
+        title={toDelete ? `Supprimer « ${toDelete.name} » ?` : ''}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
       />
     </div>
   );

@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+
 import { Download, Trash2 } from 'lucide-react';
 import { parseRecipe, parseRuntimeRecipe, isRuntimeRecipeJson } from '~/contract';
 import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
@@ -70,6 +73,7 @@ function EditRecipePage() {
       await navigate({ to: '/admin/recipes', search: adminRecipesList.defaultSearch });
     },
   });
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   if (query.isPending) {
     return <p className="text-muted-foreground">Chargement de la recette…</p>;
@@ -112,15 +116,24 @@ function EditRecipePage() {
       <Button
         variant="destructive"
         disabled={remove.isPending}
-        onClick={() => {
-          if (confirm(`Supprimer la recette « ${query.data?.name} » ?`)) {
-            remove.mutate();
-          }
-        }}
+        onClick={() => setConfirmDeleteOpen(true)}
       >
         <Trash2 />
         Supprimer
       </Button>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => {
+          remove.mutate();
+          setConfirmDeleteOpen(false);
+        }}
+        title={`Supprimer la recette « ${query.data?.name} » ?`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </>
   );
 

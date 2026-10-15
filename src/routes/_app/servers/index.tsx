@@ -1,12 +1,14 @@
 import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { DataTable } from '~/components/data-table/data-table';
 
 import { Button } from '~/components/ui/button';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { useAuth } from '~/contexts/use-auth';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { userServersList, type UserServerRow } from '~/lists/user-servers';
@@ -37,6 +39,7 @@ function ServersPage() {
 
   const listServers = useServerFn(listServersFn);
   const deleteServer = useServerFn(deleteServerFn);
+  const [toDelete, setToDelete] = useState<UserServerRow | null>(null);
 
   const query = useQuery({
     queryKey: ['servers', search],
@@ -58,12 +61,6 @@ function ServersPage() {
   // require the raw params type): the page resets below are part of the patch.
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
-
-  const onDelete = (server: UserServerRow) => {
-    if (confirm(`Supprimer « ${server.name} » ? Le dossier sera effacé.`)) {
-      remove.mutate(server);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -111,7 +108,7 @@ function ServersPage() {
             isPending={query.isPending}
             isFetching={query.isFetching}
             error={query.error}
-            rowContext={{ deleting: remove.isPending, onDelete }}
+            rowContext={{ deleting: remove.isPending, onDelete: setToDelete }}
           />
         </CardContent>
       </Card>
@@ -121,6 +118,20 @@ function ServersPage() {
           ← Retour à l'accueil
         </Button>
       </p>
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        onConfirm={() => {
+          if (toDelete) remove.mutate(toDelete);
+          setToDelete(null);
+        }}
+        title={toDelete ? `Supprimer « ${toDelete.name} » ?` : ''}
+        description="Le dossier sera effacé."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }

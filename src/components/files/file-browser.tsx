@@ -7,6 +7,7 @@ import { MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
 import { ListTable } from '~/components/data-table/list-table';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { SftpConnectionDialog } from '~/components/sftp-card';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { filesList } from '~/lists/files';
@@ -53,6 +54,7 @@ export function FileBrowser({
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<FileObject | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<FileObject | null>(null);
   /** Table state of the listing (client mode: filtered/sorted/paginated locally). */
   const [tableQuery, setTableQuery] = useState<ListQuery>(filesList.defaultSearch);
 
@@ -128,12 +130,6 @@ export function FileBrowser({
   const open = (entry: FileObject) => {
     if (entry.isDirectory) onNavigate(entry.path);
     else onNavigate(dir, entry.path);
-  };
-
-  const askDelete = (entry: FileObject) => {
-    if (confirm(`Supprimer « ${entry.name} »${entry.isDirectory ? ' et son contenu' : ''} ?`)) {
-      remove.mutate([entry.path]);
-    }
   };
 
   const segments = dir ? dir.split('/') : [];
@@ -247,7 +243,7 @@ export function FileBrowser({
                   onOpen: open,
                   onDownload: (entry) => onDownload(entry.path),
                   onRename: (entry) => setRenaming(entry),
-                  onDelete: askDelete,
+                  onDelete: setToDelete,
                 }}
               />
             </div>
@@ -262,6 +258,19 @@ export function FileBrowser({
         onSubmit={(values) => {
           if (renaming) rename.mutate({ path: renaming.path, newName: values.name });
         }}
+      />
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        onConfirm={() => {
+          if (toDelete) remove.mutate([toDelete.path]);
+          setToDelete(null);
+        }}
+        title={toDelete ? `Supprimer « ${toDelete.name} »${toDelete.isDirectory ? ' et son contenu' : ''} ?` : ''}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
       />
     </div>
   );

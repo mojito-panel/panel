@@ -25,6 +25,7 @@ import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
 import { InstallLogs, InstallNotice } from '~/components/console/install-panel';
 import { ErrorState } from '~/components/error/error-state';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
@@ -142,6 +143,8 @@ function ServerConsolePage() {
   const submitCommand = useMutation({
     mutationFn: (cmd: string) => sendCommand({ data: { serverId, command: cmd } }),
   });
+
+  const [askKill, setAskKill] = useState(false);
 
   const runAction = (a: 'start' | 'stop' | 'restart' | 'kill') => {
     if (wsSendRef.current) {
@@ -264,9 +267,7 @@ function ServerConsolePage() {
           {canKill && (
             <Button
               variant="destructive"
-              onClick={() => {
-                if (confirm('Forcer l’arrêt du process ?')) runAction('kill');
-              }}
+              onClick={() => setAskKill(true)}
               disabled={action.isPending || !isAlive}
             >
               <Skull />
@@ -316,6 +317,19 @@ function ServerConsolePage() {
       {submitCommand.isError && (
         <p className="text-sm text-destructive">{submitCommand.error.message}</p>
       )}
+      <ConfirmDialog
+        open={askKill}
+        onOpenChange={setAskKill}
+        onConfirm={() => {
+          runAction('kill');
+          setAskKill(false);
+        }}
+        title="Forcer l’arrêt du process ?"
+        confirmLabel="Forcer l’arrêt"
+        cancelLabel="Annuler"
+        destructive
+        pending={action.isPending}
+      />
     </div>
   );
 }

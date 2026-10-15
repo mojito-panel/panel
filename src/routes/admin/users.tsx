@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
@@ -20,6 +21,7 @@ import { canFromPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminUsersList, type AdminUserRow, type AdminUsersContext } from '~/lists/users';
 import { Button } from '~/components/ui/button';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { Input } from '~/components/ui/input';
 import {
   Card,
@@ -63,6 +65,9 @@ interface RoleDto {
 }
 
 function AdminUsersPage() {
+  const [banTarget, setBanTarget] = useState<AdminUserRow | null>(null);
+  const [banReason, setBanReason] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
   const navigate = useNavigate({ from: Route.fullPath });
@@ -142,17 +147,12 @@ function AdminUsersPage() {
   });
 
   const confirmBan = (target: AdminUserRow) => {
-    if (!confirm(`Suspendre « ${target.email} » ? Il ne pourra plus se connecter.`)) {
-      return;
-    }
-    const reason = prompt('Raison de la suspension (optionnelle) :');
-    ban.mutate({ userId: target.id, banReason: reason ?? undefined });
+    setBanTarget(target);
+    setBanReason('');
   };
 
   const confirmDelete = (target: AdminUserRow) => {
-    if (confirm(`Supprimer définitivement « ${target.email} » ?`)) {
-      remove.mutate({ userId: target.id });
-    }
+    setDeleteTarget(target);
   };
 
   // Search updates write the WHOLE validated query back (reducer form would
@@ -211,6 +211,50 @@ function AdminUsersPage() {
       {canCreate && (
         <CreateUserCard createUser={createUser} onCreated={invalidate} roles={roles} />
       )}
+
+      {/* ─── Confirm dialogs ─── */}
+      <ConfirmDialog
+        open={banTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setBanTarget(null);
+        }}
+        onConfirm={() => {
+          if (banTarget) {
+            ban.mutate({ userId: banTarget.id, banReason: banReason || undefined });
+          }
+          setBanTarget(null);
+          setBanReason('');
+        }}
+        title={`Suspendre « ${banTarget?.email ?? ''} » ?`}
+        description="Il ne pourra plus se connecter. Ses sessions actives seront révoquées."
+        confirmLabel="Suspendre"
+        destructive
+        pending={ban.isPending}
+      >
+        <Input
+          placeholder="Raison de la suspension (optionnelle)"
+          value={banReason}
+          onChange={(e) => setBanReason(e.target.value)}
+        />
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteTarget) {
+            remove.mutate({ userId: deleteTarget.id });
+          }
+          setDeleteTarget(null);
+        }}
+        title={`Supprimer définitivement « ${deleteTarget?.email ?? ''} » ?`}
+        description="Cette action est irréversible."
+        confirmLabel="Supprimer"
+        destructive
+        pending={remove.isPending}
+      />
     </div>
   );
 }

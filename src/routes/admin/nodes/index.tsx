@@ -30,6 +30,7 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 import { NodeSchemeField } from '~/components/node-scheme-field';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import type { NodeScheme } from '~/validators/node';
 
 export const Route = createFileRoute('/admin/nodes/')({
@@ -89,11 +90,7 @@ function AdminNodesPage() {
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
 
-  const onDelete = (node: AdminNodeRow) => {
-    if (confirm(`Supprimer le node « ${node.name} » ?`)) {
-      remove.mutate(node);
-    }
-  };
+  const [nodeToDelete, setNodeToDelete] = useState<AdminNodeRow | null>(null);
 
   const form = useForm({
     validators: { onChange: createNodeSchema },
@@ -150,7 +147,7 @@ function AdminNodesPage() {
             isFetching={query.isFetching}
             error={query.error}
             emptyMessage="Aucun node enregistré."
-            rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
+            rowContext={{ canDelete, deleting: remove.isPending, onDelete: setNodeToDelete }}
           />
         </CardContent>
       </Card>
@@ -350,6 +347,21 @@ function AdminNodesPage() {
             )}
           </CardContent>
         </Card>
+      )}
+      {nodeToDelete && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && setNodeToDelete(null)}
+          onConfirm={() => {
+            remove.mutate(nodeToDelete);
+            setNodeToDelete(null);
+          }}
+          title={`Supprimer le node « ${nodeToDelete.name} » ?`}
+          confirmLabel="Supprimer"
+          cancelLabel="Annuler"
+          destructive
+          pending={remove.isPending}
+        />
       )}
     </div>
   );
