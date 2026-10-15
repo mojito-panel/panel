@@ -94,14 +94,34 @@ function DebouncedInput({
   );
 }
 
-/** Active filter chips of a multiple-choice filter (empty = no filter). */
+/**
+ * Chip toggle: additive for a multi-choice filter, exclusive (radio-like) for
+ * the boolean/nullable tri-state filters — switching value must be one click,
+ * never "un-pick, then pick".
+ */
+export function toggleChip(
+  selected: readonly string[],
+  value: string,
+  exclusive: boolean,
+): string[] {
+  const active = selected.includes(value);
+  if (exclusive) return active ? [] : [value];
+  return active
+    ? selected.filter((entry) => entry !== value)
+    : [...selected, value];
+}
+
+/** Active filter chips of a filter (empty = no filter). */
 function ChoiceChips({
   options,
   selected,
+  exclusive = false,
   onChange,
 }: {
   options: readonly { value: string; label: string }[];
   selected: string[];
+  /** One active chip at most, clicking the active chip clears the filter. */
+  exclusive?: boolean;
   onChange: (values: string[]) => void;
 }) {
   return (
@@ -114,13 +134,7 @@ function ChoiceChips({
             type="button"
             size="xs"
             variant={active ? 'secondary' : 'outline'}
-            onClick={() =>
-              onChange(
-                active
-                  ? selected.filter((value) => value !== option.value)
-                  : [...selected, option.value],
-              )
-            }
+            onClick={() => onChange(toggleChip(selected, option.value, exclusive))}
           >
             {option.label}
           </Button>
@@ -155,6 +169,7 @@ export function FilterControl({
     case 'boolean':
       return (
         <ChoiceChips
+          exclusive
           options={[
             { value: 'true', label: 'Oui' },
             { value: 'false', label: 'Non' },
@@ -168,6 +183,7 @@ export function FilterControl({
       const [missing, present] = filter.labels ?? ['Non défini', 'Défini'];
       return (
         <ChoiceChips
+          exclusive
           options={[
             { value: 'true', label: missing },
             { value: 'false', label: present },

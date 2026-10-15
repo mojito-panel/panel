@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { FilterControl } from '~/components/data-table/data-table-filters';
+import { FilterControl, toggleChip } from '~/components/data-table/data-table-filters';
 import type { ListFilterChoice } from '~/lists/define';
 
 /**
@@ -57,5 +57,23 @@ describe('filter control (single choice)', () => {
   it('falls back to the raw value when its option is not loaded yet', () => {
     // A `dynamic` filter (node ids) can render before its options arrive.
     expect(triggerText(renderChoice('node_123'))).toBe('node_123');
+  });
+});
+
+describe('chip toggle (boolean/nullable filters)', () => {
+  it('switches value in one click while the other state is active', () => {
+    // Clicking "Non" while "Oui" is selected must REPLACE it, not be swallowed.
+    expect(toggleChip(['true'], 'false', true)).toEqual(['false']);
+    expect(toggleChip(['false'], 'true', true)).toEqual(['true']);
+  });
+
+  it('clears the filter when the active chip is clicked again', () => {
+    expect(toggleChip(['true'], 'true', true)).toEqual([]);
+    expect(toggleChip(['false'], 'false', true)).toEqual([]);
+  });
+
+  it('stays additive for a multi-choice filter', () => {
+    expect(toggleChip(['running'], 'stopped', false)).toEqual(['running', 'stopped']);
+    expect(toggleChip(['running', 'stopped'], 'running', false)).toEqual(['stopped']);
   });
 });
