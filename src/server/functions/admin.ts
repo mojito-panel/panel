@@ -615,9 +615,10 @@ async function pingNodes(nodes: Parameters<typeof agentHealth>[0][]) {
 }
 
 /**
- * Admin dashboard data: global counters, node health (live agent ping of
- * the public /health route — also refreshes status/lastSeenAt in DB) and
- * the 5 most recent servers.
+ * Admin dashboard data: global counters and the 5 most recent servers —
+ * DB ONLY, always fast. The LIVE node health pings are a separate
+ * best-effort query (`getAdminOverviewHealthFn`, polled by the page), so
+ * offline agents never block the dashboard.
  */
 export const getAdminOverviewFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
@@ -642,16 +643,14 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' })
     const runningCount = servers.filter((s) => s.status === 'running').length;
     const installingCount = servers.filter((s) => s.status === 'installing').length;
 
-    const pings = await pingNodes(nodes);
-
-    const nodeDtos = nodes.map((node, index) => ({
+    // DB status is served immediately; the health poll below refreshes it.
+    const nodeDtos = nodes.map((node) => ({
       id: node.id,
       name: node.name,
       fqdn: node.fqdn,
       publicPort: node.publicPort,
       status: node.status,
       lastSeenAt: node.lastSeenAt,
-      agentVersion: pings[index].status === 'fulfilled' ? (pings[index].value.version ?? null) : null,
       serverCount: servers.filter((s) => s.nodeId === node.id).length,
     }));
 
@@ -680,6 +679,26 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' })
       nodes: nodeDtos,
       recentServers,
     };
+  });
+
+/**
+ * Live node health for the dashboard — parallel agent pings (short
+ * timeout), syncing status/lastSeenAt in DB. Per node: the live status
+ * and the agent version (null when unreachable). Polled by the page.
+ */
+export const getAdminOverviewHealthFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requirePanelPermission({'panel.overview':['read']});
+    const nodes = await orm.em.find(Node, {});
+    const pings = await pingNodes(nodes);
+    return nodes.map((node, index) => ({
+      id: node.id,
+      status: node.status as 'online' | 'offline',
+      lastSeenAt: node.lastSeenAt,
+      agentVersion:
+        pings[index].status === 'fulfilled' ? (pings[index].value.version ?? null) : null,
+    }));
   });
 
 // ─── Health (admin dashboard) ────────────────────────────────────────────────

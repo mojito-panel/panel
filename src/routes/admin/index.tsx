@@ -2,9 +2,10 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
-import { getAdminOverviewFn } from '~/server/functions/admin';
+import { getAdminOverviewFn, getAdminOverviewHealthFn } from '~/server/functions/admin';
 import { adminNodesList } from '~/lists/nodes';
 import { StatusBadge } from '~/components/status-badge';
+import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
 import {
   Card,
@@ -50,16 +51,25 @@ function StatCard({
 
 function AdminOverviewPage() {
   const getOverview = useServerFn(getAdminOverviewFn);
-
-  // Auto-refresh: the agent healthchecks are cheap and the dashboard is the
-  // admin's cockpit — 30s keeps node status honest without spamming.
+  const getOverviewHealth = useServerFn(getAdminOverviewHealthFn);
+  // DB overview (fast) — the dashboard renders from this alone.
   const query = useQuery({
     queryKey: ['admin-overview'],
     queryFn: () => getOverview(),
     refetchInterval: 30_000,
   });
 
+  // LIVE agent health — polled at a regular interval; the node badges and
+  // agent versions show skeletons until the first answer, never block.
+  const healthQuery = useQuery({
+    queryKey: ['admin-overview-health'],
+    queryFn: () => getOverviewHealth(),
+    refetchInterval: 5_000,
+  });
+
   const data = query.data;
+  // Live health indexed by node id — null while the poll is in flight.
+  const healthById = new Map(healthQuery.data?.map((n) => [n.id, n]));
 
   return (
     <div className="space-y-6">
@@ -102,35 +112,46 @@ function AdminOverviewPage() {
         <StatCard icon={Puzzle} label="Recettes" value={data?.counts.recipes ?? '…'} />
       </div>
 
-      {/* ─── Nodes health (live agent ping) ─── */}
+      {/* ─── Nodes health (DB row + live agent poll) ─── */}
       <Card>
         <CardHeader>
           <CardTitle>Nodes</CardTitle>
           <CardDescription>
-            Santé des agents (healthcheck live au chargement de la page).
+            Santé des agents (polling live — le statut se rafraîchit toutes les 5 s).
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="divide-y">
-            {(data?.nodes ?? []).map((node) => (
-              <div key={node.id} className="flex items-center justify-between gap-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{node.name}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {node.fqdn}:{node.publicPort}
-                    {node.agentVersion && ` · agent ${node.agentVersion}`}
-                    {node.lastSeenAt &&
-                      ` · vu ${new Date(node.lastSeenAt).toLocaleString('fr-FR')}`}
-                  </p>
+            {(data?.nodes ?? []).map((node) => {
+              const health = healthById.get(node.id);
+              return (
+                <div key={node.id} className="flex items-center justify-between gap-4 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{node.name}</p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {node.fqdn}:{node.publicPort}
+                      {healthQuery.isPending
+                        ? ' · …'
+                        : health?.agentVersion
+                          ? ` · agent ${health.agentVersion}`
+                          : ' · agent injoignable'}
+                      {health?.lastSeenAt &&
+                        ` · vu ${new Date(health.lastSeenAt).toLocaleString('fr-FR')}`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      {node.serverCount} serveur{node.serverCount > 1 ? 's' : ''}
+                    </span>
+                    {healthQuery.isPending ? (
+                      <Skeleton className="h-6 w-24 rounded-full" />
+                    ) : (
+                      <StatusBadge status={health?.status ?? node.status} />
+                    )}
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-sm text-muted-foreground">
-                    {node.serverCount} serveur{node.serverCount > 1 ? 's' : ''}
-                  </span>
-                  <StatusBadge status={node.status} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {data?.nodes.length === 0 && (
               <p className="text-muted-foreground">
                 Aucun node.{' '}
