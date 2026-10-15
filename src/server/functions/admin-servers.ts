@@ -2,6 +2,9 @@ import { createServerFn } from '@tanstack/react-start';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db/entities';
+import { adminServersList } from '~/lists/servers';
+import { serverAllocationsList } from '~/lists/allocations';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { resolveRuntimeRecipes } from './runtimes';
 import {
   requirePanelPermission,
@@ -17,7 +20,6 @@ import {
   AgentError,
 } from '../agent/client';
 import {
-  listAdminServersSchema,
   adminServerIdSchema,
   updateAdminServerSchema,
   setAdminServerSuspendedSchema,
@@ -44,57 +46,52 @@ async function loadServer(serverId: string) {
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export const listAdminServersFn = createServerFn({ method: 'GET' })
-  .validator(listAdminServersSchema)
+/**
+ * Server list of the admin area — filter/sort/pagination run in the database
+ * (`adminServersList`), the joined `user` table is pulled in only when a filter
+ * or the sort actually needs it.
+ */
+export const listAdminServersFn = createServerFn({ method: 'POST' })
+  .validator(adminServersList.querySchema)
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['read'] });
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const [servers, nodes, recipes, users] = await Promise.all([
-      em.find(Server, {}),
-      em.find(Node, {}),
-      em.find(Recipe, {}),
-      em.find(User, {}),
+    const { rows, rowCount } = await runListQuery(
+      listQueryBuilder(em, Server, adminServersList),
+      adminServersList.spec,
+      data,
+    );
+
+    // Display names of the current page only (queries stay bounded by pageSize).
+    const [nodes, recipes, owners] = await Promise.all([
+      em.find(Node, { id: { $in: [...new Set(rows.map((server) => server.nodeId))] } }),
+      em.find(Recipe, { id: { $in: [...new Set(rows.map((server) => server.recipeId))] } }),
+      em.find(User, { id: { $in: [...new Set(rows.map((server) => server.ownerId))] } }),
     ]);
 
-    const search = data.search?.toLowerCase() ?? '';
-    const ownerEmailById = new Map(users.map((user) => [user.id, user.email.toLowerCase()]));
+    const nodeNames = new Map(nodes.map((node) => [node.id, node.name]));
+    const recipeNames = new Map(recipes.map((recipe) => [recipe.id, recipe.name]));
+    const ownersById = new Map(owners.map((owner) => [owner.id, owner]));
 
-    const rows = servers
-      .filter((server) => {
-        if (data.nodeId && server.nodeId !== data.nodeId) return false;
-        if (data.status && server.status !== data.status) return false;
-        if (search) {
-          const ownerEmail = ownerEmailById.get(server.ownerId) ?? '';
-          if (
-            !server.name.toLowerCase().includes(search) &&
-            !ownerEmail.includes(search)
-          ) {
-            return false;
-          }
-        }
-        return true;
-      })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map((server) => {
-        const owner = users.find((user) => user.id === server.ownerId);
+    return {
+      rowCount,
+      rows: rows.map((server) => {
+        const owner = ownersById.get(server.ownerId);
         return {
           id: server.id,
           name: server.name,
           status: server.status,
           suspended: server.suspended,
-          nodeId: server.nodeId,
-          nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
-          recipeName: recipes.find((r) => r.id === server.recipeId)?.name ?? '—',
-          ownerId: server.ownerId,
+          nodeName: nodeNames.get(server.nodeId) ?? '—',
+          recipeName: recipeNames.get(server.recipeId) ?? '—',
           ownerName: owner?.name ?? null,
           ownerEmail: owner?.email ?? '—',
           createdAt: server.createdAt,
         };
-      });
-
-    return { servers: rows };
+      }),
+    };
   });
 
 // ─── Detail (DB + live agent runtime state) ───────────────────────────────────
@@ -369,7 +366,7 @@ async function pushPrimaryAllocation(
   }
 }
 
-/** Serializable allocation DTO shared by the admin allocations queries. */
+/** Serializable allocation DTO of the server detail payload. */
 function allocationDto(allocation: {
   id: string;
   ip: string;
@@ -386,25 +383,64 @@ function allocationDto(allocation: {
   };
 }
 
+/** Row of the free-allocation picker of the "add" form (claim candidates). */
+function allocationPickerDto(allocation: {
+  id: string;
+  ip: string;
+  port: number;
+  alias: string | null | undefined;
+}) {
+  return {
+    id: allocation.id,
+    ip: allocation.ip,
+    port: allocation.port,
+    alias: allocation.alias ?? null,
+  };
+}
+
 /**
- * Allocations of a server + the free ones of its node (Pelican
- * AllocationsRelationManager list: claim from the pool, set primary,
- * release).
+ * Allocations of a server — the admin record's own allocation table. Filter/
+ * sort/pagination run in the database (`serverAllocationsList`); the server id
+ * is a route param, applied to the query builder BEFORE `runListQuery` (never
+ * a search param). The free pool of the node comes from the unpaginated
+ * `listAdminServerFreeAllocationsFn` picker below.
  */
-export const listAdminServerAllocationsFn = createServerFn({ method: 'GET' })
+export const listAdminServerAllocationsFn = createServerFn({ method: 'POST' })
+  .validator(serverAllocationsList.querySchema.and(adminServerIdSchema))
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['read'] });
+    const { em, server } = await loadServer(data.serverId);
+
+    const qb = listQueryBuilder(em, Allocation, serverAllocationsList);
+    qb.andWhere({ serverId: server.id });
+
+    const { rows, rowCount } = await runListQuery(qb, serverAllocationsList.spec, data);
+
+    return {
+      rowCount,
+      rows: rows.map((allocation) => ({
+        id: allocation.id,
+        ip: allocation.ip ?? '0.0.0.0',
+        port: allocation.port,
+        alias: allocation.alias ?? null,
+        primary: allocation.primary ?? false,
+      })),
+    };
+  });
+
+/**
+ * Free allocations of the server's node — the unpaginated PICKER helper of the
+ * "add an allocation" form (the claim needs every candidate at once). A picker
+ * must never go through the paginated list function above.
+ */
+export const listAdminServerFreeAllocationsFn = createServerFn({ method: 'GET' })
   .validator(adminServerIdSchema)
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['read'] });
     const { em, server } = await loadServer(data.serverId);
 
-    const assigned = await em.find(Allocation, { serverId: server.id });
     const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
-    const byPort = (a: { port: number }, b: { port: number }) => a.port - b.port;
-
-    return {
-      allocations: assigned.sort(byPort).map(allocationDto),
-      free: free.sort(byPort).map(allocationDto),
-    };
+    return free.sort((a, b) => a.port - b.port).map(allocationPickerDto);
   });
 
 /** Claims a FREE allocation of the server's node and assigns it to the server. */

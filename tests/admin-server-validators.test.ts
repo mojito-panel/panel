@@ -1,45 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
-  listAdminServersSchema,
   adminServerIdSchema,
   updateAdminServerSchema,
   setAdminServerSuspendedSchema,
   adminServerAllocationActionSchema,
 } from '../src/validators/admin-server';
-
-describe('listAdminServersSchema', () => {
-  it('accepts an empty filter set', () => {
-    const result = listAdminServersSchema.safeParse({});
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts the full filter set', () => {
-    const result = listAdminServersSchema.safeParse({
-      search: 'my server',
-      nodeId: 'node_123',
-      status: 'running',
-    });
-    expect(result.success).toBe(true);
-    expect(result.data?.search).toBe('my server');
-  });
-
-  it('trims the search input', () => {
-    const result = listAdminServersSchema.safeParse({ search: '  spaced  ' });
-    expect(result.success).toBe(true);
-    expect(result.data?.search).toBe('spaced');
-  });
-
-  it('rejects an over-long search', () => {
-    const result = listAdminServersSchema.safeParse({ search: 'a'.repeat(129) });
-    expect(result.success).toBe(false);
-  });
-
-  it('strips unknown keys (default Zod object behavior)', () => {
-    const result = listAdminServersSchema.safeParse({ foo: 'bar', search: 'x' });
-    expect(result.success).toBe(true);
-    expect(result.data).toEqual({ search: 'x' });
-  });
-});
 
 describe('adminServerIdSchema', () => {
   it('accepts an id', () => {

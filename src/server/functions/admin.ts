@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
@@ -11,10 +11,16 @@ import {
   parseRecipe,
   parseRuntimeRecipe,
   isRuntimeRecipeJson,
+  recipeVariableSchema,
   DEFAULT_SFTP_PORT,
   type Recipe as RecipeDefinition,
   type RuntimeRecipe,
+  type RecipeVariable,
 } from '~/contract';
+import { adminNodesList } from '~/lists/nodes';
+import { nodeAllocationsList } from '~/lists/allocations';
+import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, requirePanelPermission, HttpError } from '../session';
 import { encryptSecret, decryptSecret } from '../crypto';
 import { agentHealth, agentGetStats, agentUpdateAllocation, AgentError } from '../agent/client';
@@ -62,6 +68,38 @@ export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () =>
     lastSeenAt: node.lastSeenAt,
   }));
 });
+
+/**
+ * Admin node list (/admin/nodes) — filter/sort/pagination run in the database
+ * (`adminNodesList`). Distinct from `listNodesFn` above, which stays the
+ * unpaginated picker helper (node selection when creating a server).
+ */
+export const listAdminNodesFn = createServerFn({ method: 'POST' })
+  .validator(adminNodesList.querySchema)
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const { rows, rowCount } = await runListQuery(
+      listQueryBuilder(em, Node, adminNodesList),
+      adminNodesList.spec,
+      data,
+    );
+
+    return {
+      rowCount,
+      rows: rows.map((node) => ({
+        id: node.id,
+        name: node.name,
+        fqdn: node.fqdn,
+        scheme: node.scheme,
+        publicPort: node.publicPort,
+        status: node.status,
+        createdAt: node.createdAt,
+      })),
+    };
+  });
 
 export const createNodeFn = createServerFn({ method: 'POST' })
   .validator(createNodeSchema)
@@ -262,33 +300,47 @@ export const listFreeNodeAllocationsFn = createServerFn({ method: 'GET' })
   });
 
 /**
- * All allocations of a node with their assigned server (null = free),
- * plus the servers installed on the node (the "assign" picker needs them).
+ * Allocations of a node with their assigned server (null = free) — the admin
+ * node pool table (/admin/nodes/$nodeId). Filter/sort/pagination run in the
+ * database (`nodeAllocationsList`); the node id is a route param, applied to
+ * the query builder BEFORE `runListQuery` (never a search param). The
+ * unpaginated `listFreeNodeAllocationsFn` above stays the picker helper.
  */
-export const listNodeAllocationsFn = createServerFn({ method: 'GET' })
-  .validator(nodeIdSchema)
+export const listNodeAllocationsFn = createServerFn({ method: 'POST' })
+  .validator(nodeAllocationsList.querySchema.and(nodeIdSchema))
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['read']});
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const [allocations, servers] = await Promise.all([
-      em.find(Allocation, { nodeId: data.nodeId }),
-      em.find(Server, { nodeId: data.nodeId }),
-    ]);
+    const qb = listQueryBuilder(em, Allocation, nodeAllocationsList);
+    qb.andWhere({ nodeId: data.nodeId });
 
-    return allocations
-      .sort((a, b) => a.port - b.port)
-      .map((allocation) => ({
-        id: allocation.id,
-        ip: allocation.ip,
-        port: allocation.port,
-        alias: allocation.alias,
-        primary: allocation.primary,
-        serverId: allocation.serverId,
-        serverName:
-          servers.find((s) => s.id === allocation.serverId)?.name ?? null,
-      }));
+    const { rows, rowCount } = await runListQuery(qb, nodeAllocationsList.spec, data);
+
+    // Server names of the current page only (the query stays bounded by pageSize).
+    const serverIds = [
+      ...new Set(rows.map((row) => row.serverId).filter((id): id is string => id !== null)),
+    ];
+    const servers =
+      serverIds.length > 0 ? await em.find(Server, { id: { $in: serverIds } }) : [];
+    const names = new Map(servers.map((server) => [server.id, server.name]));
+
+    return {
+      rowCount,
+      rows: rows.map((allocation) => {
+        const serverId = allocation.serverId ?? null;
+        return {
+          id: allocation.id,
+          ip: allocation.ip ?? '0.0.0.0',
+          port: allocation.port,
+          alias: allocation.alias ?? null,
+          serverId,
+          serverName: serverId === null ? null : names.get(serverId) ?? null,
+          primary: allocation.primary ?? false,
+        };
+      }),
+    };
   });
 
 /**
@@ -562,27 +614,75 @@ async function upsertRecipe(
   return { slug: recipe.slug, name: recipe.name, created: true };
 }
 
-export const listRecipesFn = createServerFn({ method: 'GET' }).handler(async () => {
+/**
+ * Declared variables of a stored recipe JSON. The DB payload is untrusted, so
+ * the variable array is validated against the contract (a malformed shape reads
+ * as an empty list rather than crashing the list).
+ */
+function storedRecipeVariables(json: Record<string, unknown>): RecipeVariable[] {
+  return z.array(recipeVariableSchema).catch([]).parse(json.variables);
+}
+
+/**
+ * Admin recipe list (/admin/recipes) — filter/sort/pagination run in the
+ * database (`adminRecipesList`). The recipe kind lives only in the JSON payload
+ * (`json->>'type'`), which the `type` filter query reads for equality.
+ */
+export const listRecipesFn = createServerFn({ method: 'POST' })
+  .validator(adminRecipesList.querySchema)
+  .handler(async ({ data }) => {
+    await requireUser();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const { rows, rowCount } = await runListQuery(
+      listQueryBuilder(em, Recipe, adminRecipesList),
+      adminRecipesList.spec,
+      data,
+    );
+
+    return {
+      rowCount,
+      rows: rows.map((recipe): AdminRecipeRow => ({
+        id: recipe.id,
+        slug: recipe.slug,
+        name: recipe.name,
+        type: recipe.json.type === 'runtime' ? 'runtime' : 'app',
+        /** Number of declared variables (auto-generated form at creation). */
+        variableCount: storedRecipeVariables(recipe.json).length,
+        updateUrl:
+          typeof recipe.json.updateUrl === 'string' ? recipe.json.updateUrl : null,
+        createdAt: recipe.createdAt,
+        updatedAt: recipe.updatedAt,
+      })),
+    };
+  });
+
+/**
+ * Picker options: the FULL recipe set (apps AND runtimes) with their variable
+ * definitions — used by the server creation form (apps) and the recipe editor's
+ * runtime picker (runtimes). Unpaginated, unlike `listRecipesFn`.
+ */
+export const listRecipeOptionsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireUser();
   const orm = await initOrm();
   const em = orm.em.fork();
   const recipes = await em.find(Recipe, {});
-  return recipes.map((recipe) => {
-    const def = recipe.json as RecipeDefinition;
-    return {
+  return recipes.map(
+    (recipe): {
+      id: string;
+      slug: string;
+      name: string;
+      type: 'app' | 'runtime';
+      variables: RecipeVariable[];
+    } => ({
       id: recipe.id,
       slug: recipe.slug,
       name: recipe.name,
-      schemaVersion: recipe.schemaVersion,
-      /** Recipe kind — 'runtime' for runtimes, 'app' otherwise. */
-      type: (recipe.json as { type?: 'app' | 'runtime' }).type ?? 'app',
-      /** Variable definitions (auto-generated form at creation). */
-      variables: def.variables ?? [],
-      /** Update URL (re-import) if defined by the recipe. */
-      updateUrl: def.updateUrl ?? null,
-      createdAt: recipe.createdAt,
-    };
-  });
+      type: recipe.json.type === 'runtime' ? 'runtime' : 'app',
+      variables: storedRecipeVariables(recipe.json),
+    }),
+  );
 });
 
 /**

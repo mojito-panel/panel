@@ -5,16 +5,6 @@ import { z } from 'zod';
  * equivalent). The per-server pages keep using ~/validators/server.
  */
 
-/** List filters: free-text search, node and status filters. */
-export const listAdminServersSchema = z.object({
-  /** Matches the server name OR the owner's email/name. */
-  search: z.string().trim().max(128).optional(),
-  nodeId: z.string().min(1).optional(),
-  status: z.string().min(1).optional(),
-});
-
-export type ListAdminServersDto = z.infer<typeof listAdminServersSchema>;
-
 /** Server id input shared by the detail / action functions. */
 export const adminServerIdSchema = z.object({
   serverId: z.string().min(1),

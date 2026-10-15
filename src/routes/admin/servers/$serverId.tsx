@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { ExternalLink, RefreshCw, Star, Trash2 } from 'lucide-react';
+import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
 import {
   getAdminServerFn,
   updateAdminServerFn,
@@ -11,6 +12,7 @@ import {
   reinstallAdminServerFn,
   deleteAdminServerFn,
   listAdminServerAllocationsFn,
+  listAdminServerFreeAllocationsFn,
   addAdminServerAllocationFn,
   removeAdminServerAllocationFn,
   setPrimaryAdminServerAllocationFn,
@@ -21,6 +23,12 @@ import {
   adminServerAllocationActionSchema,
   type UpdateAdminServerFormDto,
 } from '~/validators/admin-server';
+import { DataPicker } from '~/components/data-table/data-picker';
+import { DataTable } from '~/components/data-table/data-table';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { serverAllocationsList } from '~/lists/allocations';
+import { adminServersList } from '~/lists/servers';
+import { adminUsersList } from '~/lists/users';
 import { canFromPermissions } from '~/lib/permissions';
 import { useAuth } from '~/contexts/use-auth';
 import { StatusBadge, statusLabel } from '~/components/status-badge';
@@ -66,6 +74,13 @@ interface AdminServerDto {
   allocations: Array<{ id: string; ip: string; port: number; alias: string | null; primary: boolean }>;
   subuserCount: number;
   backupCount: number;
+}
+
+/** Owner selection stored by the picker (mirrors the server's owner DTO). */
+interface OwnerSelection {
+  id: string;
+  name: string | null;
+  email: string;
 }
 
 /** Read-only info entry (Pelican TextEntry equivalent). */
@@ -151,14 +166,14 @@ function ServerRecordTabs({
   const permissions = user?.permissions ?? [];
   const canListUsers = canFromPermissions(permissions, { user: ['list'] });
 
-  // Owner picker source — requires the user:list permission (admins have it)
+  // Owner picker: one page of the users list (the user:list permission gates it)
   const listUsers = useServerFn(listUsersFn);
-  const usersQuery = useQuery({
-    queryKey: ['admin-server-owner-picker'],
-    queryFn: () => listUsers({ data: { limit: 100 } }),
-    enabled: canUpdate && canListUsers,
-    staleTime: 60_000,
-  });
+  const [ownerSelection, setOwnerSelection] = useState<OwnerSelection | null>(null);
+  const ownerValue =
+    ownerSelection ??
+    (server.owner
+      ? { id: server.owner.id, name: server.owner.name, email: server.owner.email }
+      : null);
 
   const queryClient = useQueryClient();
   const updateServer = useServerFn(updateAdminServerFn);
@@ -237,48 +252,34 @@ function ServerRecordTabs({
 
               <form.Field name="ownerId">
                 {(field) => {
-                  const users = usersQuery.data?.users ?? [];
                   return (
                     <div className="space-y-2">
                       <Label>Propriétaire</Label>
                       {canUpdate ? (
                         canListUsers ? (
-                          <Select
-                            value={field.state.value}
-                            onValueChange={(value) => value !== null && field.handleChange(value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              {/* base-ui only resolves the item label once the
-                                  item is MOUNTED (popup opened) — resolve it
-                                  ourselves so the trigger never shows the id */}
-                              <SelectValue placeholder="Choisis un propriétaire">
-                                {(value: string | null) => {
-                                  if (!value) return 'Choisis un propriétaire';
-                                  const candidate = users.find((c) => c.id === value);
-                                  if (candidate) {
-                                    return candidate.name
-                                      ? `${candidate.name} (${candidate.email})`
-                                      : candidate.email;
-                                  }
-                                  // Users list still loading — fall back to the
-                                  // server's own owner record
-                                  if (server.owner?.id === value) {
-                                    return server.owner.name
-                                      ? `${server.owner.name} (${server.owner.email})`
-                                      : server.owner.email;
-                                  }
-                                  return '';
-                                }}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {users.map((candidate) => (
-                                <SelectItem key={candidate.id} value={candidate.id}>
-                                  {candidate.name ?? candidate.email} ({candidate.email})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <div className="max-w-md">
+                            <DataPicker
+                            list={adminUsersList}
+                            fetchPage={(query) => listUsers({ data: query })}
+                            toSelection={(candidate) => ({
+                              id: candidate.id,
+                              name: candidate.name,
+                              email: candidate.email,
+                            })}
+                            renderValue={(selection) =>
+                              selection.name
+                                ? `${selection.name} (${selection.email})`
+                                : selection.email
+                            }
+                            value={ownerValue}
+                            onChange={(selection) => {
+                              setOwnerSelection(selection);
+                              field.handleChange(selection?.id ?? '');
+                            }}
+                            title="Choisir un propriétaire"
+                            placeholder="Rechercher un propriétaire"
+                          />
+                        </div>
                         ) : (
                           <p className="py-2 text-sm text-muted-foreground">
                             {server.owner?.email ?? '—'} — transfert non autorisé (permission
@@ -457,17 +458,30 @@ function AdminServerAllocationsPanel({
   const queryClient = useQueryClient();
 
   const listAllocations = useServerFn(listAdminServerAllocationsFn);
+  const listFree = useServerFn(listAdminServerFreeAllocationsFn);
   const addAllocation = useServerFn(addAdminServerAllocationFn);
   const removeAllocation = useServerFn(removeAdminServerAllocationFn);
   const setPrimary = useServerFn(setPrimaryAdminServerAllocationFn);
 
+  // The panel lives inside a tab, not a route — it owns its query state
+  // instead of the URL search params (see the list contract).
+  const [search, setSearch] = useState<ListQuery>(serverAllocationsList.defaultSearch);
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    setSearch((prev) => mergeQuery(prev, patch));
+
   const query = useQuery({
-    queryKey: ['admin-server-allocations', serverId],
-    queryFn: () => listAllocations({ data: { serverId } }),
+    queryKey: ['admin-server-allocations', serverId, search],
+    queryFn: () => listAllocations({ data: { serverId, ...search } }),
+    placeholderData: keepPreviousData,
+  });
+  const freeQuery = useQuery({
+    queryKey: ['admin-server-allocations-free', serverId],
+    queryFn: () => listFree({ data: { serverId } }),
   });
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin-server-allocations', serverId] });
+    await queryClient.invalidateQueries({ queryKey: ['admin-server-allocations-free', serverId] });
     await queryClient.invalidateQueries({ queryKey: ['admin-server', serverId] });
   };
 
@@ -509,8 +523,7 @@ function AdminServerAllocationsPanel({
     onSubmit: ({ value }) => add.mutate(value.allocationId),
   });
 
-  const allocations = query.data?.allocations ?? [];
-  const free = query.data?.free ?? [];
+  const free = freeQuery.data ?? [];
 
   return (
     <div className="divide-y">
@@ -518,83 +531,31 @@ function AdminServerAllocationsPanel({
         title="Allocations du serveur"
         description="Ports réseau affectés à ce serveur. L'allocation principale fournit SERVER_PORT et SERVER_IP — un changement s'applique au prochain démarrage."
       >
-        {query.isPending ? (
-          <p className="text-sm text-muted-foreground">Chargement…</p>
-        ) : allocations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aucune allocation — réclames-en une dans le pool du node ci-dessous.
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-4 font-medium">Adresse</th>
-                <th className="py-2 pr-4 font-medium">Alias</th>
-                <th className="py-2 pr-4 font-medium">Principale</th>
-                <th className="py-2 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {allocations.map((allocation) => (
-                <tr key={allocation.id}>
-                  <td className="py-2 pr-4 font-mono">
-                    {allocation.ip}:{allocation.port}
-                  </td>
-                  <td className="py-2 pr-4">{allocation.alias ?? '—'}</td>
-                  <td className="py-2 pr-4">
-                    {allocation.primary ? (
-                      <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                        Principale
-                      </span>
-                    ) : canUpdate ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={primary.isPending}
-                        onClick={() => primary.mutate(allocation.id)}
-                      >
-                        <Star />
-                        Définir principale
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="py-2 text-right">
-                    {canUpdate ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={allocation.primary || remove.isPending}
-                        title={
-                          allocation.primary
-                            ? 'Définis une autre allocation principale avant de retirer celle-ci'
-                            : undefined
-                        }
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Retirer l’allocation ${allocation.ip}:${allocation.port} ? Elle retournera dans le pool du node.`,
-                            )
-                          ) {
-                            remove.mutate(allocation.id);
-                          }
-                        }}
-                      >
-                        <Trash2 />
-                        Retirer
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          list={serverAllocationsList}
+          rows={query.data?.rows ?? []}
+          rowCount={query.data?.rowCount ?? 0}
+          search={search}
+          onSearchChange={onSearchChange}
+          isPending={query.isPending}
+          isFetching={query.isFetching}
+          error={query.error}
+          emptyMessage="Aucune allocation — réclames-en une dans le pool du node ci-dessous."
+          rowContext={{
+            canEdit: canUpdate,
+            busy: primary.isPending || remove.isPending,
+            onSetPrimary: (allocation) => primary.mutate(allocation.id),
+            onRevoke: (allocation) => {
+              if (
+                confirm(
+                  `Retirer l’allocation ${allocation.ip}:${allocation.port} ? Elle retournera dans le pool du node.`,
+                )
+              ) {
+                remove.mutate(allocation.id);
+              }
+            },
+          }}
+        />
       </CardSection>
 
       <CardSection
@@ -653,7 +614,7 @@ function AdminServerAllocationsPanel({
             panel.servers.update.
           </p>
         )}
-        {free.length === 0 && !query.isPending && (
+        {free.length === 0 && !freeQuery.isPending && (
           <p className="mt-2 text-sm text-muted-foreground">
             Aucune allocation libre sur ce node — crées-en dans la page du node.
           </p>
@@ -723,7 +684,7 @@ function ServerActionsPanel({
     },
     onSuccess: async () => {
       toast.success('Serveur supprimé');
-      await navigate({ to: '/admin/servers' });
+      await navigate({ to: '/admin/servers', search: adminServersList.defaultSearch });
     },
     onError: (error) => toast.error(error.message),
   });

@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm, useStore } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import { ExternalLink, Plus } from 'lucide-react';
 import {
-  listNodesFn,
+  listAdminNodesFn,
   createNodeFn,
   deleteNodeFn,
   resolveNodeFqdnFn,
 } from '~/server/functions/admin';
+import { DataTable } from '~/components/data-table/data-table';
+import { useAuth } from '~/contexts/use-auth';
+import { canFromPermissions } from '~/lib/permissions';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminNodesList, type AdminNodeRow } from '~/lists/nodes';
 import { createNodeSchema, type CreateNodeDto } from '~/validators/node';
 import { buildAgentConfig } from '~/lib/agent-config';
 import { Button } from '~/components/ui/button';
@@ -21,6 +26,11 @@ import { NodeSchemeField } from '~/components/node-scheme-field';
 import type { NodeScheme } from '~/validators/node';
 
 export const Route = createFileRoute('/admin/nodes/')({
+  // Same schema as the server function: the route validates the URL, the
+  // function validates the payload — one definition, no drift.
+  validateSearch: (search: Record<string, unknown>): ListQuery =>
+    adminNodesList.querySchema.parse(search),
+  search: { middlewares: [stripSearchParams(adminNodesList.defaultSearch)] },
   component: AdminNodesPage,
 });
 
@@ -28,27 +38,55 @@ export const Route = createFileRoute('/admin/nodes/')({
 const IP_PATTERN = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 function AdminNodesPage() {
+  const { user } = useAuth();
+  const permissions = user?.permissions ?? [];
   const queryClient = useQueryClient();
-  const listNodes = useServerFn(listNodesFn);
+  const navigate = useNavigate({ from: Route.fullPath });
+  const search = Route.useSearch();
+
+  const listNodes = useServerFn(listAdminNodesFn);
   const createNode = useServerFn(createNodeFn);
   const deleteNode = useServerFn(deleteNodeFn);
 
-  const query = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes() });
+  const canDelete = canFromPermissions(permissions, { 'panel.nodes': ['delete'] });
+
+  const query = useQuery({
+    queryKey: ['admin-nodes', search],
+    queryFn: () => listNodes({ data: search }),
+    placeholderData: keepPreviousData,
+  });
 
   const create = useMutation({
     mutationFn: async (data: CreateNodeDto) => {
       const result = await createNode({ data });
-      await queryClient.invalidateQueries({ queryKey: ['nodes'] });
+      // The picker list stays in the same cache key space as before.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-nodes'] }),
+        queryClient.invalidateQueries({ queryKey: ['nodes'] }),
+      ]);
       return result;
     },
   });
 
   const remove = useMutation({
-    mutationFn: (nodeId: string) => deleteNode({ data: { nodeId } }),
+    mutationFn: (node: AdminNodeRow) => deleteNode({ data: { nodeId: node.id } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['nodes'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-nodes'] });
+      toast.success('Node supprimé');
     },
+    onError: (error) => toast.error(error.message),
   });
+
+  // Search updates write the WHOLE validated query back (reducer form would
+  // require the raw params type): the page resets below are part of the patch.
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    navigate({ search: mergeQuery(search, patch), replace: true });
+
+  const onDelete = (node: AdminNodeRow) => {
+    if (confirm(`Supprimer le node « ${node.name} » ?`)) {
+      remove.mutate(node);
+    }
+  };
 
   const form = useForm({
     validators: { onChange: createNodeSchema },
@@ -289,76 +327,19 @@ function AdminNodesPage() {
         </Card>
       )}
 
-      {/* ─── Node list ─── */}
-      <Card>
-        <CardContent className="space-y-4">
-          {query.isPending && (
-            <p className="text-sm text-muted-foreground">Chargement…</p>
-          )}
-          {query.isError && (
-            <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-          )}
-
-          {(query.data ?? []).length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Node</th>
-                    <th className="py-2 pr-4 font-medium">Adresse</th>
-                    <th className="py-2 pr-4 font-medium">Statut</th>
-                    <th className="py-2 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {(query.data ?? []).map((node) => (
-                    <tr key={node.id}>
-                      <td className="py-2 pr-4">
-                        <Link
-                          to="/admin/nodes/$nodeId"
-                          params={{ nodeId: node.id }}
-                          className="font-medium hover:underline"
-                        >
-                          {node.name}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-4 text-muted-foreground">
-                        {node.scheme}://{node.fqdn}:{node.publicPort}
-                      </td>
-                      <td className="py-2 pr-4">{node.status}</td>
-                      <td className="py-2">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={remove.isPending}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              if (confirm(`Supprimer le node « ${node.name} » ?`)) {
-                                remove.mutate(node.id);
-                              }
-                            }}
-                          >
-                            Supprimer
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            !query.isPending && (
-              <p className="text-sm text-muted-foreground">Aucun node enregistré.</p>
-            )
-          )}
-
-          {remove.isError && (
-            <p className="text-sm text-destructive">{remove.error.message}</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* ─── Node list — filtering/sorting/pagination run in the database ─── */}
+      <DataTable
+        list={adminNodesList}
+        rows={query.data?.rows ?? []}
+        rowCount={query.data?.rowCount ?? 0}
+        search={search}
+        onSearchChange={onSearchChange}
+        isPending={query.isPending}
+        isFetching={query.isFetching}
+        error={query.error}
+        emptyMessage="Aucun node enregistré."
+        rowContext={{ canDelete, deleting: remove.isPending, onDelete }}
+      />
     </div>
   );
 }

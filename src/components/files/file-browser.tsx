@@ -1,23 +1,15 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useState, type ChangeEvent } from 'react';
-import {
-  ArrowUp,
-  Download,
-  File as FileIcon,
-  FilePlus,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  Pencil,
-  Trash2,
-  Upload,
-} from 'lucide-react';
+import { ArrowUp, FilePlus, FolderPlus, Upload } from 'lucide-react';
 
 import { MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
+import { ListTable } from '~/components/data-table/list-table';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
 import { SftpConnectionDialog } from '~/components/sftp-card';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { filesList } from '~/lists/files';
 import {
   listFilesFn,
   createEntryFn,
@@ -26,10 +18,8 @@ import {
   uploadFileFn,
 } from '~/server/functions/files';
 import { CreateEntryForm } from './create-entry-form';
-import { RenameEntryForm } from './rename-entry-form';
-import { FileTableSkeleton } from './file-table-skeleton';
+import { RenameEntryDialog } from './rename-entry-dialog';
 import { FileErrorState } from './file-error-state';
-import { formatSize } from './format-size';
 
 /** Directory listing — toolbar + breadcrumb + the listing table inside a card. */
 export function FileBrowser({
@@ -61,8 +51,10 @@ export function FileBrowser({
   const uploadFile = useServerFn(uploadFileFn);
 
   const [creating, setCreating] = useState(false);
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<FileObject | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Table state of the listing (client mode: filtered/sorted/paginated locally). */
+  const [tableQuery, setTableQuery] = useState<ListQuery>(filesList.defaultSearch);
 
   const query = useQuery({
     queryKey: ['files', serverId, dir],
@@ -219,127 +211,58 @@ export function FileBrowser({
         />
       )}
 
-      {/* Listing — one card wrapping the whole table */}
+      {/* Listing — one card wrapping the toolbar + the shared table */}
       <Card className="mt-4 py-0">
         <CardContent className="p-0">
-          {query.isPending && <FileTableSkeleton />}
-
-          {query.isError && (
-            <FileErrorState
-              bare
-              message={query.error.message}
-              onRetry={() => query.refetch()}
-            />
+          {dir && (
+            <div className="border-b px-3 py-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onNavigate(segments.slice(0, -1).join('/'))}
+              >
+                <ArrowUp />
+                ..
+              </Button>
+            </div>
           )}
 
-          {query.data &&
-            (query.data.files.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-                <FolderOpen className="size-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Dossier vide</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pl-4 pr-4 font-medium">Nom</th>
-                    <th className="py-2 pr-4 font-medium">Taille</th>
-                    <th className="py-2 pr-4 font-medium">Modifié</th>
-                    <th className="py-2 pr-4 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dir && (
-                    <tr className="border-b">
-                      <td colSpan={4} className="py-2 pl-4 pr-4">
-                        <button
-                          className="flex items-center gap-2 rounded px-2 py-1 hover:bg-muted"
-                          onClick={() => onNavigate(segments.slice(0, -1).join('/'))}
-                        >
-                          <ArrowUp className="size-4" />
-                          ..
-                        </button>
-                      </td>
-                    </tr>
-                  )}
-                  {query.data.files.map((entry) =>
-                    renaming === entry.path ? (
-                      <RenameEntryForm
-                        key={entry.path}
-                        currentName={entry.name}
-                        pending={rename.isPending}
-                        onCancel={() => setRenaming(null)}
-                        onSubmit={(values) =>
-                          rename.mutate({ path: entry.path, newName: values.name })
-                        }
-                      />
-                    ) : (
-                      <tr key={entry.path} className="border-b hover:bg-muted/40">
-                        <td className="py-2 pl-4 pr-4">
-                          <button
-                            className="flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted"
-                            onClick={() => open(entry)}
-                            title={entry.isDirectory ? 'Ouvrir' : 'Éditer'}
-                          >
-                            {entry.isDirectory ? (
-                              <Folder className="size-4 shrink-0 text-muted-foreground" />
-                            ) : (
-                              <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-                            )}
-                            <span className="truncate">{entry.name}</span>
-                          </button>
-                        </td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          {entry.isDirectory ? '—' : formatSize(entry.size)}
-                        </td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          {entry.modifiedAt
-                            ? new Date(entry.modifiedAt).toLocaleString('fr-FR')
-                            : '—'}
-                        </td>
-                        <td className="py-2 pr-4">
-                          <div className="flex justify-end gap-1">
-                            {!entry.isDirectory && (
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                title="Télécharger"
-                                onClick={() => onDownload(entry.path)}
-                              >
-                                <Download />
-                              </Button>
-                            )}
-                            {canWrite && (
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                title="Renommer"
-                                onClick={() => setRenaming(entry.path)}
-                              >
-                                <Pencil />
-                              </Button>
-                            )}
-                            {canDelete && (
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                title="Supprimer"
-                                onClick={() => askDelete(entry)}
-                                disabled={remove.isPending}
-                              >
-                                <Trash2 />
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ),
-                  )}
-                </tbody>
-              </table>
-            ))}
+          {query.isError ? (
+            <FileErrorState bare message={query.error.message} onRetry={() => query.refetch()} />
+          ) : (
+            <div className="p-3">
+              <ListTable
+                list={filesList}
+                rows={query.data?.files ?? []}
+                search={tableQuery}
+                onSearchChange={(patch) =>
+                  setTableQuery((previous) => mergeQuery(previous, patch))
+                }
+                isPending={query.isPending}
+                emptyMessage="Dossier vide"
+                rowContext={{
+                  canWrite,
+                  canDelete,
+                  deleting: remove.isPending,
+                  onOpen: open,
+                  onDownload: (entry) => onDownload(entry.path),
+                  onRename: (entry) => setRenaming(entry),
+                  onDelete: askDelete,
+                }}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <RenameEntryDialog
+        entry={renaming}
+        pending={rename.isPending}
+        onClose={() => setRenaming(null)}
+        onSubmit={(values) => {
+          if (renaming) rename.mutate({ path: renaming.path, newName: values.name });
+        }}
+      />
     </div>
   );
 }

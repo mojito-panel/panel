@@ -1,9 +1,13 @@
+import { z } from 'zod';
 import { createServerFn } from '@tanstack/react-start';
 import type { EntityManager } from '@mikro-orm/core';
+import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
 import { Backup, Node, Recipe } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
 import type { IBackup, INode } from '~/db/types';
 import type { BackupOperationStatus } from '~/contract';
+import { serverBackupsList } from '~/lists/backups';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
 import { signBackupDownloadToken } from '../jwt';
 import { decryptSecret } from '../crypto';
@@ -15,7 +19,6 @@ import {
   AgentError,
 } from '../agent/client';
 import {
-  listBackupsSchema,
   createBackupSchema,
   restoreBackupSchema,
   deleteBackupSchema,
@@ -103,25 +106,55 @@ function applyOperationStatus(row: IBackup, status: BackupOperationStatus): void
 
 // ─── List (with in-flight status sync) ───────────────────────────────────────
 
-export const listBackupsFn = createServerFn({ method: 'GET' })
-  .validator(listBackupsSchema)
+/**
+ * Query of the backups tab: the paginated list query PLUS the server it is
+ * scoped to — the server id is a route param, not a search param, so it
+ * travels alongside the rest of the payload.
+ */
+const listBackupsQuerySchema = serverBackupsList.querySchema.and(
+  z.object({ serverId: z.string().min(1) }),
+);
+
+/**
+ * Backups of ONE server — the in-flight rows are synced with the agent first
+ * (a 404 marks them failed, a network error leaves them alone), then
+ * filter/sort/pagination run in the database. The scoping `serverId` sits on the
+ * query builder BEFORE `runListQuery`, so it applies to rows AND total.
+ */
+export const listBackupsFn = createServerFn({ method: 'POST' })
+  .validator(listBackupsQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {
       'server.backups': ['read'],
     });
 
-    const rows = await em.find(Backup, { serverId: server.id });
+    // Sync needs every ACTIVE row of the server, not just the requested page.
+    const all = await em.find(Backup, { serverId: server.id });
     const node = await em.findOne(Node, { id: server.nodeId });
-
-    await syncActiveBackups(em, node, server.id, rows);
+    await syncActiveBackups(em, node, server.id, all);
     await em.flush();
 
-    return rows
-      .sort(
-        (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
-      )
-      .map(toDto);
+    // `loadServerWithPermission` types its em loosely; the shared builder wants
+    // the Postgres entity manager (same runtime object).
+    const qb = listQueryBuilder(em as PostgreSqlEntityManager, Backup, serverBackupsList);
+    qb.andWhere({ serverId: server.id });
+
+    const { rows, rowCount } = await runListQuery(qb, serverBackupsList.spec, data);
+
+    return {
+      rowCount,
+      rows: rows.map((backup) => ({
+        id: backup.id,
+        name: backup.name,
+        status: backup.status as BackupStatusDb,
+        sizeBytes: backup.sizeBytes,
+        checksum: backup.checksum ?? null,
+        error: backup.error ?? null,
+        completedAt: backup.completedAt ?? null,
+        createdAt: backup.createdAt,
+      })),
+    };
   });
 
 // ─── Creation (limit check → row → agent order) ───────────────────────────────

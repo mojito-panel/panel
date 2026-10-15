@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
 import { getAdminOverviewFn } from '~/server/functions/admin';
+import { adminNodesList } from '~/lists/nodes';
 import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -133,7 +134,11 @@ function AdminOverviewPage() {
             {data?.nodes.length === 0 && (
               <p className="text-muted-foreground">
                 Aucun node.{' '}
-                <Link to="/admin/nodes" className="underline">
+                <Link
+                  to="/admin/nodes"
+                  search={adminNodesList.defaultSearch}
+                  className="underline"
+                >
                   En ajouter un
                 </Link>
                 .

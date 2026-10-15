@@ -1,7 +1,11 @@
 import { createServerFn } from '@tanstack/react-start';
+import { z } from 'zod';
 import type { EntityManager } from '@mikro-orm/core';
 import { initOrm } from '~/db';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
+import { userServersList } from '~/lists/user-servers';
+import { serverAllocationsList } from '~/lists/allocations';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { resolveRuntimeRecipes } from './runtimes';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import { nanoid } from '~/lib/nanoid';
@@ -87,40 +91,81 @@ async function pushPrimaryAllocation(em: EntityManager, server: IServer): Promis
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export const listServersFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const user = await requireUser();
-  const orm = await initOrm();
-  const em = orm.em.fork();
+/**
+ * Visibility scope of the viewer on the server table: an admin sees every
+ * server, anyone else the ones they own PLUS the ones shared with them through
+ * a `server_user` grant (Pelican sub-user semantics). `null` = no restriction.
+ */
+async function viewerServerScope(em: EntityManager, user: { id: string; role: string }) {
+  if (user.role === 'admin') return null;
+  const grants = await em.find(ServerUser, { userId: user.id });
+  return {
+    $or: [
+      { ownerId: user.id },
+      { id: { $in: grants.map((grant) => grant.serverId) } },
+    ],
+  };
+}
 
-  // Admin sees everything; a user sees their servers PLUS the ones shared
-  // with them (Pelican sub-user semantics)
-  const servers =
-    user.role === 'admin'
-      ? await em.find(Server, {})
-      : await (async () => {
-          const grants = await em.find(ServerUser, { userId: user.id });
-          return em.find(Server, {
-            $or: [
-              { ownerId: user.id },
-              { id: { $in: grants.map((grant) => grant.serverId) } },
-            ],
-          });
-        })();
+/**
+ * Server list of the signed-in user — filter/search/sort/pagination run in the
+ * database (`userServersList`). The visibility scope above is a base condition
+ * applied to the query builder before the shared list query runs.
+ */
+export const listServersFn = createServerFn({ method: 'POST' })
+  .validator(userServersList.querySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const orm = await initOrm();
+    const em = orm.em.fork();
 
-  const nodes = await em.find(Node, {});
-  const recipes = await em.find(Recipe, {});
+    const qb = listQueryBuilder(em, Server, userServersList);
+    const scope = await viewerServerScope(em, user);
+    if (scope) qb.where(scope);
 
-  return servers.map((server) => ({
-    id: server.id,
-    name: server.name,
-    status: server.status,
-    nodeId: server.nodeId,
-    nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
-    recipeId: server.recipeId,
-    recipeName: recipes.find((p) => p.id === server.recipeId)?.name ?? '—',
-    createdAt: server.createdAt,
-  }));
-});
+    const { rows, rowCount } = await runListQuery(qb, userServersList.spec, data);
+
+    // Node names of the current page only (the query stays bounded by pageSize).
+    const nodes = await em.find(Node, {
+      id: { $in: [...new Set(rows.map((server) => server.nodeId))] },
+    });
+    const nodeNames = new Map(nodes.map((node) => [node.id, node.name]));
+
+    return {
+      rowCount,
+      rows: rows.map((server) => ({
+        id: server.id,
+        name: server.name,
+        status: server.status,
+        nodeName: nodeNames.get(server.nodeId) ?? '—',
+        createdAt: server.createdAt,
+      })),
+    };
+  });
+
+// ─── Picker options ───────────────────────────────────────────────────────────
+
+/**
+ * Picker variant of the list — the full `{ id, name }` set visible to the viewer
+ * (same scope as `listServersFn`), optionally restricted to one node. NOT
+ * paginated: assignment pickers need every candidate. Keep paginated list
+ * functions out of pickers.
+ */
+export const listServerOptionsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ nodeId: z.string().optional() }))
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const qb = listQueryBuilder(em, Server, userServersList);
+    const scope = await viewerServerScope(em, user);
+    if (scope) qb.where(scope);
+    if (data.nodeId) qb.andWhere({ nodeId: data.nodeId });
+
+    const servers = await qb.orderBy({ name: 'ASC' }).getResult();
+    return servers.map((server) => ({ id: server.id, name: server.name }));
+  });
 
 // ─── Creation (install via the agent) ────────────────────────────────────────────
 
@@ -705,29 +750,35 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
 
 // ─── Network page (allocations) ──────────────────────────────────────────────
 
-/** Serializable allocation DTO shared by the Network page queries. */
-function allocationDto(allocation: {
+/** Row of the free-allocation picker of the "add" form (claim candidates). */
+function allocationPickerDto(allocation: {
   id: string;
   ip: string;
   port: number;
   alias: string | null | undefined;
-  primary: boolean;
 }) {
   return {
     id: allocation.id,
     ip: allocation.ip,
     port: allocation.port,
     alias: allocation.alias ?? null,
-    primary: allocation.primary,
   };
 }
 
 /**
- * Allocations of a server + the free ones of its node (Pelican Network
- * page: list, claim from the pool, set primary, release).
+ * Allocations of a server — the Network page table. Filter/sort/pagination run
+ * in the database (`serverAllocationsList`); the server id AND the viewer's
+ * `server.network.read` grant are resolved first, then the scope is applied to
+ * the query builder BEFORE `runListQuery` (the server id is a route param, not
+ * a search param). The free pool of the node comes from the unpaginated picker
+ * below.
  */
-export const getServerNetworkFn = createServerFn({ method: 'GET' })
-  .validator(serverLogsQuerySchema)
+export const listServerAllocationsFn = createServerFn({ method: 'POST' })
+  .validator(
+    serverAllocationsList.querySchema.and(
+      serverAllocationActionSchema.pick({ serverId: true }),
+    ),
+  )
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await loadServerWithPermission(
@@ -738,14 +789,42 @@ export const getServerNetworkFn = createServerFn({ method: 'GET' })
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const assigned = await em.find(Allocation, { serverId: server.id });
-    const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
-    const byPort = (a: { port: number }, b: { port: number }) => a.port - b.port;
+    const qb = listQueryBuilder(em, Allocation, serverAllocationsList);
+    qb.andWhere({ serverId: server.id });
+
+    const { rows, rowCount } = await runListQuery(qb, serverAllocationsList.spec, data);
 
     return {
-      allocations: assigned.sort(byPort).map(allocationDto),
-      free: free.sort(byPort).map(allocationDto),
+      rowCount,
+      rows: rows.map((allocation) => ({
+        id: allocation.id,
+        ip: allocation.ip ?? '0.0.0.0',
+        port: allocation.port,
+        alias: allocation.alias ?? null,
+        primary: allocation.primary ?? false,
+      })),
     };
+  });
+
+/**
+ * Free allocations of the server's node — the unpaginated PICKER helper of the
+ * "add an allocation" form (the claim needs every candidate at once). A picker
+ * must never go through the paginated list function above.
+ */
+export const listServerFreeAllocationsFn = createServerFn({ method: 'GET' })
+  .validator(serverAllocationActionSchema.pick({ serverId: true }))
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { server } = await loadServerWithPermission(
+      data.serverId,
+      user,
+      { 'server.network': ['read'] },
+    );
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
+    return free.sort((a, b) => a.port - b.port).map(allocationPickerDto);
   });
 
 /** Claims a FREE allocation of the server's node and assigns it to the server. */

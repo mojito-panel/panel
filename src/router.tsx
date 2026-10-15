@@ -1,5 +1,6 @@
 import { createRouter } from '@tanstack/react-router';
 import { QueryClient } from '@tanstack/react-query';
+import { parseSearch, stringifySearch } from '~/lib/search-params';
 import { routeTree } from './routeTree.gen';
 
 /**
@@ -18,6 +19,8 @@ export interface RouterContext {
 export function getRouter() {
   const router = createRouter({
     routeTree,
+    parseSearch,
+    stringifySearch,
     context: {
       queryClient: new QueryClient({
         defaultOptions: {

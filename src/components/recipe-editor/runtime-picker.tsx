@@ -3,7 +3,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { AlertTriangle } from 'lucide-react';
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
-import { listRecipesFn } from '~/server/functions/admin';
+import { listRecipeOptionsFn } from '~/server/functions/admin';
 
 /**
  * Picker of the panel's RUNTIME recipes — the single way an app (or a
@@ -20,8 +20,8 @@ export function RuntimePicker({
   onChange: (value: string[]) => void;
   onBlur?: () => void;
 }) {
-  const listRecipes = useServerFn(listRecipesFn);
-  const query = useQuery({ queryKey: ['recipes'], queryFn: () => listRecipes() });
+  const listRecipeOptions = useServerFn(listRecipeOptionsFn);
+  const query = useQuery({ queryKey: ['recipe-options'], queryFn: () => listRecipeOptions() });
   const runtimes = (query.data ?? []).filter((recipe) => recipe.type === 'runtime');
 
   // Rows: every known runtime, plus required ids without a recipe (orphans)

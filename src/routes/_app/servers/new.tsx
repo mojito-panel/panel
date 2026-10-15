@@ -4,8 +4,13 @@ import { useServerFn } from '@tanstack/react-start';
 import { useForm, useStore } from '@tanstack/react-form';
 import { Plus } from 'lucide-react';
 import type { RecipeVariable } from '~/contract';
-import { listNodesFn, listRecipesFn, listFreeNodeAllocationsFn } from '~/server/functions/admin';
+import {
+  listNodesFn,
+  listRecipeOptionsFn,
+  listFreeNodeAllocationsFn,
+} from '~/server/functions/admin';
 import { installServerFn } from '~/server/functions/servers';
+import { userServersList } from '~/lists/user-servers';
 import { createServerSchema, type CreateServerDto } from '~/validators/server';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -28,15 +33,19 @@ function NewServerPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const listNodes = useServerFn(listNodesFn);
-  const listRecipes = useServerFn(listRecipesFn);
+  const listRecipeOptions = useServerFn(listRecipeOptionsFn);
   const listFreeNodeAllocations = useServerFn(listFreeNodeAllocationsFn);
   const installServer = useServerFn(installServerFn);
 
   const nodesQuery = useQuery({ queryKey: ['nodes'], queryFn: () => listNodes() });
-  const recipesQuery = useQuery({ queryKey: ['recipes'], queryFn: () => listRecipes() });
+  const recipesQuery = useQuery({
+    queryKey: ['recipe-options'],
+    queryFn: () => listRecipeOptions(),
+  });
 
   const nodes = nodesQuery.data ?? [];
-  const recipes = recipesQuery.data ?? [];
+  // Only apps can be installed as a server — runtimes are picked by the editor.
+  const recipes = (recipesQuery.data ?? []).filter((recipe) => recipe.type === 'app');
 
   const mutation = useMutation({
     mutationFn: async (data: CreateServerDto) => {
@@ -322,7 +331,7 @@ function NewServerPage() {
       </Card>
 
       <p className="mt-6">
-        <Button variant="ghost" render={<Link to="/servers" />}>
+        <Button variant="ghost" render={<Link to="/servers" search={userServersList.defaultSearch} />}>
           ← Mes serveurs
         </Button>
       </p>

@@ -4,6 +4,7 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { AppSidebar } from '~/components/app-sidebar';
 import { AppShell } from '~/components/app-shell';
 import { hasAdminAreaAccess } from '~/lib/permissions';
+import { userServersList } from '~/lists/user-servers';
 
 /**
  * Admin layout — Pelican-style admin area. Same consolidated sidebar as
@@ -18,7 +19,7 @@ export const Route = createFileRoute('/admin')({
       throw redirect({ to: '/login' });
     }
     if (!hasAdminAreaAccess(user.permissions ?? [])) {
-      throw redirect({ to: '/servers' });
+      throw redirect({ to: '/servers', search: userServersList.defaultSearch });
     }
   },
   component: AdminLayout,

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { ServerStatus } from '~/contract';
 import { StatusBall, statusLabel } from '~/components/status-badge';
+import { userServersList } from '~/lists/user-servers';
 import { SidebarUserMenu } from '~/components/user-menu';
 import {
   Sidebar,
@@ -183,7 +184,7 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
                 </div>
               </SidebarMenuButton>
             ) : (
-              <SidebarMenuButton size="lg" render={<Link to="/servers" />}>
+              <SidebarMenuButton size="lg" render={<Link to="/servers" search={userServersList.defaultSearch} />}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   {variant === 'admin' ? (
                     <Shield className="size-4" />

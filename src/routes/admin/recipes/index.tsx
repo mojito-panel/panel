@@ -1,49 +1,90 @@
 import { useState, type FormEvent } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  createFileRoute,
+  Link,
+  stripSearchParams,
+  useNavigate,
+} from '@tanstack/react-router';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { Pencil, Download, RefreshCw, Plus, Upload } from 'lucide-react';
+import { toast } from 'sonner';
+import { Plus, Upload } from 'lucide-react';
 import {
   listRecipesFn,
   importRecipesFn,
   getRecipeFn,
   deleteRecipeFn,
 } from '~/server/functions/admin';
+import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
 
+/**
+ * /admin/recipes — every recipe imported in the panel. Filtering, sorting and
+ * pagination run in the database; the list definition (`~/lists/recipes`) holds
+ * the columns AND the query it accepts, the state lives in the URL search params.
+ */
 export const Route = createFileRoute('/admin/recipes/')({
+  validateSearch: (search: Record<string, unknown>): ListQuery =>
+    adminRecipesList.querySchema.parse(search),
+  search: { middlewares: [stripSearchParams(adminRecipesList.defaultSearch)] },
   component: AdminRecipesPage,
 });
 
 type ImportMutationInput = { jsons: string[]; urls: string[] };
 
 function AdminRecipesPage() {
+  const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
+  const search = Route.useSearch();
+
   const listRecipes = useServerFn(listRecipesFn);
   const importRecipes = useServerFn(importRecipesFn);
   const getRecipe = useServerFn(getRecipeFn);
   const deleteRecipe = useServerFn(deleteRecipeFn);
 
-  const query = useQuery({ queryKey: ['recipes'], queryFn: () => listRecipes() });
+  const query = useQuery({
+    queryKey: ['admin-recipes', search],
+    queryFn: () => listRecipes({ data: search }),
+    placeholderData: keepPreviousData,
+  });
 
   const importMutation = useMutation({
     mutationFn: (input: ImportMutationInput) => importRecipes({ data: input }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+    },
   });
 
   const remove = useMutation({
     mutationFn: (recipeId: string) => deleteRecipe({ data: { recipeId } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      toast.success('Recette supprimée');
     },
+    onError: (error) => toast.error(error.message),
   });
 
   // Pelican-style layout: the import panel only shows behind the header button
   const [showImport, setShowImport] = useState(false);
-  /** Recipe kind filter — apps and runtimes live in the same list. */
-  const [typeFilter, setTypeFilter] = useState<'all' | 'app' | 'runtime'>('all');
+
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    navigate({ search: mergeQuery(search, patch), replace: true });
+
+  const onDelete = (recipe: AdminRecipeRow) => {
+    if (confirm(`Supprimer la recette « ${recipe.name} » ?`)) {
+      remove.mutate(recipe.id);
+    }
+  };
 
   /** Batch import: textarea + .json files + URL (each optional). */
   const onImportSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -75,13 +116,13 @@ function AdminRecipesPage() {
   };
 
   /** Export: downloads the recipe's raw JSON. */
-  const exportRecipe = async (recipeId: string, slug: string) => {
-    const result = await getRecipe({ data: { recipeId } });
+  const exportRecipe = async (recipe: AdminRecipeRow) => {
+    const result = await getRecipe({ data: { recipeId: recipe.id } });
     const blob = new Blob([result.json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `recipe-${slug}.json`;
+    link.download = `recipe-${recipe.slug}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
@@ -192,146 +233,24 @@ function AdminRecipesPage() {
       )}
 
       {/* ─── Recipe list ─── */}
-      <Card>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Type
-            </p>
-            <div className="flex gap-1">
-              {(
-                [
-                  ['all', 'Toutes'],
-                  ['app', 'Applications'],
-                  ['runtime', 'Runtimes'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTypeFilter(value)}
-                  className={
-                    'rounded-md px-3 py-1 text-xs transition-colors ' +
-                    (typeFilter === value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80')
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {(query.data ?? []).filter((recipe) => typeFilter === 'all' || recipe.type === typeFilter)
-            .length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Recette</th>
-                    <th className="py-2 pr-4 font-medium">Variables</th>
-                    <th className="py-2 pr-4 font-medium">Mise à jour</th>
-                    <th className="py-2 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {(query.data ?? [])
-                    .filter((recipe) => typeFilter === 'all' || recipe.type === typeFilter)
-                    .map((recipe) => (
-                    <tr key={recipe.id}>
-                      <td className="py-2 pr-4">
-                        <Link
-                          to="/admin/recipes/$recipeId"
-                          params={{ recipeId: recipe.id }}
-                          className="font-medium hover:underline"
-                        >
-                          {recipe.name}
-                        </Link>
-                        {recipe.type === 'runtime' && (
-                          <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            runtime
-                          </span>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {recipe.slug} · v{recipe.schemaVersion}
-                        </p>
-                      </td>
-                      <td className="py-2 pr-4">{recipe.variables.length}</td>
-                      <td className="max-w-xs py-2 pr-4">
-                        {recipe.updateUrl ? (
-                          <span
-                            className="block truncate text-xs text-muted-foreground"
-                            title={recipe.updateUrl}
-                          >
-                            {recipe.updateUrl}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="py-2">
-                        <div className="flex justify-end gap-1">
-                          {recipe.updateUrl && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Re-importer depuis l'URL de mise à jour"
-                              disabled={importMutation.isPending}
-                              onClick={() => updateFromUrl(recipe.updateUrl as string)}
-                            >
-                              <RefreshCw />
-                              Mettre à jour
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            render={
-                              <Link
-                                to="/admin/recipes/$recipeId"
-                                params={{ recipeId: recipe.id }}
-                              />
-                            }
-                          >
-                            <Pencil />
-                            Éditer
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void exportRecipe(recipe.id, recipe.slug)}
-                          >
-                            <Download />
-                            Exporter
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={remove.isPending}
-                            onClick={() => {
-                              if (confirm(`Supprimer la recette « ${recipe.name} » ?`)) {
-                                remove.mutate(recipe.id);
-                              }
-                            }}
-                          >
-                            Supprimer
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Aucune recette importée.</p>
-          )}
-
-          {remove.isError && (
-            <p className="text-sm text-destructive">{remove.error.message}</p>
-          )}
-        </CardContent>
-      </Card>
+      <DataTable
+        list={adminRecipesList}
+        rows={query.data?.rows ?? []}
+        rowCount={query.data?.rowCount ?? 0}
+        search={search}
+        onSearchChange={onSearchChange}
+        isPending={query.isPending}
+        isFetching={query.isFetching}
+        error={query.error}
+        emptyMessage="Aucune recette importée."
+        rowContext={{
+          importing: importMutation.isPending,
+          deleting: remove.isPending,
+          onUpdateFromUrl: (url) => updateFromUrl(url),
+          onExport: (recipe) => void exportRecipe(recipe),
+          onDelete,
+        }}
+      />
     </div>
   );
 }

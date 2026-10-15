@@ -1,10 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { getNodeFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
-import { listServersFn } from '~/server/functions/servers';
+import { getNodeFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, listFreeNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
+import { listServerOptionsFn } from '~/server/functions/servers';
 import {
   updateNodeSchema,
   createAllocationsSchema,
@@ -14,18 +20,13 @@ import {
 import { buildAgentConfig, buildAgentConfigWithoutToken } from '~/lib/agent-config';
 import { NodeSchemeField } from '~/components/node-scheme-field';
 import type { NodeScheme } from '~/validators/node';
+import { DataTable } from '~/components/data-table/data-table';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { nodeAllocationsList } from '~/lists/allocations';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { CardSection, TabsCard } from '~/components/tabs-card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
-import { Trash2 } from 'lucide-react';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
   component: AdminNodeEditPage,
@@ -401,6 +402,9 @@ function NodeSettingsForm({
   );
 }
 
+/** Query of the node pool total: one row is enough, the function returns `rowCount`. */
+const POOL_TOTAL_QUERY: ListQuery = { ...nodeAllocationsList.defaultSearch, size: 1 };
+
 /**
  * Allocations tab — Pelican node allocation management: create IP:port
  * entries (single port or range), assign them to servers, revoke, delete.
@@ -408,19 +412,37 @@ function NodeSettingsForm({
 function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
   const queryClient = useQueryClient();
   const listAllocations = useServerFn(listNodeAllocationsFn);
+  const listFree = useServerFn(listFreeNodeAllocationsFn);
   const createAllocations = useServerFn(createNodeAllocationsFn);
   const deleteAllocation = useServerFn(deleteAllocationFn);
   const assignAllocation = useServerFn(assignAllocationFn);
   const revokeAllocation = useServerFn(revokeAllocationFn);
-  const listServers = useServerFn(listServersFn);
+  const listServerOptions = useServerFn(listServerOptionsFn);
+
+  // The panel lives inside a tab, not a route — it owns its query state
+  // instead of the URL search params (see the list contract).
+  const [search, setSearch] = useState<ListQuery>(nodeAllocationsList.defaultSearch);
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    setSearch((prev) => mergeQuery(prev, patch));
 
   const query = useQuery({
-    queryKey: ['node-allocations', nodeId],
-    queryFn: () => listAllocations({ data: { nodeId } }),
+    queryKey: ['node-allocations', nodeId, search],
+    queryFn: () => listAllocations({ data: { nodeId, ...search } }),
+    placeholderData: keepPreviousData,
+  });
+  // Free pool (unpaginated picker) + unfiltered total: the pool description
+  // keeps its counts even though the table is paginated and filterable.
+  const freeQuery = useQuery({
+    queryKey: ['node-allocations', nodeId, 'free'],
+    queryFn: () => listFree({ data: { nodeId } }),
+  });
+  const totalQuery = useQuery({
+    queryKey: ['node-allocations', nodeId, 'total'],
+    queryFn: () => listAllocations({ data: { ...POOL_TOTAL_QUERY, nodeId } }),
   });
   const serversQuery = useQuery({
-    queryKey: ['servers'],
-    queryFn: () => listServers(),
+    queryKey: ['server-options', nodeId],
+    queryFn: () => listServerOptions({ data: { nodeId } }),
   });
 
   const invalidate = async () => {
@@ -478,15 +500,15 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
     onSubmit: ({ value }) => create.mutate(value),
   });
 
-  const allocations = query.data ?? [];
-  const freeCount = allocations.filter((a) => a.serverId === null).length;
-  const nodeServers = (serversQuery.data ?? []).filter((s) => s.nodeId === nodeId);
+  const freeCount = freeQuery.data?.length ?? 0;
+  const total = totalQuery.data?.rowCount ?? 0;
+  const nodeServers = serversQuery.data ?? [];
 
   return (
     <div className="divide-y">
       <CardSection
         title="Pool d'allocations"
-        description={`IP:port disponibles pour les serveurs de ce node (${freeCount} libre / ${allocations.length} au total).`}
+        description={`IP:port disponibles pour les serveurs de ce node (${freeCount} libre / ${total} au total).`}
       >
         <form
           onSubmit={(e) => {
@@ -566,103 +588,29 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
       </CardSection>
 
       <CardSection title="Allocations du node">
-        {query.isPending ? (
-          <p className="text-sm text-muted-foreground">Chargement…</p>
-        ) : allocations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aucune allocation — crée-en ci-dessus pour pouvoir installer des
-            serveurs sur ce node.
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-4 font-medium">Adresse</th>
-                <th className="py-2 pr-4 font-medium">Alias</th>
-                <th className="py-2 pr-4 font-medium">Serveur</th>
-                <th className="py-2 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {allocations.map((allocation) => (
-                <tr key={allocation.id}>
-                  <td className="py-2 pr-4 font-mono">
-                    {allocation.ip}:{allocation.port}
-                  </td>
-                  <td className="py-2 pr-4">{allocation.alias ?? '—'}</td>
-                  <td className="py-2 pr-4">
-                    {allocation.serverId === null ? (
-                      <span className="text-muted-foreground">libre</span>
-                    ) : (
-                      <>
-                        {allocation.serverName}
-                        {allocation.primary && (
-                          <span className="ml-2 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                            principale
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td className="py-2 text-right">
-                    {allocation.serverId === null ? (
-                      <div className="flex items-center justify-end gap-2">
-                        {nodeServers.length > 0 && (
-                          <Select
-                            value=""
-                            onValueChange={(serverId) =>
-                              serverId !== null &&
-                              assign.mutate({ allocationId: allocation.id, serverId })
-                            }
-                          >
-                            <SelectTrigger size="sm" className="w-44">
-                              <SelectValue placeholder="— Affecter à —" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {nodeServers.map((server) => (
-                                <SelectItem key={server.id} value={server.id}>
-                                  {server.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={remove.isPending}
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Supprimer l’allocation ${allocation.ip}:${allocation.port} ?`,
-                              )
-                            ) {
-                              remove.mutate(allocation.id);
-                            }
-                          }}
-                        >
-                          <Trash2 />
-                          Supprimer
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={revoke.isPending}
-                        onClick={() => revoke.mutate(allocation.id)}
-                      >
-                        Révoquer
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          list={nodeAllocationsList}
+          rows={query.data?.rows ?? []}
+          rowCount={query.data?.rowCount ?? 0}
+          search={search}
+          onSearchChange={onSearchChange}
+          isPending={query.isPending}
+          isFetching={query.isFetching}
+          error={query.error}
+          emptyMessage="Aucune allocation — crée-en ci-dessus pour pouvoir installer des serveurs sur ce node."
+          rowContext={{
+            servers: nodeServers,
+            busy: remove.isPending || revoke.isPending || assign.isPending,
+            onAssign: (allocation, serverId) =>
+              assign.mutate({ allocationId: allocation.id, serverId }),
+            onDelete: (allocation) => {
+              if (confirm(`Supprimer l’allocation ${allocation.ip}:${allocation.port} ?`)) {
+                remove.mutate(allocation.id);
+              }
+            },
+            onRevoke: (allocation) => revoke.mutate(allocation.id),
+          }}
+        />
       </CardSection>
     </div>
   );

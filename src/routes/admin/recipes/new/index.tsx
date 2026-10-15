@@ -41,7 +41,8 @@ function NewRecipePage() {
       return createRecipe({ data: { json: JSON.stringify(recipe, null, 2) } });
     },
     onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
       await navigate({
         to: '/admin/recipes/$recipeId',
         params: { recipeId: result.id },
@@ -58,7 +59,8 @@ function NewRecipePage() {
       return createRecipe({ data: { json: JSON.stringify(recipe, null, 2) } });
     },
     onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
       await navigate({
         to: '/admin/recipes/$recipeId',
         params: { recipeId: result.id },

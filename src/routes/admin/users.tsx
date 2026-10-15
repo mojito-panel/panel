@@ -1,9 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useForm, useStore } from '@tanstack/react-form';
+import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
-import { Ban, CircleCheck, Search, Trash2, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
+import { DataTable } from '~/components/data-table/data-table';
 import {
   listUsersFn,
   createUserFn,
@@ -16,6 +17,8 @@ import { listRolesFn } from '~/server/functions/roles';
 import { createUserFormSchema, type CreateUserFormDto } from '~/validators/user';
 import { useAuth } from '~/contexts/use-auth';
 import { canFromPermissions } from '~/lib/permissions';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminUsersList, type AdminUserRow, type AdminUsersContext } from '~/lists/users';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import {
@@ -34,8 +37,18 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 
-/** /admin/users — comptes du panel : rôles, suspension, suppression. */
+/**
+ * /admin/users — comptes du panel : rôles, suspension, suppression.
+ * Filtering, sorting and pagination run in the database; the list definition
+ * (`~/lists/users`) holds the columns AND the query it accepts, the state
+ * lives in the URL search params.
+ */
 export const Route = createFileRoute('/admin/users')({
+  // Same schema as the server function: the route validates the URL, the
+  // function validates the payload — one definition, no drift.
+  validateSearch: (search: Record<string, unknown>): ListQuery =>
+    adminUsersList.querySchema.parse(search),
+  search: { middlewares: [stripSearchParams(adminUsersList.defaultSearch)] },
   component: AdminUsersPage,
 });
 
@@ -49,23 +62,12 @@ interface RoleDto {
   builtIn: boolean;
 }
 
-interface AdminUserDto {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-  roleName: string;
-  banned: boolean;
-  banReason: string | null;
-  banExpires: string | null;
-  createdAt: string | null;
-  serverCount: number;
-}
-
 function AdminUsersPage() {
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
+  const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
+  const search = Route.useSearch();
 
   const listUsers = useServerFn(listUsersFn);
   const createUser = useServerFn(createUserFn);
@@ -89,21 +91,14 @@ function AdminUsersPage() {
   });
   const roles: RoleDto[] = rolesQuery.data ?? [];
 
-  // Search form — the value feeds the query key reactively (no useState)
-  const searchForm = useForm({
-    defaultValues: { search: '' },
-  });
-  const search = useStore(searchForm.store, (s) => s.values.search);
-
   const query = useQuery({
     queryKey: ['admin-users', search],
-    queryFn: () => listUsers({ data: { search: search || undefined } }),
+    queryFn: () => listUsers({ data: search }),
+    placeholderData: keepPreviousData,
   });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-
-  const users: AdminUserDto[] = query.data?.users ?? [];
 
   const changeRole = useMutation({
     mutationFn: (input: { userId: string; role: string }) =>
@@ -146,7 +141,7 @@ function AdminUsersPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  const confirmBan = (target: AdminUserDto) => {
+  const confirmBan = (target: AdminUserRow) => {
     if (!confirm(`Suspendre « ${target.email} » ? Il ne pourra plus se connecter.`)) {
       return;
     }
@@ -154,10 +149,31 @@ function AdminUsersPage() {
     ban.mutate({ userId: target.id, banReason: reason ?? undefined });
   };
 
-  const confirmDelete = (target: AdminUserDto) => {
+  const confirmDelete = (target: AdminUserRow) => {
     if (confirm(`Supprimer définitivement « ${target.email} » ?`)) {
       remove.mutate({ userId: target.id });
     }
+  };
+
+  // Search updates write the WHOLE validated query back (reducer form would
+  // require the raw params type): the page resets below are part of the patch.
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    navigate({ search: mergeQuery(search, patch), replace: true });
+
+  const busy =
+    changeRole.isPending || ban.isPending || unban.isPending || remove.isPending;
+
+  const rowContext: AdminUsersContext = {
+    canSetRole,
+    canBan,
+    canDelete,
+    roles: roles.map((role) => ({ id: role.id, name: role.name })),
+    busy,
+    isSelf: (target) => target.id === user?.id,
+    onRoleChange: (target, roleId) => changeRole.mutate({ userId: target.id, role: roleId }),
+    onBan: confirmBan,
+    onUnban: (target) => unban.mutate({ userId: target.id }),
+    onDelete: confirmDelete,
   };
 
   return (
@@ -172,136 +188,22 @@ function AdminUsersPage() {
             immédiatement les sessions actives.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search bar — live filtering on email */}
-          <searchForm.Field name="search">
-            {(field) => (
-              <div className="relative max-w-sm">
-                <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  className="pl-8"
-                  placeholder="Rechercher un e-mail…"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-              </div>
-            )}
-          </searchForm.Field>
-
-          {query.isPending && (
-            <p className="text-sm text-muted-foreground">Chargement…</p>
-          )}
-          {query.isError && (
-            <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-          )}
-
-          {users.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Utilisateur</th>
-                    <th className="py-2 pr-4 font-medium">Rôle</th>
-                    <th className="py-2 pr-4 font-medium">Serveurs</th>
-                    <th className="py-2 pr-4 font-medium">Statut</th>
-                    <th className="py-2 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {users.map((target) => {
-                    const isSelf = target.id === user?.id;
-                    return (
-                      <tr key={target.id} className={target.banned ? 'opacity-60' : undefined}>
-                        <td className="py-2 pr-4">
-                          <p className="font-medium">{target.name ?? '—'}</p>
-                          <p className="text-xs text-muted-foreground">{target.email}</p>
-                        </td>
-                        <td className="py-2 pr-4">
-                          {canSetRole && !isSelf ? (
-                            <Select
-                              value={target.role}
-                              onValueChange={(role) =>
-                                role !== null &&
-                                changeRole.mutate({ userId: target.id, role })
-                              }
-                            >
-                              <SelectTrigger className="w-44">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {roles.map((role) => (
-                                  <SelectItem key={role.id} value={role.id}>
-                                    {role.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <span>{target.roleName}</span>
-                          )}
-                        </td>
-                        <td className="py-2 pr-4">{target.serverCount}</td>
-                        <td className="py-2 pr-4">
-                          {target.banned ? (
-                            <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">
-                              Suspendu
-                            </span>
-                          ) : (
-                            <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                              Actif
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2">
-                          <div className="flex justify-end gap-1">
-                            {canBan && !isSelf && (
-                              target.banned ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => unban.mutate({ userId: target.id })}
-                                  disabled={unban.isPending}
-                                >
-                                  <CircleCheck />
-                                  Réactiver
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => confirmBan(target)}
-                                  disabled={ban.isPending}
-                                >
-                                  <Ban />
-                                  Suspendre
-                                </Button>
-                              )
-                            )}
-                            {canDelete && !isSelf && (
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => confirmDelete(target)}
-                                disabled={remove.isPending}
-                              >
-                                <Trash2 />
-                                Supprimer
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            !query.isPending && (
-              <p className="text-sm text-muted-foreground">Aucun utilisateur.</p>
-            )
-          )}
+        <CardContent>
+          <DataTable
+            list={adminUsersList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            emptyMessage="Aucun utilisateur."
+            filterOptions={{
+              role: roles.map((role) => ({ value: role.id, label: role.name })),
+            }}
+            rowContext={rowContext}
+          />
         </CardContent>
       </Card>
 

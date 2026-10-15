@@ -104,13 +104,6 @@ export type UpdateServerVariablesDto = z.infer<typeof updateServerVariablesSchem
 
 // ─── Sub-users (per-server permission grants, Pelican "Users" tab) ──────────
 
-/** Reads the sub-user list of a server. */
-export const listServerUsersSchema = z.object({
-  serverId: z.string().min(1),
-});
-
-export type ListServerUsersDto = z.infer<typeof listServerUsersSchema>;
-
 /** Adds a sub-user by email with a permission grant. */
 export const addServerUserSchema = z.object({
   serverId: z.string().min(1),
@@ -138,13 +131,6 @@ export const removeServerUserSchema = z.object({
 export type RemoveServerUserDto = z.infer<typeof removeServerUserSchema>;
 
 // ─── Backups (server archives, Pelican "Backups" tab) ───────────────────────
-
-/** Reads the backup list of a server. */
-export const listBackupsSchema = z.object({
-  serverId: z.string().min(1),
-});
-
-export type ListBackupsDto = z.infer<typeof listBackupsSchema>;
 
 /** Creates a backup — the name is optional (default: dated label). */
 export const createBackupSchema = z.object({

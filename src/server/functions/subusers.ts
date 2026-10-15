@@ -1,7 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
-import { initOrm } from '~/db';
-import { Server, ServerUser, User } from '~/db/entities';
+import { z } from 'zod';
+import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
+import { ServerUser, User } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
+import { serverSubusersList } from '~/lists/subusers';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
 import {
   flattenPermissions,
@@ -10,7 +13,6 @@ import {
   type PermissionStatements,
 } from '~/lib/permissions';
 import {
-  listServerUsersSchema,
   addServerUserSchema,
   updateServerUserSchema,
   removeServerUserSchema,
@@ -43,25 +45,53 @@ function assertWithinCeiling(
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
-export const listServerUsersFn = createServerFn({ method: 'GET' })
-  .validator(listServerUsersSchema)
+/**
+ * Query of the Users tab: the paginated list query PLUS the server it is scoped
+ * to — the server id is a route param, not a search param, so it travels
+ * alongside the rest of the payload.
+ */
+const listServerUsersQuerySchema = serverSubusersList.querySchema.and(
+  z.object({ serverId: z.string().min(1) }),
+);
+
+/**
+ * Sub-users of ONE server — filter/search/sort/pagination run in the database
+ * (`serverSubusersList`). The scoping `serverId` sits on the query builder
+ * BEFORE `runListQuery`, so it applies to the rows AND the total; the joined
+ * `user` table is pulled in only when a filter or the sort needs it.
+ */
+export const listServerUsersFn = createServerFn({ method: 'POST' })
+  .validator(listServerUsersQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
-    await loadServerWithPermission(data.serverId, user, { 'server.users': ['read'] });
+    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+      'server.users': ['read'],
+    });
 
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const grants = await em.find(ServerUser, { serverId: data.serverId });
-    const users = await em.find(User, { id: { $in: grants.map((g) => g.userId) } });
+    // `loadServerWithPermission` types its em loosely; the shared builder wants
+    // the Postgres entity manager (same runtime object).
+    const qb = listQueryBuilder(em as PostgreSqlEntityManager, ServerUser, serverSubusersList);
+    qb.andWhere({ serverId: server.id });
 
-    return grants.map((grant) => ({
-      id: grant.id,
-      userId: grant.userId,
-      name: users.find((u) => u.id === grant.userId)?.name ?? '—',
-      email: users.find((u) => u.id === grant.userId)?.email ?? '—',
-      permissions: flattenPermissions(sanitizeStatements(grant.permissions ?? {})),
-      createdAt: grant.createdAt ? grant.createdAt.toISOString() : null,
-    }));
+    const { rows, rowCount } = await runListQuery(qb, serverSubusersList.spec, data);
+
+    // Display names/e-mails of the current page only (queries stay bounded by pageSize).
+    const accounts = await em.find(User, {
+      id: { $in: [...new Set(rows.map((grant) => grant.userId))] },
+    });
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
+
+    return {
+      rowCount,
+      rows: rows.map((grant) => ({
+        id: grant.id,
+        userId: grant.userId,
+        name: accountsById.get(grant.userId)?.name ?? '—',
+        email: accountsById.get(grant.userId)?.email ?? '—',
+        permissions: flattenPermissions(sanitizeStatements(grant.permissions ?? {})),
+        createdAt: grant.createdAt,
+      })),
+    };
   });
 
 // ─── Add (invite an existing account by email) ───────────────────────────────

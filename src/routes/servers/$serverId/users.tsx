@@ -1,9 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { Save, Trash2, UserPlus } from 'lucide-react';
+import { Save, UserPlus } from 'lucide-react';
+import { DataTable } from '~/components/data-table/data-table';
 import { getServerFn } from '~/server/functions/servers';
 import {
   listServerUsersFn,
@@ -16,10 +18,20 @@ import {
   SERVER_PERMISSION_GROUPS,
   type PermissionStatements,
 } from '~/lib/permissions';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { serverSubusersList, type ServerSubuserRow } from '~/lists/subusers';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Label } from '~/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
 import {
   Card,
   CardContent,
@@ -29,8 +41,20 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 
-/** /servers/$serverId/users — sous-utilisateurs (accès partagé au serveur). */
+/**
+ * /servers/$serverId/users — sous-utilisateurs (accès partagé au serveur).
+ *
+ * The list definition (`~/lists/subusers`) holds the columns AND the query it
+ * accepts (identity joined from `user`, so search/sort by e-mail run in SQL);
+ * pagination/state live in the URL search params. The permission grid moved
+ * into a dialog opened from the row action, keeping the listing a plain list.
+ */
 export const Route = createFileRoute('/servers/$serverId/users')({
+  // Same schema as the server function: the route validates the URL, the
+  // function validates the payload — one definition, no drift.
+  validateSearch: (search: Record<string, unknown>): ListQuery =>
+    serverSubusersList.querySchema.parse(search),
+  search: { middlewares: [stripSearchParams(serverSubusersList.defaultSearch)] },
   component: ServerUsersPage,
 });
 
@@ -50,6 +74,8 @@ function checkedToStatements(checked: Record<string, boolean>): PermissionStatem
 
 function ServerUsersPage() {
   const { serverId } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
 
   const getServer = useServerFn(getServerFn);
@@ -57,6 +83,9 @@ function ServerUsersPage() {
   const addUser = useServerFn(addServerUserFn);
   const updateUser = useServerFn(updateServerUserFn);
   const removeUser = useServerFn(removeServerUserFn);
+
+  // Sub-user whose permissions are being edited (null = dialog closed).
+  const [editing, setEditing] = useState<ServerSubuserRow | null>(null);
 
   // Shared server query (cached) — viewer grants gate the page controls
   const serverQuery = useQuery({
@@ -70,12 +99,13 @@ function ServerUsersPage() {
   const canRemove = serverCan(permissions, { 'server.users': ['delete'] });
 
   const query = useQuery({
-    queryKey: ['server-users', serverId],
-    queryFn: () => listUsers({ data: { serverId } }),
+    queryKey: ['server-subusers', serverId, search],
+    queryFn: () => listUsers({ data: { ...search, serverId } }),
+    placeholderData: keepPreviousData,
   });
 
   const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['server-users', serverId] });
+    await queryClient.invalidateQueries({ queryKey: ['server-subusers', serverId] });
   };
 
   const add = useMutation({
@@ -93,6 +123,7 @@ function ServerUsersPage() {
       updateUser({ data: { serverId, userId: input.userId, permissions: input.permissions } }),
     onSuccess: async () => {
       await invalidate();
+      setEditing(null);
       toast.success('Permissions mises à jour');
     },
     onError: (error) => toast.error(error.message),
@@ -123,6 +154,19 @@ function ServerUsersPage() {
       add.mutate({ email: value.email, permissions: statements });
     },
   });
+
+  // Search updates write the WHOLE validated query back (reducer form would
+  // require the raw params type): the page resets below are part of the patch.
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    navigate({ search: mergeQuery(search, patch), replace: true });
+
+  const onEdit = (subuser: ServerSubuserRow) => setEditing(subuser);
+
+  const onRemove = (subuser: ServerSubuserRow) => {
+    if (confirm(`Retirer l’accès de « ${subuser.email} » à ce serveur ?`)) {
+      remove.mutate({ userId: subuser.userId });
+    }
+  };
 
   if (!serverCan(permissions, { 'server.users': ['read'] })) {
     return (
@@ -215,139 +259,132 @@ function ServerUsersPage() {
       )}
 
       {/* ─── Current sub-users ─── */}
-      <div className="space-y-4">
-        {query.isPending && (
-          <p className="text-sm text-muted-foreground">Chargement…</p>
-        )}
-        {query.isError && (
-          <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-        )}
-        {query.data?.map((subuser) => (
-          <SubuserCard
-            key={subuser.id}
-            subuser={subuser}
-            canUpdate={canUpdate}
-            canRemove={canRemove}
-            onSave={(statements) =>
-              update.mutate({ userId: subuser.userId, permissions: statements })
-            }
-            onRemove={() => {
-              if (confirm(`Retirer l’accès de « ${subuser.email} » à ce serveur ?`)) {
-                remove.mutate({ userId: subuser.userId });
-              }
-            }}
-            pending={update.isPending || remove.isPending}
-          />
-        ))}
-        {!query.isPending && (query.data?.length ?? 0) === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Aucun sous-utilisateur pour l’instant.
-          </p>
-        )}
-      </div>
+      <DataTable
+        list={serverSubusersList}
+        rows={query.data?.rows ?? []}
+        rowCount={query.data?.rowCount ?? 0}
+        search={search}
+        onSearchChange={onSearchChange}
+        isPending={query.isPending}
+        isFetching={query.isFetching}
+        error={query.error}
+        emptyMessage="Aucun sous-utilisateur pour l’instant."
+        rowContext={{
+          canManage: canUpdate || canRemove,
+          removing: update.isPending || remove.isPending,
+          onEdit,
+          onRemove,
+        }}
+      />
+
+      {/* Edit a sub-user's permissions — remounts per row so the checkboxes
+          reflect the grant being edited (TanStack Form + the existing
+          updateServerUserFn validator). */}
+      <SubuserPermissionsDialog
+        key={editing?.id ?? 'closed'}
+        subuser={editing}
+        pending={update.isPending}
+        onClose={() => setEditing(null)}
+        onSubmit={(statements) => {
+          if (editing) update.mutate({ userId: editing.userId, permissions: statements });
+        }}
+      />
     </div>
   );
 }
 
-interface SubuserDto {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  permissions: string[];
-  createdAt: string | null;
-}
-
-/** One sub-user: identity + inline permission editor + remove. */
-function SubuserCard({
+/** Permission editor of one sub-user, opened from the row action. */
+function SubuserPermissionsDialog({
   subuser,
-  canUpdate,
-  canRemove,
-  onSave,
-  onRemove,
   pending,
+  onClose,
+  onSubmit,
 }: {
-  subuser: SubuserDto;
-  canUpdate: boolean;
-  canRemove: boolean;
-  onSave: (permissions: PermissionStatements) => void;
-  onRemove: () => void;
+  /** Sub-user being edited, or null when the dialog is closed. */
+  subuser: ServerSubuserRow | null;
   pending: boolean;
+  onClose: () => void;
+  onSubmit: (permissions: PermissionStatements) => void;
 }) {
-  // Edit form — initialized from the current grant, same checkbox grid
   const form = useForm({
     defaultValues: {
       permissions: Object.fromEntries(
-        subuser.permissions.map((permission) => [permission, true]),
+        subuser?.permissions.map((permission) => [permission, true]) ?? [],
       ) as Record<string, boolean>,
     },
     onSubmit: ({ value }) => {
-      onSave(checkedToStatements(value.permissions));
+      const statements = checkedToStatements(value.permissions);
+      if (Object.keys(statements).length === 0) {
+        toast.error('Sélectionne au moins une permission');
+        return;
+      }
+      onSubmit(statements);
     },
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">{subuser.name}</CardTitle>
-            <CardDescription>{subuser.email}</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            {canUpdate && (
-              <form.Subscribe selector={(s) => s.isSubmitting}>
-                {(isSubmitting) => (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isSubmitting || pending}
-                    onClick={() => form.handleSubmit()}
+    <Dialog open={subuser !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Permissions de l’accès</DialogTitle>
+          <DialogDescription>
+            {subuser ? `${subuser.name} — ${subuser.email}` : ''}
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <div className="grid max-h-[60vh] gap-4 overflow-y-auto sm:grid-cols-2">
+            {SERVER_PERMISSION_GROUPS.map((group) => (
+              <div key={group.resource} className="space-y-2 rounded-md border p-3">
+                <p className="text-sm font-medium">{group.label}</p>
+                {group.actions.map((entry) => (
+                  <form.Field
+                    key={entry.permission}
+                    name={`permissions.${entry.permission}`}
                   >
-                    <Save />
-                    Enregistrer
-                  </Button>
-                )}
-              </form.Subscribe>
-            )}
-            {canRemove && (
-              <Button size="sm" variant="destructive" disabled={pending} onClick={onRemove}>
-                <Trash2 />
-                Retirer l’accès
-              </Button>
-            )}
+                    {(field) => (
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`${subuser?.id ?? 'edit'}-${entry.permission}`}
+                          checked={Boolean(field.state.value)}
+                          onCheckedChange={(checked) => field.handleChange(checked === true)}
+                        />
+                        <Label
+                          htmlFor={`${subuser?.id ?? 'edit'}-${entry.permission}`}
+                          className="text-sm font-normal"
+                        >
+                          {entry.label}
+                        </Label>
+                      </div>
+                    )}
+                  </form.Field>
+                ))}
+              </div>
+            ))}
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {SERVER_PERMISSION_GROUPS.map((group) => (
-            <div key={group.resource} className="space-y-2 rounded-md border p-3">
-              <p className="text-sm font-medium">{group.label}</p>
-              {group.actions.map((entry) => (
-                <form.Field key={entry.permission} name={`permissions.${entry.permission}`}>
-                  {(field) => (
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`${subuser.id}-${entry.permission}`}
-                        checked={Boolean(field.state.value)}
-                        disabled={!canUpdate}
-                        onCheckedChange={(checked) => field.handleChange(checked === true)}
-                      />
-                      <Label
-                        htmlFor={`${subuser.id}-${entry.permission}`}
-                        className="text-sm font-normal"
-                      >
-                        {entry.label}
-                      </Label>
-                    </div>
-                  )}
-                </form.Field>
-              ))}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Annuler
+            </Button>
+            <form.Subscribe selector={(s) => [s.isSubmitting, pending]}>
+              {([isSubmitting, isPending]) => (
+                <Button type="submit" disabled={isSubmitting || isPending}>
+                  <Save />
+                  {isPending ? 'Enregistrement…' : 'Enregistrer'}
+                </Button>
+              )}
+            </form.Subscribe>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

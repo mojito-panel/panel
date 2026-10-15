@@ -106,8 +106,6 @@ export const renameEntryFormSchema = z.object({
   name: entryNameField,
 });
 
-export type RenameEntryFormDto = z.infer<typeof renameEntryFormSchema>;
-
 /** Editor form: raw text content. */
 export const saveFileFormSchema = z.object({
   content: z.string().max(2 * 1024 * 1024, 'Fichier trop volumineux'),

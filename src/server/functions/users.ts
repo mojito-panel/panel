@@ -1,7 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
+import { sql } from '@mikro-orm/postgresql';
 import { z } from 'zod';
 import { initOrm } from '~/db';
 import { Account, Server, Session, ServerUser, User, PanelRole } from '~/db/entities';
+import { adminUsersList } from '~/lists/users';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import {
   requireUser,
   requirePanelPermission,
@@ -68,50 +71,75 @@ function roleLabel(roleId: string, customRoles: { id: string; name: string }[]):
   );
 }
 
-// ─── List (search + pagination) ───────────────────────────────────────────────
+// ─── List (search + filter + sort + pagination) ───────────────────────────────
 
+/**
+ * User list of the admin area — filter/sort/pagination run in the database
+ * (`adminUsersList`). The per-page server count is one grouped count over the
+ * page's owner ids (never every server loaded to count in JS).
+ */
 export const listUsersFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      search: z.string().optional(),
-      limit: z.number().int().min(1).max(100).optional(),
-      offset: z.number().int().min(0).optional(),
-    }),
-  )
+  .validator(adminUsersList.querySchema)
   .handler(async ({ data }) => {
     await requirePanelPermission({ user: ['list'] });
 
     const orm = await initOrm();
     const em = orm.em.fork();
 
-    const where = data.search ? { email: { $ilike: `%${data.search}%` } } : {};
-    const [users, total, customRoles, servers] = await Promise.all([
-      em.find(User, where, {
-        orderBy: { createdAt: 'desc' },
-        limit: data.limit ?? 50,
-        offset: data.offset ?? 0,
-      }),
-      em.count(User, where),
+    const { rows, rowCount } = await runListQuery(
+      listQueryBuilder(em, User, adminUsersList),
+      adminUsersList.spec,
+      data,
+    );
+
+    const ids = rows.map((user) => user.id);
+    const [customRoles, serverCounts] = await Promise.all([
       em.find(PanelRole, {}),
-      em.find(Server, {}),
+      ids.length > 0
+        ? em.getConnection().execute<{ owner_id: string; count: number }[]>(
+            sql`select owner_id, count(*)::int as count from "server" where owner_id in (${ids}) group by owner_id`,
+          )
+        : Promise.resolve<{ owner_id: string; count: number }[]>([]),
     ]);
 
+    const countByOwner = new Map(serverCounts.map((row) => [row.owner_id, row.count]));
+
     return {
-      total,
-      users: users.map((user) => ({
+      rowCount,
+      rows: rows.map((user) => ({
         id: user.id,
         name: user.name ?? null,
         email: user.email,
-        role: user.role,
+        username: user.username ?? null,
+        role: user.role ?? 'user',
         roleName: roleLabel(user.role ?? 'user', customRoles),
         banned: user.banned ?? false,
-        banReason: user.banReason ?? null,
-        banExpires: user.banExpires ? user.banExpires.toISOString() : null,
-        createdAt: user.createdAt ? user.createdAt.toISOString() : null,
-        serverCount: servers.filter((s) => s.ownerId === user.id).length,
+        serverCount: countByOwner.get(user.id) ?? 0,
+        createdAt: user.createdAt,
       })),
     };
   });
+
+// ─── Options (owner pickers) ──────────────────────────────────────────────────
+
+/**
+ * Every user as a light `{ id, name, email }` option, sorted by name — feeds the
+ * owner picker of the admin server page. Kept separate from the paginated list
+ * function: a picker needs the whole set, not a page of it.
+ */
+export const listUserOptionsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requirePanelPermission({ user: ['list'] });
+
+  const orm = await initOrm();
+  const em = orm.em.fork();
+  const users = await em.find(User, {}, { orderBy: { name: 'asc' } });
+
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name ?? null,
+    email: user.email,
+  }));
+});
 
 // ─── Create ──────────────────────────────────────────────────────────────────
 

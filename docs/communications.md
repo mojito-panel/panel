@@ -386,7 +386,8 @@ sequenceDiagram
 | `installServerFn` | POST | Create + start the installation |
 | `getInstallStatusFn` | GET | Installation status/logs (end-of-install sync + polling fallback) |
 | `retryInstallFn` | POST | Relaunch a failed installation |
-| `listServersFn` | GET | List (admin: everything, otherwise own servers) |
+| `listServersFn` | POST | List (admin: everything, otherwise own + shared servers) |
+| `listServerOptionsFn` | GET | Picker options (full `{ id, name }` set, optional `nodeId`) |
 | `getServerFn` | GET | Detail + runtime sync + logs |
 | `getServerLogsFn` | GET | Incremental logs (console fallback) |
 | `createConsoleTokenFn` | POST | Console JWT + wsUrl |
@@ -394,7 +395,8 @@ sequenceDiagram
 | `sendCommandFn` | POST | stdin command via panel |
 | `reinstallServerFn` | POST | In-place reinstallation |
 | `updateServerVariablesFn` | POST | Variable editing (userEditable merge + agent sync) — see §6 |
-| `getServerNetworkFn` | GET | Server allocations + free ones on the node (Network page) |
+| `listServerAllocationsFn` | POST | Server allocations (list query: filters/sort/pagination) — Network page |
+| `listServerFreeAllocationsFn` | GET | Free allocations of the server's node (full set, for the add form / assign picker) |
 | `addServerAllocationFn` | POST | Claim a free allocation on the node |
 | `removeServerAllocationFn` | POST | Release a non-primary allocation |
 | `setPrimaryServerAllocationFn` | POST | Set the primary allocation + agent sync (next start) |

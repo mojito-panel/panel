@@ -4,6 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { Download, Trash2 } from 'lucide-react';
 import { parseRecipe, parseRuntimeRecipe, isRuntimeRecipeJson } from '~/contract';
 import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
+import { adminRecipesList } from '~/lists/recipes';
 import { Button } from '~/components/ui/button';
 import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
 import { RuntimeRecipeEditor } from '~/components/recipe-editor/runtime-recipe-editor';
@@ -42,7 +43,8 @@ function EditRecipePage() {
     },
     onSuccess: async () => {
       // List only — ['recipe'] is NOT invalidated so the form keeps its state
-      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
     },
   });
 
@@ -55,15 +57,17 @@ function EditRecipePage() {
       return updateRecipe({ data: { recipeId, json: JSON.stringify(recipe, null, 2) } });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
     },
   });
 
   const remove = useMutation({
     mutationFn: () => deleteRecipe({ data: { recipeId } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['recipes'] });
-      await navigate({ to: '/admin/recipes' });
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
+      await navigate({ to: '/admin/recipes', search: adminRecipesList.defaultSearch });
     },
   });
 
@@ -74,7 +78,10 @@ function EditRecipePage() {
     return (
       <div className="space-y-4">
         <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-        <Button variant="ghost" render={<Link to="/admin/recipes" />}>
+        <Button
+          variant="ghost"
+          render={<Link to="/admin/recipes" search={adminRecipesList.defaultSearch} />}
+        >
           ← Recettes
         </Button>
       </div>
