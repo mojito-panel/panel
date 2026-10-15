@@ -75,7 +75,14 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
             onValueChange={(role) => role !== null && context.onRoleChange(user, role)}
           >
             <SelectTrigger className="w-44">
-              <SelectValue />
+              {/* base-ui only resolves an item's LABEL once that item is mounted
+                  (i.e. after the popup opened) — a closed trigger would show the
+                  raw value, so the label is resolved here. */}
+              <SelectValue>
+                {(current: string | null) =>
+                  context.roles.find((role) => role.id === current)?.name ?? current ?? user.roleName
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {context.roles.map((role) => (

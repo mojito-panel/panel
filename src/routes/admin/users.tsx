@@ -25,12 +25,20 @@ import { ConfirmDialog } from '~/components/confirm-dialog';
 import { Input } from '~/components/ui/input';
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -68,6 +76,7 @@ function AdminUsersPage() {
   const [banTarget, setBanTarget] = useState<AdminUserRow | null>(null);
   const [banReason, setBanReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
   const navigate = useNavigate({ from: Route.fullPath });
@@ -187,6 +196,14 @@ function AdminUsersPage() {
             utilisateur), suspension et suppression. La suspension révoque
             immédiatement les sessions actives.
           </CardDescription>
+          {canCreate && (
+            <CardAction>
+              <Button onClick={() => setCreateOpen(true)}>
+                <UserPlus />
+                Créer un utilisateur
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           <DataTable
@@ -207,9 +224,15 @@ function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {/* ─── Create user ─── */}
+      {/* ─── Create user (dialog opened from the list card's action button) ─── */}
       {canCreate && (
-        <CreateUserCard createUser={createUser} onCreated={invalidate} roles={roles} />
+        <CreateUserDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          createUser={createUser}
+          onCreated={invalidate}
+          roles={roles}
+        />
       )}
 
       {/* ─── Confirm dialogs ─── */}
@@ -259,12 +282,16 @@ function AdminUsersPage() {
   );
 }
 
-/** "Create a user" card (name, email, password, role). */
-function CreateUserCard({
+/** "Create a user" dialog, opened from the list card's action button. */
+function CreateUserDialog({
+  open,
+  onOpenChange,
   createUser,
   onCreated,
   roles,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   createUser: (args: { data: CreateUserFormDto }) => Promise<{ id: string; email: string; role: string }>;
   onCreated: () => Promise<void>;
   roles: RoleDto[];
@@ -286,136 +313,151 @@ function CreateUserCard({
     onSuccess: async () => {
       await onCreated();
       form.reset();
+      onOpenChange(false);
       toast.success('Compte créé');
     },
     onError: (error) => toast.error(error.message),
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Créer un utilisateur</CardTitle>
-        <CardDescription>
-          Le mot de passe est défini directement — l’utilisateur pourra se
-          connecter immédiatement.
-        </CardDescription>
-      </CardHeader>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-      >
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <form.Field name="name">
-            {(field) => (
-              <div className="space-y-2">
-                <Input
-                  placeholder="Nom"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Créer un utilisateur</DialogTitle>
+          <DialogDescription>
+            Le mot de passe est défini directement — l’utilisateur pourra se
+            connecter immédiatement.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <form.Field name="name">
+              {(field) => (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Nom"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+            <form.Field name="username">
+              {(field) => (
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Nom d’utilisateur (SFTP)"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+            <form.Field name="email">
+              {(field) => (
+                <div className="space-y-2">
+                  <Input
+                    type="email"
+                    placeholder="Adresse e-mail"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+            <form.Field name="password">
+              {(field) => (
+                <div className="space-y-2">
+                  <Input
+                    type="password"
+                    placeholder="Mot de passe (8 caractères min.)"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p className="text-sm text-destructive">
+                      {field.state.meta.errors[0]?.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+            <div className="sm:col-span-2">
+              <form.Field name="role">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Select
+                      value={field.state.value}
+                      onValueChange={(v) => v !== null && field.handleChange(v)}
+                    >
+                      <SelectTrigger className="w-full">
+                        {/* base-ui only resolves an item's LABEL once that item is
+                            mounted (i.e. after the popup opened) — a closed trigger
+                            would show the raw value, so the label is resolved here. */}
+                        <SelectValue placeholder="Rôle">
+                          {(current: string | null) =>
+                            roles.find((role) => role.id === current)?.name ?? current ?? 'Rôle'
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            {role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-sm text-destructive">
+                        {field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </form.Field>
-          <form.Field name="username">
-            {(field) => (
-              <div className="space-y-2">
-                <Input
-                  placeholder="Nom d’utilisateur (SFTP)"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Input
-                  type="email"
-                  placeholder="Adresse e-mail"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Input
-                  type="password"
-                  placeholder="Mot de passe (8 caractères min.)"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
-          <form.Field name="role">
-            {(field) => (
-              <div className="space-y-2">
-                <Select
-                  value={field.state.value}
-                  onValueChange={(v) => v !== null && field.handleChange(v)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Rôle" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
-        </CardContent>
-        <CardFooter>
-          <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
-            {([canSubmit, isSubmitting]) => (
-              <Button type="submit" disabled={!canSubmit || isSubmitting || create.isPending}>
-                <UserPlus />
-                {isSubmitting || create.isPending ? 'Création…' : 'Créer le compte'}
-              </Button>
-            )}
-          </form.Subscribe>
-        </CardFooter>
-      </form>
-    </Card>
+              </form.Field>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Annuler
+            </Button>
+            <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
+              {([canSubmit, isSubmitting]) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting || create.isPending}>
+                  <UserPlus />
+                  {isSubmitting || create.isPending ? 'Création…' : 'Créer le compte'}
+                </Button>
+              )}
+            </form.Subscribe>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
