@@ -220,6 +220,7 @@ export const getNodeHealthFn = createServerFn({ method: 'GET' })
 
     return {
       status: node.status as 'online' | 'offline',
+      lastSeenAt: node.lastSeenAt,
       agentVersion,
     };
   });

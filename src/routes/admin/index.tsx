@@ -117,7 +117,7 @@ function AdminOverviewPage() {
         <CardHeader>
           <CardTitle>Nodes</CardTitle>
           <CardDescription>
-            Santé des agents (polling live — le statut se rafraîchit toutes les 5 s).
+            Santé des agents.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -130,11 +130,6 @@ function AdminOverviewPage() {
                     <p className="truncate font-medium">{node.name}</p>
                     <p className="truncate text-sm text-muted-foreground">
                       {node.fqdn}:{node.publicPort}
-                      {healthQuery.isPending
-                        ? ' · …'
-                        : health?.agentVersion
-                          ? ` · agent ${health.agentVersion}`
-                          : ' · agent injoignable'}
                       {health?.lastSeenAt &&
                         ` · vu ${new Date(health.lastSeenAt).toLocaleString('fr-FR')}`}
                     </p>

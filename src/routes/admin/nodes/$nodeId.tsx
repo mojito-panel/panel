@@ -100,7 +100,6 @@ function AdminNodeEditPage() {
   // until the first answer arrives).
   const health = healthQuery.data;
   const liveStatus = health?.status ?? node.status;
-  const agentVersion = health ? health.agentVersion : null;
 
   return (
     <div>
@@ -130,21 +129,13 @@ function AdminNodeEditPage() {
               <CardSection title="Informations du node">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <InfoEntry
-                    label="Version de l'agent"
-                    value={healthQuery.isPending ? '…' : (agentVersion ?? 'injoignable')}
-                    muted={!agentVersion}
-                  />
-                  <InfoEntry label="Serveurs installés" value={String(node.serverCount)} />
-                  <InfoEntry
                     label="Dernier contact"
                     value={
-                      healthQuery.isPending
-                        ? '…'
-                        : health && health.status === 'online'
-                          ? new Date().toLocaleString('fr-FR')
-                          : node.lastSeenAt
-                            ? new Date(node.lastSeenAt).toLocaleString('fr-FR')
-                            : 'jamais'
+                      health?.lastSeenAt
+                        ? new Date(health.lastSeenAt).toLocaleString('fr-FR')
+                        : node.lastSeenAt
+                          ? new Date(node.lastSeenAt).toLocaleString('fr-FR')
+                          : 'jamais'
                     }
                     muted={!(health?.status === 'online')}
                   />
