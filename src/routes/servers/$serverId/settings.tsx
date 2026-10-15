@@ -10,6 +10,7 @@ import {
 import { serverCan } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
+import { ErrorState, PageSkeleton } from '~/components/error/error-state';
 import {
   Card,
   CardContent,
@@ -43,7 +44,7 @@ function ServerSettingsPage() {
 
   const query = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
   });
 
   const reinstallMutation = useMutation({
@@ -86,8 +87,9 @@ function ServerSettingsPage() {
   return (
     <div className="space-y-6">
       {query.isError && (
-        <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
+        <ErrorState message={query.error.message} onRetry={() => query.refetch()} />
       )}
+      {query.isPending && <PageSkeleton />}
 
       {/* ─── Server information (Pelican: "Server Information") ─── */}
       <Card>

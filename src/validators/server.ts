@@ -46,6 +46,19 @@ export const sendCommandSchema = z.object({
   command: z.string().min(1, 'La commande est vide'),
 });
 
+/**
+ * Server detail — the id alone (getServerFn / getServerRuntimeFn).
+ */
+export const serverDetailQuerySchema = z.object({
+  serverId: z.string().min(1),
+});
+
+export type ServerDetailQueryDto = z.infer<typeof serverDetailQuerySchema>;
+
+/**
+ * Incremental logs cursor (console polling) — `after` is the last line
+ * index seen by the client.
+ */
 export const serverLogsQuerySchema = z.object({
   serverId: z.string().min(1),
   after: z.coerce.number().int().min(0).default(0),

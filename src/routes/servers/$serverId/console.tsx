@@ -10,8 +10,10 @@ import type {
   ConsoleInstallStatus,
   ServerStatus,
 } from '~/contract';
+import type { PanelServerStatus } from '~/components/app-sidebar';
 import {
   getServerFn,
+  getServerRuntimeFn,
   getInstallStatusFn,
   retryInstallFn,
   serverActionFn,
@@ -22,6 +24,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
 import { InstallLogs, InstallNotice } from '~/components/console/install-panel';
+import { ErrorState, PageSkeleton } from '~/components/error/error-state';
 import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
@@ -50,6 +53,7 @@ function ServerConsolePage() {
   const { serverId } = Route.useParams();
   const queryClient = useQueryClient();
   const getServer = useServerFn(getServerFn);
+  const getRuntime = useServerFn(getServerRuntimeFn);
   const doAction = useServerFn(serverActionFn);
   const sendCommand = useServerFn(sendCommandFn);
   const getInstallStatus = useServerFn(getInstallStatusFn);
@@ -72,13 +76,22 @@ function ServerConsolePage() {
   };
 
   const handleConsoleStatus = (status: ServerStatus) => {
-    // Runtime status pushed by the agent → refresh the query (DB sync)
+    // Runtime status pushed by the agent → refresh the queries (DB sync)
     void queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+    void queryClient.invalidateQueries({ queryKey: ['server-runtime', serverId] });
   };
 
+  // DB detail (name, grants) — never waits on the agent
   const query = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
+  });
+
+  // LIVE agent status (best-effort — the DB status is served when the
+  // agent is unreachable), polled like the old detail query
+  const runtimeQuery = useQuery({
+    queryKey: ['server-runtime', serverId],
+    queryFn: () => getRuntime({ data: { serverId } }),
     refetchInterval: 5000,
   });
 
@@ -103,6 +116,7 @@ function ServerConsolePage() {
       // The WS carries the live state; the panel DB still says 'installing'
       syncInstallDb.mutate();
       void queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      void queryClient.invalidateQueries({ queryKey: ['server-runtime', serverId] });
       void queryClient.invalidateQueries({ queryKey: ['servers'] });
     }
   };
@@ -113,6 +127,7 @@ function ServerConsolePage() {
       // The agent replays the new install over the WS (reset) — status follows
       await queryClient.invalidateQueries({ queryKey: ['install-status', serverId] });
       await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      await queryClient.invalidateQueries({ queryKey: ['server-runtime', serverId] });
     },
   });
 
@@ -120,7 +135,7 @@ function ServerConsolePage() {
     mutationFn: (a: 'start' | 'stop' | 'restart' | 'kill') =>
       doAction({ data: { serverId, action: a } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      await queryClient.invalidateQueries({ queryKey: ['server-runtime', serverId] });
     },
   });
 
@@ -137,11 +152,15 @@ function ServerConsolePage() {
   };
 
   const server = query.data;
-  const isRunning = server?.status === 'running';
+  // LIVE agent status only (null = agent unreachable) — a stale DB status
+  // is never displayed here; the install detection below keeps its own
+  // persisted fallback because installs are tracked in the DB.
+  const status: PanelServerStatus | null | undefined = runtimeQuery.data?.status;
+  const isRunning = status === 'running';
   // Process up (starting / running / stopping) — stop/kill make sense in
   // all three (a server stuck in "starting" must be stoppable), commands
   // reach the stdin of a live process.
-  const isAlive = isRunning || server?.status === 'starting' || server?.status === 'stopping';
+  const isAlive = isRunning || status === 'starting' || status === 'stopping';
 
   // Per-server grants (sub-users) — hide what the viewer may not do. The
   // console JWT carries the same permissions: the agent refuses anyway.
@@ -153,7 +172,8 @@ function ServerConsolePage() {
   const canCommand = serverCan(permissions, { 'server.console': ['command'] });
   const canRetryInstall = serverCan(permissions, { 'server.settings': ['update'] });
 
-  // Install active: WS status first, DB status while the WS has not pushed yet
+  // Install active: WS status first, persisted status while the WS has not
+  // pushed yet (the DB is the source of truth for installs)
   const installActive = installStatus
     ? installStatus.status !== 'installed'
     : server?.status === 'installing' || server?.status === 'install_failed';
@@ -190,7 +210,15 @@ function ServerConsolePage() {
   return (
     <div className="space-y-6">
       {query.isError && (
-        <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
+        <ErrorState message={query.error.message} onRetry={() => query.refetch()} />
+      )}
+      {runtimeQuery.isError && (
+        <ErrorState message={runtimeQuery.error.message} onRetry={() => runtimeQuery.refetch()} />
+      )}
+
+      {/* Status + grants still loading → skeletons for the power buttons */}
+      {(query.isPending || runtimeQuery.isPending) && !installActive && (
+        <PageSkeleton bare />
       )}
 
       {/* Live install — the steps stream into the console below, a one-line

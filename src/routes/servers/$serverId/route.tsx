@@ -5,20 +5,23 @@ import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { AppSidebar, type PanelServerStatus } from '~/components/app-sidebar';
 import { AppShell } from '~/components/app-shell';
-import { getServerFn } from '~/server/functions/servers';
+import { getServerFn, getServerRuntimeFn } from '~/server/functions/servers';
 
 /**
  * Server layout (Pelican-style /server/{uuid}) — TOP-LEVEL route: it does NOT
  * nest under the dashboard layout (_app), but shares the consolidated
  * AppSidebar: server name + status in the header, the server tabs below,
  * the user menu (theme + logout) in the footer, like every other layout.
- * Server data is cached under ['server', serverId] and shared with the
- * child pages.
+ *
+ * Two shared queries feed the layout and the child pages:
+ * - ['server', serverId] — DB detail (name, recipe, grants): always fast,
+ *   never waits on the agent;
+ * - ['server-runtime', serverId] — LIVE agent status, best-effort (the DB
+ *   status is served when the agent is unreachable).
  */
 export const Route = createFileRoute('/servers/$serverId')({
   beforeLoad: ({ context }) => {
-    const user = (context as { user?: unknown }).user;
-    if (!user) {
+    if (!context.user) {
       throw redirect({ to: '/login' });
     }
   },
@@ -28,14 +31,24 @@ export const Route = createFileRoute('/servers/$serverId')({
 function ServerLayout() {
   const { serverId } = Route.useParams();
   const getServer = useServerFn(getServerFn);
+  const getRuntime = useServerFn(getServerRuntimeFn);
 
   const query = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
+  });
+
+  const runtimeQuery = useQuery({
+    queryKey: ['server-runtime', serverId],
+    queryFn: () => getRuntime({ data: { serverId } }),
+    refetchInterval: 5000,
   });
 
   const server = query.data;
-  const status: PanelServerStatus | undefined = server?.status;
+  // LIVE status only — a stale DB status is never shown in the sidebar
+  // (the runtime fn returns null when the agent is unreachable)
+  const status: PanelServerStatus | undefined =
+    runtimeQuery.data?.status ?? undefined;
 
   return (
     <TooltipProvider>
@@ -45,7 +58,9 @@ function ServerLayout() {
             id: serverId,
             name: server?.name,
             status,
+            statusFetching: runtimeQuery.isPending,
             permissions: server?.viewer?.permissions,
+            permissionsLoaded: query.isSuccess,
           }}
         />
         <AppShell

@@ -1,5 +1,6 @@
 import { CloudOff, RefreshCw, TriangleAlert } from 'lucide-react';
 
+import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
 
 /**
@@ -20,14 +21,15 @@ export function isAgentUnreachableError(message: string): boolean {
 }
 
 /**
- * Friendly error block for the file browser / editor — an unreachable agent
- * gets a dedicated explanation (the agent daemon runs on the node, not the
- * panel), anything else falls back to the raw message.
+ * Friendly error block for a page whose strictly-required data failed to
+ * load — an unreachable agent gets a dedicated explanation (the agent
+ * daemon runs on the node, not the panel), anything else falls back to the
+ * raw message.
  *
  * `bare` renders without the dashed border / top margin — used when the
- * block sits inside the listing card.
+ * block sits inside a card.
  */
-export function FileErrorState({
+export function ErrorState({
   message,
   onRetry,
   bare = false,
@@ -51,8 +53,8 @@ export function FileErrorState({
           <CloudOff className="size-8 text-muted-foreground" />
           <p className="font-medium">Agent injoignable</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            Le nœud qui héberge ce serveur ne répond pas. Vérifie que l’agent tourne
-            sur la machine et que son port est ouvert, puis réessaie.
+            Le nœud qui héberge ce serveur ne répond pas. Vérifie que l’agent
+            tourne sur la machine et que son port est ouvert, puis réessaie.
           </p>
         </>
       ) : (
@@ -68,6 +70,27 @@ export function FileErrorState({
           Réessayer
         </Button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Page skeleton for a strictly-required query still in flight — the card
+ *-shaped placeholder the page replaces with its content (or an ErrorState)
+ * once the query settles.
+ */
+export function PageSkeleton({ bare = false }: { bare?: boolean }) {
+  return (
+    <div
+      className={
+        bare
+          ? 'space-y-3'
+          : 'mt-6 space-y-3 rounded-lg border border-dashed px-6 py-10'
+      }
+    >
+      <Skeleton className="mx-auto h-5 w-48" />
+      <Skeleton className="mx-auto h-4 w-64" />
+      <Skeleton className="mx-auto h-8 w-24" />
     </div>
   );
 }

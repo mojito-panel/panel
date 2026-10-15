@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { RecipeVariable } from '~/contract';
 import { getServerFn, updateServerVariablesFn } from '~/server/functions/servers';
 import { makeUpdateServerVariablesSchema } from '~/validators/server';
+import { ErrorState, PageSkeleton } from '~/components/error/error-state';
 import { serverCan } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { VariableField } from '~/components/variable-field';
@@ -54,10 +55,9 @@ function ServerVariablesPage() {
 
   const query = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
   });
 
-  const server = query.data;
 
   const mutation = useMutation({
     mutationFn: async (variables: Record<string, string | number | boolean>) => {
@@ -76,12 +76,14 @@ function ServerVariablesPage() {
   });
 
   if (query.isError) {
-    return <p className="text-sm text-destructive">Erreur : {query.error.message}</p>;
+    return <ErrorState message={query.error.message} onRetry={() => query.refetch()} />;
   }
 
-  if (!server) {
-    return <p className="text-sm text-muted-foreground">Chargement…</p>;
+  if (query.isPending) {
+    return <PageSkeleton />;
   }
+
+  const server = query.data;
 
   // Sub-user without the server.variables.read grant — the command and the
   // variable values are not even sent by the server function

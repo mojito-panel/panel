@@ -90,7 +90,7 @@ function ServerUsersPage() {
   // Shared server query (cached) — viewer grants gate the page controls
   const serverQuery = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
 
@@ -168,7 +168,9 @@ function ServerUsersPage() {
     }
   };
 
-  if (!serverCan(permissions, { 'server.users': ['read'] })) {
+  // Only deny once the viewer grants are known — while the server query is
+  // in flight the table below renders its own skeleton
+  if (serverQuery.isSuccess && !serverCan(permissions, { 'server.users': ['read'] })) {
     return (
       <p className="text-sm text-muted-foreground">
         Tu n’as pas la permission de gérer les utilisateurs de ce serveur.

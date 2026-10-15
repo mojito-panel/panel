@@ -40,6 +40,7 @@ import {
   updateServerVariablesSchema,
   serverActionInputSchema,
   sendCommandSchema,
+  serverDetailQuerySchema,
   serverLogsQuerySchema,
   serverAllocationActionSchema,
 } from '~/validators/server';
@@ -362,10 +363,10 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
     }
   });
 
-// ─── Detail (DB + actual agent runtime state) ─────────────────────────────
+// ─── Detail (DB only — always fast, never waits on the agent) ───────────────
 
 export const getServerFn = createServerFn({ method: 'GET' })
-  .validator(serverLogsQuerySchema)
+  .validator(serverDetailQuerySchema)
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server, viewer } = await loadServerForViewer(data.serverId, user);
@@ -380,28 +381,6 @@ export const getServerFn = createServerFn({ method: 'GET' })
       throw new HttpError(500, 'Configuration du serveur incomplète');
     }
 
-    // Actual runtime status (may differ from the DB)
-    let runtimeStatus: ServerStatusDb = server.status as ServerStatusDb;
-    let runtimeState: string | null = null;
-    let logs: string[] = [];
-    try {
-      const info = await agentGetServer(node, server.id);
-      runtimeStatus = info.status;
-      runtimeState = info.runtimeState ?? null;
-      logs = info.logs ?? [];
-      // Sync the persisted status
-      if (runtimeStatus !== server.status) {
-        const em2 = orm.em.fork();
-        const dbServer = await em2.findOne(Server, { id: server.id });
-        if (dbServer) {
-          dbServer.status = runtimeStatus;
-          await em2.flush();
-        }
-      }
-    } catch {
-      // Agent unreachable → serve the DB state
-    }
-
     const recipeJson = recipe.json as RecipeContract;
 
     // Sub-users only see the variables/startup command with the matching
@@ -411,8 +390,10 @@ export const getServerFn = createServerFn({ method: 'GET' })
     return {
       id: server.id,
       name: server.name,
-      status: runtimeStatus,
-      runtimeState,
+      // Persisted status (DB) — the LIVE agent status is a separate
+      // best-effort query (getServerRuntimeFn), so a slow/unreachable
+      // agent never blocks the page or hides the sidebar menu.
+      status: server.status as ServerStatusDb,
       ownerId: server.ownerId,
       variables: canReadVariables ? server.variables : {},
       createdAt: server.createdAt,
@@ -435,7 +416,6 @@ export const getServerFn = createServerFn({ method: 'GET' })
             cpuCores: Number(server.cpuCores),
           }
         : null,
-      logs,
       // What the current user can do on this server (sidebar + page gating)
       viewer: {
         isOwner: viewer.isOwner,
@@ -444,6 +424,42 @@ export const getServerFn = createServerFn({ method: 'GET' })
         permissions: viewer.permissions,
       },
     };
+  });
+
+// ─── Live runtime status (agent, best-effort + DB sync) ─────────────────────
+
+/**
+ * Live status of the server as reported by the agent. An unreachable agent
+ * is NOT an error: `status` comes back `null` and the UI shows "Inconnu"
+ * (the persisted DB status may be out of sync — never served as live).
+ */
+export const getServerRuntimeFn = createServerFn({ method: 'GET' })
+  .validator(serverDetailQuerySchema)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { server } = await loadServerForViewer(data.serverId, user);
+    const orm = await initOrm();
+    const em = orm.em.fork();
+
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    try {
+      const info = await agentGetServer(node, server.id);
+      // Sync the persisted status
+      if (info.status !== server.status) {
+        const em2 = orm.em.fork();
+        const dbServer = await em2.findOne(Server, { id: server.id });
+        if (dbServer) {
+          dbServer.status = info.status;
+          await em2.flush();
+        }
+      }
+      return { status: info.status, runtimeState: info.runtimeState ?? null };
+    } catch {
+      // Agent unreachable → no live status (null = "Inconnu" in the UI)
+      return { status: null, runtimeState: null };
+    }
   });
 
 // ─── Power action (start/stop/restart/kill) ───────────────────────────────────

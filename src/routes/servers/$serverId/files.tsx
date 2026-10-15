@@ -28,7 +28,7 @@ function FilesPage() {
   const getServer = useServerFn(getServerFn);
   const serverQuery = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
   const canCreate = serverCan(permissions, { 'server.files': ['create'] });

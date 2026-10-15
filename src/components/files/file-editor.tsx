@@ -9,7 +9,7 @@ import { Skeleton } from '~/components/ui/skeleton';
 import { readFileFn, saveFileFn } from '~/server/functions/files';
 import { saveFileFormSchema } from '~/validators/files';
 import { formatSize } from './format-size';
-import { FileErrorState } from './file-error-state';
+import { ErrorState } from '~/components/error/error-state';
 
 /** Text editor (read → edit → save) — opened via ?file=… deep link. */
 export function FileEditor({
@@ -60,7 +60,7 @@ export function FileEditor({
       )}
 
       {query.isError && (
-        <FileErrorState message={query.error.message} onRetry={() => query.refetch()} />
+        <ErrorState message={query.error.message} onRetry={() => query.refetch()} />
       )}
 
       {query.data && (

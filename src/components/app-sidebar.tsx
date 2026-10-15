@@ -34,7 +34,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
 } from '~/components/ui/sidebar';
+import { Skeleton } from '~/components/ui/skeleton';
 import { getBrandingFn } from '~/server/functions/settings';
 import { useAuth } from '~/contexts/use-auth';
 import {
@@ -121,13 +123,23 @@ function NavItem({ title, url, icon: Icon, soon, params }: NavItemProps) {
   );
 }
 
-/** Server context of the single-server variant (name, status, permissions). */
+/**
+ * Server context of the single-server variant (name, status, permissions).
+ * The flags keep the layout decoupled from the queries: `nameLoaded` /
+ * `permissionsLoaded` mark the DB detail query, `statusLoaded` the live
+ * runtime query — the sidebar shows skeletons for whatever is in flight.
+ */
 interface ServerContext {
   id: string;
   name?: string;
+  /** Last-known (DB) status — shown until the live status arrives. */
   status?: PanelServerStatus;
+  /** True while the live agent status query is in flight. */
+  statusFetching?: boolean;
   /** Viewer's per-server permissions (flat list) — sub-users see fewer tabs. */
   permissions?: string[];
+  /** False while the DB detail query is in flight → skeleton menu. */
+  permissionsLoaded?: boolean;
 }
 
 interface AppSidebarProps {
@@ -175,12 +187,16 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <Server className="size-4" />
                 </div>
-                <div className="flex min-w-0 flex-col gap-0.5 leading-none">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5 leading-none">
                   <span className="truncate font-semibold">{server.name ?? '…'}</span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <StatusBall status={server.status ?? 'unknown'} />
-                    {server.status ? statusLabel(server.status) : '…'}
-                  </span>
+                  {server.statusFetching ? (
+                    <Skeleton className="h-3 w-16" />
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <StatusBall status={server.status ?? 'unknown'} />
+                      {statusLabel(server.status ?? 'unknown')}
+                    </span>
+                  )}
                 </div>
               </SidebarMenuButton>
             ) : (
@@ -227,16 +243,24 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
               <SidebarGroupLabel>{server.name ?? 'Serveur'}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {visibleServerItems.map((item) => (
-                    <NavItem
-                      key={item.title}
-                      title={item.title}
-                      url={item.url}
-                      icon={item.icon}
-                      soon={item.soon}
-                      params={serverParams}
-                    />
-                  ))}
+                  {server.permissionsLoaded ? (
+                    visibleServerItems.map((item) => (
+                      <NavItem
+                        key={item.title}
+                        title={item.title}
+                        url={item.url}
+                        icon={item.icon}
+                        soon={item.soon}
+                        params={serverParams}
+                      />
+                    ))
+                  ) : (
+                    // Per-server grants unknown yet → the FULL menu as
+                    // skeletons, never a filtered flash of tabs
+                    serverItems.map((item) => (
+                      <SidebarMenuSkeleton key={item.title} showIcon />
+                    ))
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

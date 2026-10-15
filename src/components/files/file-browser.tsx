@@ -19,7 +19,7 @@ import {
 } from '~/server/functions/files';
 import { CreateEntryForm } from './create-entry-form';
 import { RenameEntryDialog } from './rename-entry-dialog';
-import { FileErrorState } from './file-error-state';
+import { ErrorState } from '~/components/error/error-state';
 
 /** Directory listing — toolbar + breadcrumb + the listing table inside a card. */
 export function FileBrowser({
@@ -228,7 +228,7 @@ export function FileBrowser({
           )}
 
           {query.isError ? (
-            <FileErrorState bare message={query.error.message} onRetry={() => query.refetch()} />
+            <ErrorState bare message={query.error.message} onRetry={() => query.refetch()} />
           ) : (
             <div className="p-3">
               <ListTable

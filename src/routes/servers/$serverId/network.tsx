@@ -69,7 +69,7 @@ function ServerNetworkPage() {
   // mutation buttons (sub-users without server.network.update see read-only)
   const serverQuery = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
   });
   const canEdit = serverCan(serverQuery.data?.viewer?.permissions ?? [], {
     'server.network': ['update'],

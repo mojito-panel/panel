@@ -61,7 +61,7 @@ function ServerBackupsPage() {
   // Shared server query (cached) — viewer grants gate the page controls
   const serverQuery = useQuery({
     queryKey: ['server', serverId],
-    queryFn: () => getServer({ data: { serverId, after: 0 } }),
+    queryFn: () => getServer({ data: { serverId } }),
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
   const includes = serverQuery.data?.recipe?.backup?.include;
