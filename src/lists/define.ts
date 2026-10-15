@@ -159,8 +159,13 @@ export interface ListColumn<TData, TContext = void> {
    * Cell renderer — receives the row as returned by the list server function,
    * plus the page-provided `rowContext` (row actions need the page's mutations;
    * the list module cannot import a server function that imports it back).
+   *
+   * The context is undefined when the list is rendered WITHOUT a page — the
+   * DataPicker reuses list declarations to let a form pick a row. Interactive
+   * cells (role selects, action buttons) must degrade to plain display
+   * rendering when the context is absent.
    */
-  cell: (row: TData, context: TContext) => ReactNode;
+  cell: (row: TData, context: TContext | undefined) => ReactNode;
   /**
    * Server-side sorting (allowlist entry) — or `true` for a client-side list
    * (rows already in the browser), where the ORM path would be meaningless.

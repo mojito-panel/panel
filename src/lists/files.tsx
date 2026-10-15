@@ -38,7 +38,7 @@ export const filesList = defineList<FileObject, FilesContext>({
       cell: (entry, context) => (
         <button
           className="flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted"
-          onClick={() => context.onOpen(entry)}
+          onClick={() => context?.onOpen(entry)}
           title={entry.isDirectory ? 'Ouvrir' : 'Éditer'}
         >
           {entry.isDirectory ? (
@@ -68,7 +68,9 @@ export const filesList = defineList<FileObject, FilesContext>({
     actions: {
       header: '',
       pinned: true,
-      cell: (entry, context) => (
+      cell: (entry, context) =>
+        // A picker renders this list without a page — nothing to act on.
+        context === undefined ? null : (
         <div className="flex justify-end gap-1">
           {!entry.isDirectory && (
             <Button

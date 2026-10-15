@@ -106,7 +106,7 @@ export const serverSubusersList = defineList<ServerSubuserRow, ServerSubusersCon
       header: '',
       pinned: true,
       cell: (subuser, context) =>
-        context.canManage ? (
+        context?.canManage ? (
           <div className="flex justify-end gap-2">
             <Button
               size="sm"

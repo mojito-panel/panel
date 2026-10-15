@@ -78,7 +78,7 @@ export const serverAllocationsList = defineList<ServerAllocationRow, ServerAlloc
       cell: (allocation, context) =>
         allocation.primary ? (
           <PrimaryChip />
-        ) : context.canEdit ? (
+        ) : context?.canEdit ? (
           <Button
             type="button"
             variant="ghost"
@@ -97,7 +97,7 @@ export const serverAllocationsList = defineList<ServerAllocationRow, ServerAlloc
       header: '',
       pinned: true,
       cell: (allocation, context) =>
-        context.canEdit ? (
+        context?.canEdit ? (
           <div className="flex justify-end">
             <Button
               type="button"
@@ -189,6 +189,8 @@ export const nodeAllocationsList = defineList<NodeAllocationRow, NodeAllocations
       header: '',
       pinned: true,
       cell: (allocation, context) =>
+        // A picker renders this list without a page — nothing to act on.
+        !context ? null :
         allocation.serverId === null ? (
           <div className="flex items-center justify-end gap-2">
             {context.servers.length > 0 && (

@@ -69,7 +69,7 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
       // Options come from the page (custom roles live in the database).
       filter: { control: 'choice', target: field('role'), dynamic: true },
       cell: (user, context) =>
-        context.canSetRole && !context.isSelf(user) ? (
+        context?.canSetRole && !context.isSelf(user) ? (
           <Select
             value={user.role}
             onValueChange={(role) => role !== null && context.onRoleChange(user, role)}
@@ -120,8 +120,8 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
       header: '',
       pinned: true,
       cell: (user, context) => {
-        // Self-lockout: never offer an action on the acting user's own row.
-        if (context.isSelf(user)) return null;
+        // Display-only without a page context (a picker renders this list).
+        if (!context || context.isSelf(user)) return null;
         if (!context.canBan && !context.canDelete) return null;
         return (
           <div className="flex justify-end gap-1">

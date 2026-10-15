@@ -125,7 +125,7 @@ export const adminServersList = defineList<AdminServerRow, AdminServersContext>(
       header: '',
       pinned: true,
       cell: (server, context) =>
-        context.canDelete ? (
+        context?.canDelete ? (
           <div className="flex justify-end">
             <Button
               variant="destructive"

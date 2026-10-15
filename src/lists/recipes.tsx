@@ -113,7 +113,9 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
     actions: {
       header: '',
       pinned: true,
-      cell: (recipe, context) => (
+      cell: (recipe, context) =>
+        // A picker renders this list without a page — nothing to act on.
+        context === undefined ? null : (
         <div className="flex justify-end gap-1">
           {recipe.updateUrl && (
             <Button

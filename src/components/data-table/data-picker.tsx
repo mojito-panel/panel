@@ -1,10 +1,8 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { RowData } from '@tanstack/react-table';
-import { Search, X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { DataTable } from '~/components/data-table/data-table';
-import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -19,14 +17,12 @@ import {
   type ListResult,
 } from '~/lists/define';
 
-/** Row actions make no sense inside a picker — the row IS the action. */
-const PICKER_HIDDEN_COLUMNS = ['actions'];
-
 /**
- * Pick one row out of a list: the SAME declaration, toolbar, columns and
- * pagination as the list page, opened in a dialog. It replaces the "load every
- * row into a select" pickers, so a picker filters/searches/paginates in the
- * database exactly like its page does.
+ * Pick one row out of a list, like a fancy input in a form: `value` +
+ * `onChange(selection | null)`, a clear affordance, and a field-shaped trigger
+ * with the same geometry as Input. The dialog reuses the SAME list
+ * declaration, toolbar, columns and pagination as the list page, so a picker
+ * filters/searches/paginates in the database exactly like its page does.
  */
 export interface DataPickerProps<TData extends RowData, TContext = void, TSelection = TData> {
   list: DefinedList<TData, TContext>;
@@ -34,15 +30,15 @@ export interface DataPickerProps<TData extends RowData, TContext = void, TSelect
   fetchPage: (query: ListQuery) => Promise<ListResult<TData>>;
   /** Selection shape the caller stores (a row, or just what it needs from it). */
   toSelection: (row: TData) => TSelection;
-  /** How the selection renders next to the button. */
+  /** How the selection renders in the trigger. */
   renderValue: (selection: TSelection) => ReactNode;
   value: TSelection | null;
   onChange: (selection: TSelection | null) => void;
   title: string;
-  /** Button label while nothing is selected. */
+  /** Trigger label while nothing is selected. */
   placeholder?: string;
   disabled?: boolean;
-  /** Cells of hidden columns are not rendered — only needed for visible ones. */
+  /** The list's row context, when the cells need one (a picker usually has none). */
   rowContext?: TContext;
 }
 
@@ -68,31 +64,52 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
     placeholderData: keepPreviousData,
   });
 
+
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-1">
-        {value !== null && (
-          <Badge variant="secondary" className="gap-1.5">
-            {renderValue(value)}
-            {!disabled && (
-              <button
-                type="button"
-                aria-label="Retirer la sélection"
-                className="opacity-60 hover:opacity-100"
-                onClick={() => onChange(null)}
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </Badge>
+      {/* Field-shaped trigger: same geometry and surface as Input/SelectTrigger
+          (h-9, w-full, rounded-3xl, bg-input/50) so the picker lines up with
+          the form controls around it. */}
+      <div
+        data-placeholder={value === null || undefined}
+        className="flex h-9 w-full min-w-0 items-center gap-1.5 rounded-3xl border border-transparent bg-input/50 px-3 text-sm whitespace-nowrap transition-[color,box-shadow,background-color] outline-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 data-placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {value === null ? (
+          <button
+            type="button"
+            disabled={disabled}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            onClick={() => setOpen(true)}
+            className="flex h-full min-w-0 flex-1 items-center gap-1.5 truncate text-left outline-none"
+          >
+            <span className="truncate">{placeholder}</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              aria-label="Retirer la sélection"
+              disabled={disabled}
+              onClick={() => onChange(null)}
+              className="-ml-1 flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground disabled:pointer-events-none"
+            >
+              <X className="pointer-events-none size-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              onClick={() => setOpen(true)}
+              className="h-full min-w-0 flex-1 truncate text-left outline-none"
+            >
+              {renderValue(value)}
+            </button>
+          </>
         )}
-
-        {!disabled && (
-          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-            <Search />
-            {value !== null ? 'Changer' : placeholder}
-          </Button>
-        )}
+        <ChevronDown className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -114,7 +131,7 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
               isPending={query.isPending}
               isFetching={query.isFetching}
               error={query.error}
-              hiddenColumns={PICKER_HIDDEN_COLUMNS}
+              hiddenColumns={['actions']}
               rowContext={rowContext}
               onRowClick={(row) => {
                 onChange(toSelection(row));

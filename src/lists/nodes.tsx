@@ -89,7 +89,7 @@ export const adminNodesList = defineList<AdminNodeRow, AdminNodesContext>({
       header: '',
       pinned: true,
       cell: (node, context) =>
-        context.canDelete ? (
+        context?.canDelete ? (
           <div className="flex justify-end">
             <Button
               variant="destructive"

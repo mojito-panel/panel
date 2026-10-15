@@ -169,12 +169,15 @@ function ServerRecordTabs({
 
   // Owner picker: one page of the users list (the user:list permission gates it)
   const listUsers = useServerFn(listUsersFn);
-  const [ownerSelection, setOwnerSelection] = useState<OwnerSelection | null>(null);
+  // undefined = untouched (falls back to the server's owner), null = cleared by
+  // the picker, object = picked. The form field mirrors it: '' when cleared.
+  const [ownerSelection, setOwnerSelection] = useState<OwnerSelection | null | undefined>(undefined);
   const ownerValue =
-    ownerSelection ??
-    (server.owner
-      ? { id: server.owner.id, name: server.owner.name, email: server.owner.email }
-      : null);
+    ownerSelection !== undefined
+      ? ownerSelection
+      : server.owner
+        ? { id: server.owner.id, name: server.owner.name, email: server.owner.email }
+        : null;
 
   const queryClient = useQueryClient();
   const updateServer = useServerFn(updateAdminServerFn);
@@ -258,7 +261,6 @@ function ServerRecordTabs({
                       <Label>Propriétaire</Label>
                       {canUpdate ? (
                         canListUsers ? (
-                          <div className="max-w-md">
                             <DataPicker
                             list={adminUsersList}
                             fetchPage={(query) => listUsers({ data: query })}
@@ -280,7 +282,6 @@ function ServerRecordTabs({
                             title="Choisir un propriétaire"
                             placeholder="Rechercher un propriétaire"
                           />
-                        </div>
                         ) : (
                           <p className="py-2 text-sm text-muted-foreground">
                             {server.owner?.email ?? '—'} — transfert non autorisé (permission

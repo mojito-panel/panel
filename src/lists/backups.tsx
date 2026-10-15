@@ -124,7 +124,9 @@ export const serverBackupsList = defineList<ServerBackupRow, ServerBackupsContex
     actions: {
       header: '',
       pinned: true,
-      cell: (backup, context) => (
+      cell: (backup, context) =>
+        // A picker renders this list without a page — nothing to act on.
+        context === undefined ? null : (
         <div className="flex justify-end gap-2">
           <Button
             size="sm"

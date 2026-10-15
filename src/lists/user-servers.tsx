@@ -77,7 +77,9 @@ export const userServersList = defineList<UserServerRow, UserServersContext>({
     actions: {
       header: '',
       pinned: true,
-      cell: (server, context) => (
+      cell: (server, context) =>
+        // A picker renders this list without a page — nothing to act on.
+        context === undefined ? null : (
         <div className="flex justify-end">
           <Button
             variant="destructive"
