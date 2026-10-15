@@ -1,30 +1,41 @@
 import { createServerFn } from '@tanstack/react-start';
-import { randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { z, ZodError } from 'zod';
-import type { EntityManager } from '@mikro-orm/core';
-import { initOrm } from '~/db';
+import { z } from 'zod';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
-import { nanoid } from '~/lib/nanoid';
-import { normalizeStoredRecipe } from '~/lib/stored-recipe';
-import {
-  parseRecipe,
-  parseRuntimeRecipe,
-  isRuntimeRecipeJson,
-  recipeVariableSchema,
-  DEFAULT_SFTP_PORT,
-  type Recipe as RecipeDefinition,
-  type RuntimeRecipe,
-  type RecipeVariable,
-} from '~/contract';
 import { adminNodesList } from '~/lists/nodes';
 import { nodeAllocationsList } from '~/lists/allocations';
 import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, requirePanelPermission, HttpError } from '../session';
-import { encryptSecret, decryptSecret } from '../crypto';
-import { agentHealth, agentGetStats, agentUpdateAllocation, AgentError } from '../agent/client';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
+import { decryptSecret } from '../crypto';
+import { agentHealth, agentGetStats, AgentError } from '../agent/client';
 import { signHealthToken } from '../jwt';
+import {
+  createNode,
+  requireNode,
+  deleteNode,
+  agentVersionOf,
+  resetNodeToken,
+  findFreeAllocations,
+  createAllocations,
+  deleteAllocation,
+  assignAllocation,
+  revokeAllocation,
+} from '../nodes';
+import {
+  parseRecipeJson,
+  recipeErrorMessage,
+  assertValidRecipeJson,
+  upsertRecipe,
+  createRecipe,
+  updateRecipe,
+  requireRecipe,
+  deleteRecipe,
+  storedRecipeVariables,
+} from '../recipes';
+import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import {
   createNodeSchema,
   deleteNodeSchema,
@@ -45,6 +56,7 @@ import {
   updateRecipeSchema,
   deleteRecipeSchema,
 } from '~/validators/recipe';
+import type { RecipeVariable } from '~/contract';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
@@ -52,22 +64,22 @@ import {
  * Node list — accessible to any signed-in user (node
  * selection when creating a server). The token is NEVER exposed here.
  */
-export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireUser();
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const nodes = await em.find(Node, {});
-  return nodes.map((node) => ({
-    id: node.id,
-    name: node.name,
-    fqdn: node.fqdn,
-    scheme: node.scheme,
-    agentPort: node.agentPort,
-    publicPort: node.publicPort,
-    status: node.status,
-    lastSeenAt: node.lastSeenAt,
-  }));
-});
+export const listNodesFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requireUser();
+    const nodes = await orm.em.find(Node, {});
+    return nodes.map((node) => ({
+      id: node.id,
+      name: node.name,
+      fqdn: node.fqdn,
+      scheme: node.scheme,
+      agentPort: node.agentPort,
+      publicPort: node.publicPort,
+      status: node.status,
+      lastSeenAt: node.lastSeenAt,
+    }));
+  });
 
 /**
  * Admin node list (/admin/nodes) — filter/sort/pagination run in the database
@@ -76,10 +88,10 @@ export const listNodesFn = createServerFn({ method: 'GET' }).handler(async () =>
  */
 export const listAdminNodesFn = createServerFn({ method: 'POST' })
   .validator(adminNodesList.querySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.nodes': ['read'] });
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const { rows, rowCount } = await runListQuery(
       listQueryBuilder(em, Node, adminNodesList),
@@ -103,33 +115,14 @@ export const listAdminNodesFn = createServerFn({ method: 'POST' })
 
 export const createNodeFn = createServerFn({ method: 'POST' })
   .validator(createNodeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['create']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const token = randomBytes(32).toString('hex');
-    const now = new Date();
-    const node = em.create(Node, {
-      id: nanoid(),
-      name: data.name,
-      fqdn: data.fqdn,
-      scheme: data.scheme,
-      agentPort: data.agentPort,
-      publicPort: data.publicPort,
-      sftpPort: data.sftpPort ?? DEFAULT_SFTP_PORT,
-      // Encrypted at rest — the token doubles as the console-JWT signing key
-      agentToken: encryptSecret(token),
-      lastSeenAt: null,
-      status: 'unknown',
-      createdAt: now,
-      updatedAt: now,
-    });
-    em.persist(node);
-    await em.flush();
+    const { id, agentToken } = await createNode(data);
 
     // The token is returned ONCE — the admin copies the generated shard.yml
     // (below) onto the node and it will never be replayable in clear again.
+    const node = await requireNode(id);
     return {
       id: node.id,
       name: node.name,
@@ -138,7 +131,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
       publicPort: node.publicPort,
       sftpPort: node.sftpPort,
       scheme: node.scheme,
-      agentToken: token,
+      agentToken,
       // Panel URL injected into the generated agent config (shard.yml).
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
     };
@@ -151,6 +144,7 @@ export const createNodeFn = createServerFn({ method: 'POST' })
  */
 export const resolveNodeFqdnFn = createServerFn({ method: 'GET' })
   .validator(nodeFqdnSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.nodes': ['read'] });
     try {
@@ -163,22 +157,10 @@ export const resolveNodeFqdnFn = createServerFn({ method: 'GET' })
 
 export const deleteNodeFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['delete']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
-
-    // Refuse deletion while servers are still installed on it
-    const servers = await em.find(Server, { nodeId: node.id });
-    if (servers.length > 0) {
-      throw new HttpError(409, `${servers.length} serveur(s) encore installé(s) sur ce node`);
-    }
-
-    em.remove(node);
-    await em.flush();
+    await deleteNode(await requireNode(data.nodeId));
     return { deleted: true };
   });
 
@@ -190,24 +172,11 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
  */
 export const getNodeFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['read']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
-
-    const serverCount = await em.count(Server, { nodeId: node.id });
-
-    // Live agent version — best effort, never blocks the page.
-    let agentVersion: string | null = null;
-    try {
-      const health = await agentHealth(node);
-      agentVersion = health.version;
-    } catch {
-      agentVersion = null;
-    }
+    const node = await requireNode(data.nodeId);
+    const serverCount = await orm.em.count(Server, { nodeId: node.id });
 
     return {
       id: node.id,
@@ -221,7 +190,7 @@ export const getNodeFn = createServerFn({ method: 'GET' })
       lastSeenAt: node.lastSeenAt,
       createdAt: node.createdAt,
       serverCount,
-      agentVersion,
+      agentVersion: await agentVersionOf(node),
       // Panel URL for the (re)generated agent configuration.
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
     };
@@ -232,13 +201,10 @@ export const getNodeFn = createServerFn({ method: 'GET' })
  */
 export const updateNodeFn = createServerFn({ method: 'POST' })
   .validator(updateNodeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['update']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
+    const node = await requireNode(data.nodeId);
 
     node.name = data.name;
     node.fqdn = data.fqdn;
@@ -246,7 +212,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
     node.publicPort = data.publicPort;
     node.scheme = data.scheme;
     node.sftpPort = data.sftpPort;
-    await em.flush();
+    await orm.em.flush();
 
     return { updated: true };
   });
@@ -258,20 +224,14 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
  */
 export const resetNodeTokenFn = createServerFn({ method: 'POST' })
   .validator(nodeIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['update']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
-
-    const token = randomBytes(32).toString('hex');
-    node.agentToken = encryptSecret(token);
-    await em.flush();
+    const node = await requireNode(data.nodeId);
+    const agentToken = await resetNodeToken(node);
 
     return {
-      agentToken: token,
+      agentToken,
       panelUrl: process.env.BETTER_AUTH_URL ?? 'http://localhost:5173',
     };
   });
@@ -284,19 +244,16 @@ export const resetNodeTokenFn = createServerFn({ method: 'POST' })
  */
 export const listFreeNodeAllocationsFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requireUser();
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const free = await em.find(Allocation, { nodeId: data.nodeId, serverId: null });
-    return free
-      .sort((a, b) => a.port - b.port)
-      .map((allocation) => ({
-        id: allocation.id,
-        ip: allocation.ip,
-        port: allocation.port,
-        alias: allocation.alias,
-      }));
+    const free = await findFreeAllocations(data.nodeId);
+    return free.map((allocation) => ({
+      id: allocation.id,
+      ip: allocation.ip,
+      port: allocation.port,
+      alias: allocation.alias,
+    }));
   });
 
 /**
@@ -308,10 +265,10 @@ export const listFreeNodeAllocationsFn = createServerFn({ method: 'GET' })
  */
 export const listNodeAllocationsFn = createServerFn({ method: 'POST' })
   .validator(nodeAllocationsList.querySchema.and(nodeIdSchema))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['read']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const qb = listQueryBuilder(em, Allocation, nodeAllocationsList);
     qb.andWhere({ nodeId: data.nodeId });
@@ -350,118 +307,48 @@ export const listNodeAllocationsFn = createServerFn({ method: 'POST' })
  */
 export const createNodeAllocationsFn = createServerFn({ method: 'POST' })
   .validator(createAllocationsSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['create']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
+    await requireNode(data.nodeId);
 
     const ports = parsePortsSpec(data.ports);
     if (!ports) throw new HttpError(422, PORTS_SPEC_MESSAGE);
 
-    const existing = await em.find(Allocation, { nodeId: data.nodeId, ip: data.ip });
-    const takenPorts = new Set(existing.map((a) => a.port));
-
-    const now = new Date();
     const alias = data.alias.trim() === '' ? null : data.alias.trim();
-    let created = 0;
-    for (const port of ports) {
-      if (takenPorts.has(port)) continue;
-      em.persist(
-        em.create(Allocation, {
-          id: nanoid(),
-          nodeId: data.nodeId,
-          serverId: null,
-          ip: data.ip,
-          port,
-          alias,
-          primary: false,
-          createdAt: now,
-        }),
-      );
-      created++;
-    }
-    await em.flush();
-
-    return {
-      created,
-      skipped: ports.length - created,
-    };
+    return createAllocations(data.nodeId, data.ip, ports, alias);
   });
 
 /** Deletes a FREE allocation — an assigned one must be revoked first. */
 export const deleteAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['delete']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    const allocation = await orm.em.findOne(Allocation, { id: data.allocationId });
     if (!allocation) throw new HttpError(404, 'Allocation introuvable');
-    if (allocation.serverId !== null) {
-      throw new HttpError(409, 'Cette allocation est affectée à un serveur — révoque-la d’abord');
-    }
-
-    em.remove(allocation);
-    await em.flush();
+    await deleteAllocation(allocation);
     return { deleted: true };
   });
 
 /**
  * Assigns a free allocation to a server of the same node (Pelican "assign"
- * action). A server without any primary promotes the newcomer and syncs
- * the agent cache — otherwise the primary is left untouched.
+ * action). A server without any primary promotes the newcomer and syncs the
+ * agent cache — otherwise the primary is left untouched.
  */
 export const assignAllocationFn = createServerFn({ method: 'POST' })
   .validator(assignAllocationSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['update']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const allocation = await em.findOne(Allocation, { id: data.allocationId });
     if (!allocation) throw new HttpError(404, 'Allocation introuvable');
-    if (allocation.serverId !== null) {
-      throw new HttpError(409, 'Cette allocation est déjà affectée à un serveur');
-    }
-
     const server = await em.findOne(Server, { id: data.serverId });
     if (!server) throw new HttpError(404, 'Serveur introuvable');
-    if (server.nodeId !== allocation.nodeId) {
-      throw new HttpError(422, 'Ce serveur n’est pas installé sur le node de l’allocation');
-    }
 
-    const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
-      (a) => a.primary,
-    );
-    allocation.serverId = server.id;
-    allocation.primary = !hadPrimary;
-    await em.flush();
-
-    if (!hadPrimary) {
-      const node = await em.findOne(Node, { id: server.nodeId });
-      if (node) {
-        try {
-          await agentUpdateAllocation(node, server.id, {
-            port: allocation.port,
-            ip: allocation.ip,
-          });
-        } catch (err) {
-          if (err instanceof AgentError && err.statusCode === 404) {
-            // tolerated — agent out of sync, DB remains the source of truth
-          } else {
-            if (err instanceof AgentError) {
-              throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
-            }
-            throw err;
-          }
-        }
-      }
-    }
-
+    await assignAllocation(allocation, server);
     return { id: allocation.id };
   });
 
@@ -473,75 +360,19 @@ export const assignAllocationFn = createServerFn({ method: 'POST' })
  */
 export const revokeAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.nodes':['update']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
+    const allocation = await orm.em.findOne(Allocation, { id: data.allocationId });
     if (!allocation || allocation.serverId === null) {
       throw new HttpError(404, 'Allocation libre introuvable');
     }
 
-    const assigned = await em.find(Allocation, { serverId: allocation.serverId });
-    const others = assigned.filter((a) => a.id !== allocation.id).sort((a, b) => a.port - b.port);
-
-    if (allocation.primary && others.length === 0) {
-      throw new HttpError(409, 'Un serveur doit conserver au moins une allocation principale');
-    }
-
-    const wasPrimary = allocation.primary;
-    const server = await em.findOne(Server, { id: allocation.serverId });
-    allocation.serverId = null;
-    allocation.primary = false;
-    let promoted: { port: number; ip: string } | null = null;
-    if (wasPrimary && others.length > 0) {
-      others[0].primary = true;
-      promoted = { port: others[0].port, ip: others[0].ip };
-    }
-    await em.flush();
-
-    if (wasPrimary && promoted && server) {
-      const node = await em.findOne(Node, { id: server.nodeId });
-      if (node) {
-        try {
-          await agentUpdateAllocation(node, server.id, promoted);
-        } catch (err) {
-          if (err instanceof AgentError && err.statusCode === 404) {
-            // tolerated — agent out of sync, DB remains the source of truth
-          } else {
-            if (err instanceof AgentError) {
-              throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
-            }
-            throw err;
-          }
-        }
-      }
-    }
-
+    await revokeAllocation(allocation);
     return { id: allocation.id };
   });
 
 // ─── Recipes ───────────────────────────────────────────────────────────────────
-
-/** Parses raw JSON and validates it against the contract (app or runtime recipe). */
-function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
-  const parsed: unknown = JSON.parse(raw);
-  // Runtime recipes have their own schema (no start/backup) — dispatch
-  // before the app schema, which rejects them (start is required there).
-  if (isRuntimeRecipeJson(parsed)) {
-    return parseRuntimeRecipe(parsed);
-  }
-  return parseRecipe(parsed);
-}
-
-/** Readable error message (ZodError → list of fields in error). */
-function recipeErrorMessage(err: unknown): string {
-  if (err instanceof ZodError) {
-    return err.issues.map((i) => `${i.path.join('.') || 'recipe'} : ${i.message}`).join(' · ');
-  }
-  return (err as Error).message;
-}
 
 /**
  * Converts a github.com/…/blob/… URL to raw.githubusercontent.com/…/raw/…
@@ -581,59 +412,16 @@ async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
 }
 
 /**
- * Creates the recipe or updates the one with the same slug (upsert —
- * a re-import updates the definition, like Pelican eggs).
- */
-async function upsertRecipe(
-  em: EntityManager,
-  recipeJson: RecipeDefinition | RuntimeRecipe,
-): Promise<{ slug: string; name: string; created: boolean }> {
-  const existing = await em.findOne(Recipe, { slug: recipeJson.id });
-  const now = new Date();
-
-  if (existing) {
-    existing.name = recipeJson.name;
-    existing.schemaVersion = recipeJson.schemaVersion;
-    existing.json = recipeJson;
-    existing.updatedAt = now;
-    await em.flush();
-    return { slug: existing.slug, name: existing.name, created: false };
-  }
-
-  const recipe = em.create(Recipe, {
-    id: nanoid(),
-    slug: recipeJson.id,
-    name: recipeJson.name,
-    schemaVersion: recipeJson.schemaVersion,
-    json: recipeJson,
-    createdAt: now,
-    updatedAt: now,
-  });
-  em.persist(recipe);
-  await em.flush();
-  return { slug: recipe.slug, name: recipe.name, created: true };
-}
-
-/**
- * Declared variables of a stored recipe JSON. The DB payload is untrusted, so
- * the variable array is validated against the contract (a malformed shape reads
- * as an empty list rather than crashing the list).
- */
-function storedRecipeVariables(json: Record<string, unknown>): RecipeVariable[] {
-  return z.array(recipeVariableSchema).catch([]).parse(json.variables);
-}
-
-/**
  * Admin recipe list (/admin/recipes) — filter/sort/pagination run in the
  * database (`adminRecipesList`). The recipe kind lives only in the JSON payload
  * (`json->>'type'`), which the `type` filter query reads for equality.
  */
 export const listRecipesFn = createServerFn({ method: 'POST' })
   .validator(adminRecipesList.querySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requireUser();
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const { rows, rowCount } = await runListQuery(
       listQueryBuilder(em, Recipe, adminRecipesList),
@@ -663,27 +451,27 @@ export const listRecipesFn = createServerFn({ method: 'POST' })
  * definitions — used by the server creation form (apps) and the recipe editor's
  * runtime picker (runtimes). Unpaginated, unlike `listRecipesFn`.
  */
-export const listRecipeOptionsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireUser();
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const recipes = await em.find(Recipe, {});
-  return recipes.map(
-    (recipe): {
-      id: string;
-      slug: string;
-      name: string;
-      type: 'app' | 'runtime';
-      variables: RecipeVariable[];
-    } => ({
-      id: recipe.id,
-      slug: recipe.slug,
-      name: recipe.name,
-      type: recipe.json.type === 'runtime' ? 'runtime' : 'app',
-      variables: storedRecipeVariables(recipe.json),
-    }),
-  );
-});
+export const listRecipeOptionsFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requireUser();
+    const recipes = await orm.em.find(Recipe, {});
+    return recipes.map(
+      (recipe): {
+        id: string;
+        slug: string;
+        name: string;
+        type: 'app' | 'runtime';
+        variables: RecipeVariable[];
+      } => ({
+        id: recipe.id,
+        slug: recipe.slug,
+        name: recipe.name,
+        type: recipe.json.type === 'runtime' ? 'runtime' : 'app',
+        variables: storedRecipeVariables(recipe.json),
+      }),
+    );
+  });
 
 /**
  * Batch recipe import: raw JSONs (textarea/files) + URLs.
@@ -692,10 +480,9 @@ export const listRecipeOptionsFn = createServerFn({ method: 'GET' }).handler(asy
  */
 export const importRecipesFn = createServerFn({ method: 'POST' })
   .validator(importRecipesSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.recipes':['create']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
 
     const imported: Array<{ slug: string; name: string; created: boolean; source: string }> = [];
     const failed: Array<{ source: string; error: string }> = [];
@@ -711,7 +498,7 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
         const raw = source.url ? await fetchRecipeJsonFromUrl(source.url) : source.raw;
         if (!raw) throw new HttpError(400, 'JSON vide');
         const recipeJson = parseRecipeJson(raw);
-        const saved = await upsertRecipe(em, recipeJson);
+        const saved = await upsertRecipe(recipeJson);
         imported.push({ ...saved, source: label });
       } catch (err) {
         failed.push({ source: label, error: recipeErrorMessage(err) });
@@ -723,13 +510,10 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
 
 export const getRecipeFn = createServerFn({ method: 'POST' })
   .validator(getRecipeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.recipes':['read']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const recipe = await em.findOne(Recipe, { id: data.recipeId });
-    if (!recipe) throw new HttpError(404, 'Recette introuvable');
+    const recipe = await requireRecipe(data.recipeId);
 
     return {
       id: recipe.id,
@@ -748,37 +532,10 @@ export const getRecipeFn = createServerFn({ method: 'POST' })
  */
 export const createRecipeFn = createServerFn({ method: 'POST' })
   .validator(createRecipeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.recipes':['create']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    let recipeJson: RecipeDefinition | RuntimeRecipe;
-    try {
-      recipeJson = parseRecipeJson(data.json);
-    } catch (err) {
-      throw new HttpError(400, `Recipe invalide : ${recipeErrorMessage(err)}`);
-    }
-
-    const clash = await em.findOne(Recipe, { slug: recipeJson.id });
-    if (clash) {
-      throw new HttpError(409, `Une recette avec le slug « ${recipeJson.id} » existe déjà`);
-    }
-
-    const now = new Date();
-    const recipe = em.create(Recipe, {
-      id: nanoid(),
-      slug: recipeJson.id,
-      name: recipeJson.name,
-      schemaVersion: recipeJson.schemaVersion,
-      json: recipeJson,
-      createdAt: now,
-      updatedAt: now,
-    });
-    em.persist(recipe);
-    await em.flush();
-
-    return { id: recipe.id, slug: recipe.slug, name: recipe.name };
+    return createRecipe(assertValidRecipeJson(data.json));
   });
 
 /**
@@ -787,55 +544,18 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
  */
 export const updateRecipeFn = createServerFn({ method: 'POST' })
   .validator(updateRecipeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.recipes':['update']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const recipe = await em.findOne(Recipe, { id: data.recipeId });
-    if (!recipe) throw new HttpError(404, 'Recette introuvable');
-
-    let recipeJson: RecipeDefinition | RuntimeRecipe;
-    try {
-      recipeJson = parseRecipeJson(data.json);
-    } catch (err) {
-      throw new HttpError(400, `Recipe invalide : ${recipeErrorMessage(err)}`);
-    }
-
-    if (recipeJson.id !== recipe.slug) {
-      const clash = await em.findOne(Recipe, { slug: recipeJson.id });
-      if (clash) {
-        throw new HttpError(409, `Une recette avec le slug « ${recipeJson.id} » existe déjà`);
-      }
-      recipe.slug = recipeJson.id;
-    }
-
-    recipe.name = recipeJson.name;
-    recipe.schemaVersion = recipeJson.schemaVersion;
-    recipe.json = recipeJson;
-    recipe.updatedAt = new Date();
-    await em.flush();
-
-    return { id: recipe.id, slug: recipe.slug, name: recipe.name };
+    return updateRecipe(data.recipeId, assertValidRecipeJson(data.json));
   });
 
 export const deleteRecipeFn = createServerFn({ method: 'POST' })
   .validator(deleteRecipeSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({'panel.recipes':['delete']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const recipe = await em.findOne(Recipe, { id: data.recipeId });
-    if (!recipe) throw new HttpError(404, 'Recette introuvable');
-
-    const servers = await em.find(Server, { recipeId: recipe.id });
-    if (servers.length > 0) {
-      throw new HttpError(409, `${servers.length} serveur(s) utilisent cette recette`);
-    }
-
-    em.remove(recipe);
-    await em.flush();
+    await deleteRecipe(data.recipeId);
     return { deleted: true };
   });
 
@@ -845,34 +565,10 @@ export const deleteRecipeFn = createServerFn({ method: 'POST' })
 const AGENT_PING_TIMEOUT_MS = 2500;
 
 /**
- * Admin dashboard data: global counters, node health (live agent ping of
- * the public /health route — also refreshes status/lastSeenAt in DB) and
- * the 5 most recent servers.
+ * Applies ping results onto the node rows and persists the outcome.
+ * Shared by the overview and the health page.
  */
-export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requirePanelPermission({'panel.overview':['read']});
-  const orm = await initOrm();
-  const em = orm.em.fork();
-
-  const [serverCount, nodeCount, userCount, recipeCount] = await Promise.all([
-    em.count(Server),
-    em.count(Node),
-    em.count(User),
-    em.count(Recipe),
-  ]);
-
-  const [servers, nodes, recipes, users] = await Promise.all([
-    em.find(Server, {}),
-    em.find(Node, {}),
-    em.find(Recipe, {}),
-    em.find(User, {}),
-  ]);
-
-  const runningCount = servers.filter((s) => s.status === 'running').length;
-  const installingCount = servers.filter((s) => s.status === 'installing').length;
-
-  // Live agent healthcheck (parallel, short timeout — an offline node
-  // must not slow the whole dashboard down)
+async function pingNodes(nodes: Parameters<typeof agentHealth>[0][]) {
   const pings = await Promise.allSettled(
     nodes.map((node) => agentHealth(node, { signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS) })),
   );
@@ -886,45 +582,77 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
       node.status = 'offline';
     }
   });
-  if (nodes.length > 0) await em.flush();
+  if (nodes.length > 0) await orm.em.flush();
+  return pings;
+}
 
-  const nodeDtos = nodes.map((node, index) => ({
-    id: node.id,
-    name: node.name,
-    fqdn: node.fqdn,
-    publicPort: node.publicPort,
-    status: node.status,
-    lastSeenAt: node.lastSeenAt,
-    agentVersion: pings[index].status === 'fulfilled' ? (pings[index].value.version ?? null) : null,
-    serverCount: servers.filter((s) => s.nodeId === node.id).length,
-  }));
+/**
+ * Admin dashboard data: global counters, node health (live agent ping of
+ * the public /health route — also refreshes status/lastSeenAt in DB) and
+ * the 5 most recent servers.
+ */
+export const getAdminOverviewFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requirePanelPermission({'panel.overview':['read']});
+    const em = orm.em;
 
-  const recentServers = [...servers]
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, 5)
-    .map((server) => ({
-      id: server.id,
-      name: server.name,
-      status: server.status,
-      nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
-      recipeName: recipes.find((p) => p.id === server.recipeId)?.name ?? '—',
-      ownerEmail: users.find((u) => u.id === server.ownerId)?.email ?? '—',
-      createdAt: server.createdAt,
+    const [serverCount, nodeCount, userCount, recipeCount] = await Promise.all([
+      em.count(Server),
+      em.count(Node),
+      em.count(User),
+      em.count(Recipe),
+    ]);
+
+    const [servers, nodes, recipes, users] = await Promise.all([
+      em.find(Server, {}),
+      em.find(Node, {}),
+      em.find(Recipe, {}),
+      em.find(User, {}),
+    ]);
+
+    const runningCount = servers.filter((s) => s.status === 'running').length;
+    const installingCount = servers.filter((s) => s.status === 'installing').length;
+
+    const pings = await pingNodes(nodes);
+
+    const nodeDtos = nodes.map((node, index) => ({
+      id: node.id,
+      name: node.name,
+      fqdn: node.fqdn,
+      publicPort: node.publicPort,
+      status: node.status,
+      lastSeenAt: node.lastSeenAt,
+      agentVersion: pings[index].status === 'fulfilled' ? (pings[index].value.version ?? null) : null,
+      serverCount: servers.filter((s) => s.nodeId === node.id).length,
     }));
 
-  return {
-    counts: {
-      servers: serverCount,
-      running: runningCount,
-      installing: installingCount,
-      nodes: nodeCount,
-      users: userCount,
-      recipes: recipeCount,
-    },
-    nodes: nodeDtos,
-    recentServers,
-  };
-});
+    const recentServers = [...servers]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 5)
+      .map((server) => ({
+        id: server.id,
+        name: server.name,
+        status: server.status,
+        nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
+        recipeName: recipes.find((p) => p.id === server.recipeId)?.name ?? '—',
+        ownerEmail: users.find((u) => u.id === server.ownerId)?.email ?? '—',
+        createdAt: server.createdAt,
+      }));
+
+    return {
+      counts: {
+        servers: serverCount,
+        running: runningCount,
+        installing: installingCount,
+        nodes: nodeCount,
+        users: userCount,
+        recipes: recipeCount,
+      },
+      nodes: nodeDtos,
+      recentServers,
+    };
+  });
 
 // ─── Health (admin dashboard) ────────────────────────────────────────────────
 
@@ -934,47 +662,47 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' }).handler(asyn
  * browser opens a DIRECT WS to each agent (see /admin/health) and the panel
  * stays out of the loop (Pelican PR #2558 semantics).
  */
-export const getHealthNodesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requirePanelPermission({'panel.overview':['read']});
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const nodes = await em.find(Node, {});
+export const getHealthNodesFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requirePanelPermission({'panel.overview':['read']});
+    const nodes = await orm.em.find(Node, {});
 
-  // Parallel ping — an offline node must not slow the page down
-  const pings = await Promise.allSettled(
-    nodes.map(async (node) => {
-      const startedAt = Date.now();
-      const stats = await agentGetStats(node, {
-        signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS),
-      });
-      return { stats, latencyMs: Date.now() - startedAt };
-    }),
-  );
+    // Parallel ping — an offline node must not slow the page down
+    const pings = await Promise.allSettled(
+      nodes.map(async (node) => {
+        const startedAt = Date.now();
+        const stats = await agentGetStats(node, {
+          signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS),
+        });
+        return { stats, latencyMs: Date.now() - startedAt };
+      }),
+    );
 
-  const now = new Date();
-  nodes.forEach((node, index) => {
-    const ping = pings[index];
-    if (ping.status === 'fulfilled') {
-      node.status = 'online';
-      node.lastSeenAt = now;
-    } else {
-      node.status = 'offline';
-    }
+    const now = new Date();
+    nodes.forEach((node, index) => {
+      const ping = pings[index];
+      if (ping.status === 'fulfilled') {
+        node.status = 'online';
+        node.lastSeenAt = now;
+      } else {
+        node.status = 'offline';
+      }
+    });
+    if (nodes.length > 0) await orm.em.flush();
+
+    return nodes.map((node, index) => ({
+      id: node.id,
+      name: node.name,
+      fqdn: node.fqdn,
+      publicPort: node.publicPort,
+      // Just set above by the ping — typed for the health page's DTO
+      status: node.status as 'online' | 'offline' | 'unknown',
+      lastSeenAt: node.lastSeenAt ?? null,
+      latencyMs: pings[index].status === 'fulfilled' ? pings[index].value.latencyMs : null,
+      snapshot: pings[index].status === 'fulfilled' ? pings[index].value.stats : null,
+    }));
   });
-  if (nodes.length > 0) await em.flush();
-
-  return nodes.map((node, index) => ({
-    id: node.id,
-    name: node.name,
-    fqdn: node.fqdn,
-    publicPort: node.publicPort,
-    // Just set above by the ping — typed for the health page's DTO
-    status: node.status as 'online' | 'offline' | 'unknown',
-    lastSeenAt: node.lastSeenAt ?? null,
-    latencyMs: pings[index].status === 'fulfilled' ? pings[index].value.latencyMs : null,
-    snapshot: pings[index].status === 'fulfilled' ? pings[index].value.stats : null,
-  }));
-});
 
 /**
  * Health WS token (browser ↔ agent direct socket) — same Pelican-style
@@ -983,12 +711,10 @@ export const getHealthNodesFn = createServerFn({ method: 'GET' }).handler(async 
  */
 export const createNodeHealthTokenFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema) // { nodeId } — same shape as the other node fns
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requirePanelPermission({'panel.overview':['read']});
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
+    const node = await requireNode(data.nodeId);
 
     const { token, expiresAt } = signHealthToken(
       { userId: user.id },

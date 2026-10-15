@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
+import { withOrmContext } from '../middleware';
 import type { EntityManager } from '@mikro-orm/core';
-import { initOrm } from '~/db';
+import { orm } from '../orm';
 import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db/entities';
 import { adminServersList } from '~/lists/servers';
 import { serverAllocationsList } from '~/lists/allocations';
@@ -37,11 +38,10 @@ import {
 
 /** Loads a server for the admin area — 404 when unknown. */
 async function loadServer(serverId: string) {
-  const orm = await initOrm();
-  const em = orm.em.fork();
+  const em = orm.em;
   const server = await em.findOne(Server, { id: serverId });
   if (!server) throw new HttpError(404, 'Serveur introuvable');
-  return { orm, em, server };
+  return { em, server };
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────
@@ -53,10 +53,10 @@ async function loadServer(serverId: string) {
  */
 export const listAdminServersFn = createServerFn({ method: 'POST' })
   .validator(adminServersList.querySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['read'] });
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const { rows, rowCount } = await runListQuery(
       listQueryBuilder(em, Server, adminServersList),
@@ -98,6 +98,7 @@ export const listAdminServersFn = createServerFn({ method: 'POST' })
 
 export const getAdminServerFn = createServerFn({ method: 'GET' })
   .validator(adminServerIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['read'] });
     const { em, server } = await loadServer(data.serverId);
@@ -159,6 +160,7 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
 
 export const updateAdminServerFn = createServerFn({ method: 'POST' })
   .validator(updateAdminServerSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
@@ -187,6 +189,7 @@ export const updateAdminServerFn = createServerFn({ method: 'POST' })
 
 export const setAdminServerSuspendedFn = createServerFn({ method: 'POST' })
   .validator(setAdminServerSuspendedSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
@@ -222,6 +225,7 @@ export const setAdminServerSuspendedFn = createServerFn({ method: 'POST' })
 
 export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
   .validator(adminServerIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
@@ -296,6 +300,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
 
 export const deleteAdminServerFn = createServerFn({ method: 'POST' })
   .validator(adminServerIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['delete'] });
     const { em, server } = await loadServer(data.serverId);
@@ -407,6 +412,7 @@ function allocationPickerDto(allocation: {
  */
 export const listAdminServerAllocationsFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationsList.querySchema.and(adminServerIdSchema))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['read'] });
     const { em, server } = await loadServer(data.serverId);
@@ -435,6 +441,7 @@ export const listAdminServerAllocationsFn = createServerFn({ method: 'POST' })
  */
 export const listAdminServerFreeAllocationsFn = createServerFn({ method: 'GET' })
   .validator(adminServerIdSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['read'] });
     const { em, server } = await loadServer(data.serverId);
@@ -446,6 +453,7 @@ export const listAdminServerFreeAllocationsFn = createServerFn({ method: 'GET' }
 /** Claims a FREE allocation of the server's node and assigns it to the server. */
 export const addAdminServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(adminServerAllocationActionSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
@@ -478,6 +486,7 @@ export const addAdminServerAllocationFn = createServerFn({ method: 'POST' })
  */
 export const removeAdminServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(adminServerAllocationActionSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
@@ -503,6 +512,7 @@ export const removeAdminServerAllocationFn = createServerFn({ method: 'POST' })
  */
 export const setPrimaryAdminServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(adminServerAllocationActionSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);

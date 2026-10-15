@@ -1,15 +1,11 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import type { EntityManager } from '@mikro-orm/core';
-import { initOrm } from '~/db';
-import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
+import { Node, Recipe, Server, ServerUser, Allocation } from '~/db/entities';
 import { userServersList } from '~/lists/user-servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { resolveRuntimeRecipes } from './runtimes';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
-import { nanoid } from '~/lib/nanoid';
-import type { IServer } from '~/db/types';
 import type { Recipe as RecipeContract } from '~/contract';
 import {
   requireUser,
@@ -18,20 +14,29 @@ import {
   loadServerWithPermission,
   requireServerOwner,
 } from '../session';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
+import {
+  requireNodeOf,
+  requireRecipeOf,
+  findPrimaryAllocation,
+  pushPrimaryAllocation,
+  installServer,
+  deleteServer,
+  syncRuntimeStatus,
+  loadServerContext,
+} from '../servers';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { toConsolePermissions } from '~/lib/permissions';
 import {
   agentInstallServer,
-  agentGetServer,
   agentGetServerLogs,
   agentGetInstallStatus,
   agentServerAction,
   agentSendCommand,
-  agentDeleteServer,
   agentReinstallServer,
   agentUpdateServerVariables,
-  agentUpdateAllocation,
   AgentError,
 } from '../agent/client';
 import { validateVariableValue } from '~/contract';
@@ -55,49 +60,13 @@ type ServerStatusDb =
   | 'stopping'
   | 'crashed';
 
-// ─── Allocation helpers ───────────────────────────────────────────────────────
-
-/** Loads the server's primary allocation (null when none is assigned). */
-async function findPrimaryAllocation(em: EntityManager, serverId: string) {
-  const allocations = await em.find(Allocation, { serverId });
-  return allocations.find((a) => a.primary) ?? null;
-}
-
-/**
- * Pushes the server's primary allocation to the agent's cache — the new
- * port/ip apply at the NEXT start. Same tolerance as the variables sync:
- * a 404 (agent out of sync) is ignored, the DB stays the source of truth.
- */
-async function pushPrimaryAllocation(em: EntityManager, server: IServer): Promise<void> {
-  const node = await em.findOne(Node, { id: server.nodeId });
-  if (!node) return;
-  const primary = await findPrimaryAllocation(em, server.id);
-  if (!primary) return;
-  try {
-    await agentUpdateAllocation(node, server.id, {
-      port: primary.port,
-      ip: primary.ip,
-    });
-  } catch (err) {
-    if (err instanceof AgentError && err.statusCode === 404) {
-      // tolerated — agent out of sync, DB remains the source of truth
-    } else {
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
-      }
-      throw err;
-    }
-  }
-}
-
-// ─── List ─────────────────────────────────────────────────────────────────────
-
 /**
  * Visibility scope of the viewer on the server table: an admin sees every
  * server, anyone else the ones they own PLUS the ones shared with them through
  * a `server_user` grant (Pelican sub-user semantics). `null` = no restriction.
  */
-async function viewerServerScope(em: EntityManager, user: { id: string; role: string }) {
+async function viewerServerScope(user: { id: string; role: string }) {
+  const em = orm.em;
   if (user.role === 'admin') return null;
   const grants = await em.find(ServerUser, { userId: user.id });
   return {
@@ -108,6 +77,7 @@ async function viewerServerScope(em: EntityManager, user: { id: string; role: st
   };
 }
 
+
 /**
  * Server list of the signed-in user — filter/search/sort/pagination run in the
  * database (`userServersList`). The visibility scope above is a base condition
@@ -115,13 +85,13 @@ async function viewerServerScope(em: EntityManager, user: { id: string; role: st
  */
 export const listServersFn = createServerFn({ method: 'POST' })
   .validator(userServersList.querySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const qb = listQueryBuilder(em, Server, userServersList);
-    const scope = await viewerServerScope(em, user);
+    const scope = await viewerServerScope(user);
     if (scope) qb.where(scope);
 
     const { rows, rowCount } = await runListQuery(qb, userServersList.spec, data);
@@ -154,13 +124,13 @@ export const listServersFn = createServerFn({ method: 'POST' })
  */
 export const listServerOptionsFn = createServerFn({ method: 'GET' })
   .validator(z.object({ nodeId: z.string().optional() }))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const qb = listQueryBuilder(em, Server, userServersList);
-    const scope = await viewerServerScope(em, user);
+    const scope = await viewerServerScope(user);
     if (scope) qb.where(scope);
     if (data.nodeId) qb.andWhere({ nodeId: data.nodeId });
 
@@ -172,97 +142,17 @@ export const listServerOptionsFn = createServerFn({ method: 'GET' })
 
 export const installServerFn = createServerFn({ method: 'POST' })
   .validator(createServerSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: data.nodeId });
-    if (!node) throw new HttpError(404, 'Node introuvable');
-
-    const recipe = await em.findOne(Recipe, { id: data.recipeId });
-    if (!recipe) throw new HttpError(404, 'Recette introuvable');
-
-    // Pelican semantics: the port comes from the node's allocation pool —
-    // the chosen allocation must be free and belong to the selected node
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
-    if (allocation.serverId !== null) {
-      throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
-    }
-    if (allocation.nodeId !== data.nodeId) {
-      throw new HttpError(422, 'Cette allocation n’appartient pas au node sélectionné');
-    }
-
-    const serverId = nanoid();
-    const now = new Date();
-
-    // 1. Persist FIRST with status 'installing' — the user is redirected to
-    //    the server console right away and follows the install live.
-    const server = em.create(Server, {
-      id: serverId,
-      name: data.name,
-      nodeId: data.nodeId,
-      recipeId: data.recipeId,
-      ownerId: user.id,
-      status: 'installing',
-      memoryMb: data.memoryMb,
-      cpuCores: data.cpuCores,
-      variables: data.variables,
-      createdAt: now,
-      updatedAt: now,
-    });
-    em.persist(server);
-
-    // The claimed allocation becomes the server's primary (port + ip)
-    allocation.serverId = serverId;
-    allocation.primary = true;
-    await em.flush();
-
-    // 2. Start the background install on the agent (fast — the agent only
-    //    validates, then runs the runner async and records every step).
-    // installDir relative to the agent's dataDir.
-    try {
-      await agentInstallServer(node, {
-        serverId,
-        name: data.name,
-        recipe: normalizeStoredRecipe(recipe.json),
-        runtimes: await resolveRuntimeRecipes(em, recipe.json),
-        variables: data.variables,
-        installDir: `servers/${serverId}`,
-        allocation: {
-          port: allocation.port,
-          memoryMb: data.memoryMb,
-          cpuCores: data.cpuCores,
-          ip: allocation.ip,
-        },
-      });
-    } catch (err) {
-      // The install could not even start → remove the server row, free the
-      // allocation and report
-      const em2 = orm.em.fork();
-      const dbServer = await em2.findOne(Server, { id: serverId });
-      if (dbServer) em2.remove(dbServer);
-      const dbAllocation = await em2.findOne(Allocation, { id: allocation.id });
-      if (dbAllocation) {
-        dbAllocation.serverId = null;
-        dbAllocation.primary = false;
-      }
-      await em2.flush();
-
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Installation refusée par l'agent : ${err.message}`);
-      }
-      throw err;
-    }
-
-    return { id: serverId, name: server.name };
+    return installServer(data, user);
   });
 
 // ─── Install status + logs (live install panel) ──────────────────────────────
 
 export const getInstallStatusFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -270,8 +160,7 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
       user,
       { 'server.console': ['read'] },
     );
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    const node = await requireNodeOf(server);
 
     try {
       const status = await agentGetInstallStatus(node, server.id);
@@ -318,6 +207,7 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
 
 export const retryInstallFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -326,13 +216,9 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
       { 'server.settings': ['update'] },
     );
 
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
-
-    const recipe = await em.findOne(Recipe, { id: server.recipeId });
-    if (!recipe) throw new HttpError(500, 'Recette introuvable');
-
-    const allocation = await findPrimaryAllocation(em, server.id);
+    const node = await requireNodeOf(server);
+    const recipe = await requireRecipeOf(server);
+    const allocation = await findPrimaryAllocation(server.id);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
@@ -367,15 +253,11 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
 
 export const getServerFn = createServerFn({ method: 'GET' })
   .validator(serverDetailQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server, viewer } = await loadServerForViewer(data.serverId, user);
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: server.nodeId });
-    const recipe = await em.findOne(Recipe, { id: server.recipeId });
-    const primaryAllocation = await findPrimaryAllocation(em, server.id);
+    const { node, recipe, primaryAllocation } = await loadServerContext(server);
 
     if (!node || !recipe) {
       throw new HttpError(500, 'Configuration du serveur incomplète');
@@ -435,37 +317,19 @@ export const getServerFn = createServerFn({ method: 'GET' })
  */
 export const getServerRuntimeFn = createServerFn({ method: 'GET' })
   .validator(serverDetailQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await loadServerForViewer(data.serverId, user);
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
-
-    try {
-      const info = await agentGetServer(node, server.id);
-      // Sync the persisted status
-      if (info.status !== server.status) {
-        const em2 = orm.em.fork();
-        const dbServer = await em2.findOne(Server, { id: server.id });
-        if (dbServer) {
-          dbServer.status = info.status;
-          await em2.flush();
-        }
-      }
-      return { status: info.status, runtimeState: info.runtimeState ?? null };
-    } catch {
-      // Agent unreachable → no live status (null = "Inconnu" in the UI)
-      return { status: null, runtimeState: null };
-    }
+    const live = await syncRuntimeStatus(server);
+    return { status: live?.status ?? null, runtimeState: live?.runtimeState ?? null };
   });
 
 // ─── Power action (start/stop/restart/kill) ───────────────────────────────────
 
 export const serverActionFn = createServerFn({ method: 'POST' })
   .validator(serverActionInputSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -480,8 +344,7 @@ export const serverActionFn = createServerFn({ method: 'POST' })
       throw new HttpError(409, 'Ce serveur est suspendu — réactivation requise avant tout démarrage');
     }
 
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    const node = await requireNodeOf(server);
 
     try {
       const result = await agentServerAction(node, server.id, data.action);
@@ -501,6 +364,7 @@ export const serverActionFn = createServerFn({ method: 'POST' })
 
 export const reinstallServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -509,15 +373,12 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
       { 'server.settings': ['update'] },
     );
 
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    const node = await requireNodeOf(server);
 
     // The CURRENT recipe is sent — an update of the recipe JSON is picked up
     // on reinstall, like an egg update in Pelican.
-    const recipe = await em.findOne(Recipe, { id: server.recipeId });
-    if (!recipe) throw new HttpError(500, 'Recette introuvable');
-
-    const allocation = await findPrimaryAllocation(em, server.id);
+    const recipe = await requireRecipeOf(server);
+    const allocation = await findPrimaryAllocation(server.id);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
@@ -577,6 +438,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
 
 export const updateServerVariablesFn = createServerFn({ method: 'POST' })
   .validator(updateServerVariablesSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -585,8 +447,7 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
       { 'server.variables': ['update'] },
     );
 
-    const recipe = await em.findOne(Recipe, { id: server.recipeId });
-    if (!recipe) throw new HttpError(500, 'Recette introuvable');
+    const recipe = await requireRecipeOf(server);
     const recipeJson = recipe.json as RecipeContract;
 
     // Merge: only userEditable variables accept the submitted values, the
@@ -616,7 +477,7 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
     // (the agent doesn't know the server: failed install, lost dataDir) is
     // tolerated: the panel DB keeps the values and the agent will receive
     // them on the next full install
-    const node = await em.findOne(Node, { id: server.nodeId });
+    const node = await orm.em.findOne(Node, { id: server.nodeId });
     if (node) {
       try {
         await agentUpdateServerVariables(node, server.id, variables);
@@ -642,6 +503,7 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
 
 export const sendCommandFn = createServerFn({ method: 'POST' })
   .validator(sendCommandSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await loadServerWithPermission(
@@ -649,10 +511,7 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
       user,
       { 'server.console': ['command'] },
     );
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    const node = await requireNodeOf(server);
 
     try {
       await agentSendCommand(node, server.id, data.command);
@@ -669,6 +528,7 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
 
 export const getServerLogsFn = createServerFn({ method: 'GET' })
   .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await loadServerWithPermission(
@@ -676,10 +536,7 @@ export const getServerLogsFn = createServerFn({ method: 'GET' })
       user,
       { 'server.console': ['read'] },
     );
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    const node = await requireNodeOf(server);
 
     try {
       const chunk = await agentGetServerLogs(node, server.id, data.after);
@@ -696,13 +553,11 @@ export const getServerLogsFn = createServerFn({ method: 'GET' })
 
 export const createConsoleTokenFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server, viewer } = await loadServerForViewer(data.serverId, user);
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    const node = await requireNodeOf(server);
 
     // Short-lived JWT — the agent validates signature/aud/scope/exp/serverId
     // and gates every console action on the permissions carried in the payload.
@@ -729,38 +584,11 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
 
 export const deleteServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await requireServerOwner(data.serverId, user);
-
-    const node = await em.findOne(Node, { id: server.nodeId });
-
-    // Agent cleanup (tolerant: if the agent no longer knows the server, continue)
-    if (node) {
-      try {
-        await agentDeleteServer(node, server.id);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!(err instanceof AgentError) || err.statusCode !== 404) {
-          throw new HttpError(502, `Suppression échouée côté agent : ${message}`);
-        }
-      }
-    }
-
-    // DB deletion — the server's allocations return to the node's free pool
-    const allocations = await em.find(Allocation, { serverId: server.id });
-    for (const allocation of allocations) {
-      allocation.serverId = null;
-      allocation.primary = false;
-    }
-    // The sub-user grants and backup rows die with the server
-    const grants = await em.find(ServerUser, { serverId: server.id });
-    em.remove(grants);
-    const backups = await em.find(Backup, { serverId: server.id });
-    em.remove(backups);
-    em.remove(server);
-    await em.flush();
-
+    const { server } = await requireServerOwner(data.serverId, user);
+    await deleteServer(server);
     return { deleted: true };
   });
 
@@ -795,6 +623,7 @@ export const listServerAllocationsFn = createServerFn({ method: 'POST' })
       serverAllocationActionSchema.pick({ serverId: true }),
     ),
   )
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await loadServerWithPermission(
@@ -802,8 +631,7 @@ export const listServerAllocationsFn = createServerFn({ method: 'POST' })
       user,
       { 'server.network': ['read'] },
     );
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const qb = listQueryBuilder(em, Allocation, serverAllocationsList);
     qb.andWhere({ serverId: server.id });
@@ -829,6 +657,7 @@ export const listServerAllocationsFn = createServerFn({ method: 'POST' })
  */
 export const listServerFreeAllocationsFn = createServerFn({ method: 'GET' })
   .validator(serverAllocationActionSchema.pick({ serverId: true }))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await loadServerWithPermission(
@@ -836,8 +665,7 @@ export const listServerFreeAllocationsFn = createServerFn({ method: 'GET' })
       user,
       { 'server.network': ['read'] },
     );
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
     return free.sort((a, b) => a.port - b.port).map(allocationPickerDto);
@@ -846,6 +674,7 @@ export const listServerFreeAllocationsFn = createServerFn({ method: 'GET' })
 /** Claims a FREE allocation of the server's node and assigns it to the server. */
 export const addServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationActionSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -872,7 +701,7 @@ export const addServerAllocationFn = createServerFn({ method: 'POST' })
     allocation.primary = !hadPrimary;
     await em.flush();
 
-    if (!hadPrimary) await pushPrimaryAllocation(em, server);
+    if (!hadPrimary) await pushPrimaryAllocation(server);
     return { id: allocation.id };
   });
 
@@ -882,6 +711,7 @@ export const addServerAllocationFn = createServerFn({ method: 'POST' })
  */
 export const removeServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationActionSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -911,6 +741,7 @@ export const removeServerAllocationFn = createServerFn({ method: 'POST' })
  */
 export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(serverAllocationActionSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(
@@ -930,6 +761,6 @@ export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
     }
     await em.flush();
 
-    await pushPrimaryAllocation(em, server);
+    await pushPrimaryAllocation(server);
     return { id: allocation.id };
   });

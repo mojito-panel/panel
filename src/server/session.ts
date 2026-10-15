@@ -1,9 +1,9 @@
 import '@tanstack/react-start/server-only';
 import { getRequestHeaders } from '@tanstack/react-start/server';
-import type { EntityManager } from '@mikro-orm/core';
+import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
 import type { Role } from 'better-auth/plugins/access';
 import { auth } from '~/lib/auth';
-import { initOrm } from '~/db';
+import { orm } from './orm';
 import { Server, ServerUser, PanelRole } from '~/db/entities';
 import type { IUser, IServer } from '~/db/types';
 import {
@@ -54,8 +54,7 @@ export async function requireUser(): Promise<IUser> {
 export async function resolvePanelRole(name: string): Promise<Role> {
   if (PANEL_ROLES[name as PanelRoleName]) return PANEL_ROLES[name as PanelRoleName];
   if (name === 'user' || !name) return panelRole('user');
-  const orm = await initOrm();
-  const em = orm.em.fork();
+  const em = orm.em;
   const row = await em.findOne(PanelRole, { id: name });
   if (!row) return panelRole('user');
   return subuserRole(sanitizeStatements(row.permissions ?? {}));
@@ -94,9 +93,8 @@ export interface ServerViewer {
   /** Flat permission list ("server.files.read") — full set for owner/admin. */
   permissions: string[];
 }
-
 export interface ServerAccess {
-  em: EntityManager;
+  em: PostgreSqlEntityManager;
   server: IServer;
   viewer: ServerViewer;
 }
@@ -120,8 +118,7 @@ export async function loadServerForViewer(
   serverId: string,
   user: IUser,
 ): Promise<ServerAccess> {
-  const orm = await initOrm();
-  const em = orm.em.fork();
+  const em = orm.em;
   const server = await em.findOne(Server, { id: serverId });
   if (!server) {
     throw new HttpError(404, 'Serveur introuvable');

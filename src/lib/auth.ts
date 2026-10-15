@@ -3,7 +3,7 @@ import { admin } from 'better-auth/plugins/admin';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { Pool } from 'pg';
 import { APIError } from 'better-auth/api';
-import { initOrm } from '~/db';
+import { orm, runWithOrmContext } from '../server/orm';
 import { User } from '~/db/entities';
 import { isRegistrationEnabled } from '../server/settings';
 import { ac, PANEL_ROLES } from '~/lib/permissions';
@@ -120,21 +120,27 @@ export const auth = betterAuth({
       // The sign-up endpoints are gated via the request path (the dispatch
       // context also carries `path`, but the static type only knows `request`).
       if (!ctx.request || !new URL(ctx.request.url).pathname.includes('/sign-up')) return;
-      const orm = await initOrm();
-      if (!(await isRegistrationEnabled(orm.em.fork()))) {
-        throw new APIError('FORBIDDEN', {
-          message: 'Les inscriptions sont désactivées par un administrateur',
-        });
-      }
-      // The SFTP username (user additional field) is unique — reject public
-      // registrations picking an existing one. Setup/admin creation check on
-      // their own side; the DB constraint is the last resort.
-      const username = (ctx as unknown as { body?: { username?: string } }).body?.username?.toLowerCase();
-      if (username && (await orm.em.fork().count(User, { username })) > 0) {
-        throw new APIError('CONFLICT', {
-          message: 'Ce nom d’utilisateur est déjà utilisé',
-        });
-      }
+      // Everything below touches the DB — run it in one MikroORM request
+      // context (single request-scoped EM fork, no manual fork()).
+      return runWithOrmContext(async () => {
+        const em = orm.em;
+        if (!(await isRegistrationEnabled(em))) {
+          throw new APIError('FORBIDDEN', {
+            message: 'Les inscriptions sont désactivées par un administrateur',
+          });
+        }
+        // The SFTP username (user additional field) is unique — reject public
+        // registrations picking an existing one. Setup/admin creation check on
+        // their own side; the DB constraint is the last resort.
+        const username = (
+          ctx as unknown as { body?: { username?: string } }
+        ).body?.username?.toLowerCase();
+        if (username && (await em.count(User, { username })) > 0) {
+          throw new APIError('CONFLICT', {
+            message: 'Ce nom d’utilisateur est déjà utilisé',
+          });
+        }
+      });
     },
   },
   advanced: {

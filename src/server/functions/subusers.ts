@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
+import { withOrmContext } from '../middleware';
 import { z } from 'zod';
-import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
 import { ServerUser, User } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
 import { serverSubusersList } from '~/lists/subusers';
@@ -62,6 +62,7 @@ const listServerUsersQuerySchema = serverSubusersList.querySchema.and(
  */
 export const listServerUsersFn = createServerFn({ method: 'POST' })
   .validator(listServerUsersQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {
@@ -70,7 +71,7 @@ export const listServerUsersFn = createServerFn({ method: 'POST' })
 
     // `loadServerWithPermission` types its em loosely; the shared builder wants
     // the Postgres entity manager (same runtime object).
-    const qb = listQueryBuilder(em as PostgreSqlEntityManager, ServerUser, serverSubusersList);
+    const qb = listQueryBuilder(em, ServerUser, serverSubusersList);
     qb.andWhere({ serverId: server.id });
 
     const { rows, rowCount } = await runListQuery(qb, serverSubusersList.spec, data);
@@ -98,6 +99,7 @@ export const listServerUsersFn = createServerFn({ method: 'POST' })
 
 export const addServerUserFn = createServerFn({ method: 'POST' })
   .validator(addServerUserSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server, viewer } = await loadServerWithPermission(
@@ -149,6 +151,7 @@ export const addServerUserFn = createServerFn({ method: 'POST' })
 
 export const updateServerUserFn = createServerFn({ method: 'POST' })
   .validator(updateServerUserSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server, viewer } = await loadServerWithPermission(
@@ -180,6 +183,7 @@ export const updateServerUserFn = createServerFn({ method: 'POST' })
 
 export const removeServerUserFn = createServerFn({ method: 'POST' })
   .validator(removeServerUserSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(

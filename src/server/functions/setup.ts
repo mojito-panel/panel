@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { initOrm } from '~/db';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
 import { User } from '~/db/entities';
 import { auth } from '~/lib/auth';
 import { usernameSchema } from '~/validators/auth';
@@ -16,11 +17,11 @@ import { HttpError } from '../session';
 // ─── Status ──────────────────────────────────────────────────────────────────
 
 /** True while no account exists — fetched in __root.tsx's beforeLoad (SSR). */
-export const getSetupStatusFn = createServerFn({ method: 'GET' }).handler(
+export const getSetupStatusFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(
   async (): Promise<{ needsSetup: boolean }> => {
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const count = await em.count(User, {});
+    const count = await orm.em.count(User, {});
     return { needsSetup: count === 0 };
   },
 );
@@ -36,12 +37,11 @@ export const createFirstAdminFn = createServerFn({ method: 'POST' })
       password: z.string().min(8, 'Le mot de passe doit faire au moins 8 caractères'),
     }),
   )
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const orm = await initOrm();
-    const em = orm.em.fork();
 
     // One-time gate: refuse as soon as any account exists.
-    const count = await em.count(User, {});
+    const count = await orm.em.count(User, {});
     if (count > 0) {
       throw new HttpError(403, 'La configuration initiale est déjà terminée');
     }
@@ -57,14 +57,14 @@ export const createFirstAdminFn = createServerFn({ method: 'POST' })
     // Panel-specific fields better-auth's user model doesn't carry: the
     // admin role for the first account, the SFTP username, a verified
     // email (there is nobody to verify it with at first run).
-    const row = await em.findOne(User, { id: user.id });
+    const row = await orm.em.findOne(User, { id: user.id });
     if (!row) {
       throw new HttpError(500, 'La création du compte administrateur a échoué');
     }
     row.role = 'admin';
     row.username = data.username.toLowerCase();
     row.emailVerified = true;
-    await em.flush();
+    await orm.em.flush();
 
     return { id: row.id, email: row.email, role: row.role };
   });

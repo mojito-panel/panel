@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createServerFn } from '@tanstack/react-start';
+import { withOrmContext } from '../middleware';
 import type { EntityManager } from '@mikro-orm/core';
-import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
 import { Backup, Node, Recipe } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
 import type { IBackup, INode } from '~/db/types';
@@ -123,6 +123,7 @@ const listBackupsQuerySchema = serverBackupsList.querySchema.and(
  */
 export const listBackupsFn = createServerFn({ method: 'POST' })
   .validator(listBackupsQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {
@@ -137,7 +138,7 @@ export const listBackupsFn = createServerFn({ method: 'POST' })
 
     // `loadServerWithPermission` types its em loosely; the shared builder wants
     // the Postgres entity manager (same runtime object).
-    const qb = listQueryBuilder(em as PostgreSqlEntityManager, Backup, serverBackupsList);
+    const qb = listQueryBuilder(em, Backup, serverBackupsList);
     qb.andWhere({ serverId: server.id });
 
     const { rows, rowCount } = await runListQuery(qb, serverBackupsList.spec, data);
@@ -161,6 +162,7 @@ export const listBackupsFn = createServerFn({ method: 'POST' })
 
 export const createBackupFn = createServerFn({ method: 'POST' })
   .validator(createBackupSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {
@@ -226,6 +228,7 @@ export const createBackupFn = createServerFn({ method: 'POST' })
 
 export const restoreBackupFn = createServerFn({ method: 'POST' })
   .validator(restoreBackupSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {
@@ -255,6 +258,7 @@ export const restoreBackupFn = createServerFn({ method: 'POST' })
 
 export const deleteBackupFn = createServerFn({ method: 'POST' })
   .validator(deleteBackupSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {
@@ -289,6 +293,7 @@ export const deleteBackupFn = createServerFn({ method: 'POST' })
 
 export const getBackupDownloadUrlFn = createServerFn({ method: 'GET' })
   .validator(backupDownloadSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { em, server } = await loadServerWithPermission(data.serverId, user, {

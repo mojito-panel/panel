@@ -1,7 +1,7 @@
 import '@tanstack/react-start/server-only';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { verifyPassword } from 'better-auth/crypto';
-import { initOrm } from '~/db';
+import { orm, runWithOrmContext } from './orm';
 import { Account, Node, Server, User } from '~/db/entities';
 import { sftpAuthRequestSchema } from '~/contract';
 import { toSftpPermissions } from '~/lib/permissions';
@@ -40,8 +40,7 @@ function sha256(value: string): Buffer {
  * constant time (never string equality).
  */
 async function findNodeByToken(bearer: string) {
-  const orm = await initOrm();
-  const em = orm.em.fork();
+  const em = orm.em;
   const nodes = await em.find(Node, {});
   const bearerHash = sha256(bearer);
   for (const node of nodes) {
@@ -63,6 +62,13 @@ async function findNodeByToken(bearer: string) {
  * rejected credential, 200 with the SFTP permissions otherwise.
  */
 export async function authenticateSftp(request: Request): Promise<Response> {
+  return runWithOrmContext(async () => authenticateSftpInner(request));
+}
+
+/**
+ * Body of `authenticateSftp` — runs inside one MikroORM request context.
+ */
+async function authenticateSftpInner(request: Request): Promise<Response> {
   const authorization = request.headers.get('authorization') ?? '';
   if (!authorization.startsWith('Bearer ')) {
     return reject();
@@ -93,8 +99,7 @@ export async function authenticateSftp(request: Request): Promise<Response> {
     return reject();
   }
 
-  const orm = await initOrm();
-  const em = orm.em.fork();
+  const em = orm.em;
   const user = await em.findOne(User, { username: connection.username.toLowerCase() });
   if (!user || user.banned) {
     return reject();
@@ -134,6 +139,7 @@ export async function authenticateSftp(request: Request): Promise<Response> {
     return Response.json({ user: user.id, server: server.id, permissions });
   } catch {
     // loadServerForViewer refuses (no grant) — same uniform 403.
-    return reject();
   }
+  return reject();
 }
+

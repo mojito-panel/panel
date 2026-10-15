@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
-import { initOrm } from '~/db';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
 import { Node } from '~/db/entities';
 import type { IUser } from '~/db/types';
 import {
@@ -52,9 +53,7 @@ async function loadNodeWithPermission(
   request: PermissionRequest,
 ) {
   const { server } = await loadServerWithPermission(serverId, user, request);
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const node = await em.findOne(Node, { id: server.nodeId });
+  const node = await orm.em.findOne(Node, { id: server.nodeId });
   if (!node) throw new HttpError(500, 'Node introuvable');
   return node;
 }
@@ -104,6 +103,7 @@ function mapAgentError(err: unknown): HttpError {
 
 export const listFilesFn = createServerFn({ method: 'GET' })
   .validator(filesQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['read'] });
@@ -118,6 +118,7 @@ export const listFilesFn = createServerFn({ method: 'GET' })
 
 export const readFileFn = createServerFn({ method: 'GET' })
   .validator(filePathQuerySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['read'] });
@@ -132,6 +133,7 @@ export const readFileFn = createServerFn({ method: 'GET' })
 
 export const saveFileFn = createServerFn({ method: 'POST' })
   .validator(saveFileSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['write'] });
@@ -147,6 +149,7 @@ export const saveFileFn = createServerFn({ method: 'POST' })
 
 export const createEntryFn = createServerFn({ method: 'POST' })
   .validator(createEntrySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['create'] });
@@ -163,6 +166,7 @@ export const createEntryFn = createServerFn({ method: 'POST' })
 
 export const renameEntryFn = createServerFn({ method: 'POST' })
   .validator(renameEntrySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['write'] });
@@ -181,6 +185,7 @@ export const renameEntryFn = createServerFn({ method: 'POST' })
 
 export const deleteEntriesFn = createServerFn({ method: 'POST' })
   .validator(deleteEntriesSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['delete'] });
@@ -196,6 +201,7 @@ export const deleteEntriesFn = createServerFn({ method: 'POST' })
 
 export const uploadFileFn = createServerFn({ method: 'POST' })
   .validator(uploadFileSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const node = await loadNodeWithPermission(data.serverId, user, { 'server.files': ['create'] });

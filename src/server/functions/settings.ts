@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
-import { initOrm } from '~/db';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
 import {
   SETTING_KEYS,
   formatSettingBool,
@@ -49,25 +50,27 @@ function assertNotForced(keys: SettingKey[]): void {
  * register page need it before any session exists, and whether sign-up is
  * open is public by nature.
  */
-export const getBrandingFn = createServerFn({ method: 'GET' }).handler(
+export const getBrandingFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(
   async (): Promise<BrandingSettings> => {
-    const orm = await initOrm();
-    return getBranding(orm.em.fork());
+    return getBranding(orm.em);
   },
 );
 
 // ─── Admin read ───────────────────────────────────────────────────────────────
 
 /** Full settings of both tabs + the env-forced key map (for field locking). */
-export const getSettingsFn = createServerFn({ method: 'GET' }).handler(
+export const getSettingsFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(
   async (): Promise<{
     general: GeneralSettingsDto;
     mail: MailSettingsDto;
     forced: ForcedSettings;
   }> => {
     await requirePanelPermission({ 'panel.settings': ['read'] });
-    const orm = await initOrm();
-    const { values, forced } = await resolveSettings(orm.em.fork());
+    const { values, forced } = await resolveSettings(orm.em);
 
     return {
       general: {
@@ -97,6 +100,7 @@ export const getSettingsFn = createServerFn({ method: 'GET' }).handler(
 
 export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
   .validator(updateGeneralSettingsSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.settings': ['update'] });
     const keys: SettingKey[] = [
@@ -107,8 +111,7 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
     ];
     assertNotForced(keys);
 
-    const orm = await initOrm();
-    await writeSettings(orm.em.fork(), {
+    await writeSettings(orm.em, {
       'app:name': data.appName,
       'app:favicon': data.favicon,
       'app:gravatar': formatSettingBool(data.gravatar),
@@ -120,6 +123,7 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
 
 export const updateMailSettingsFn = createServerFn({ method: 'POST' })
   .validator(updateMailSettingsSchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.settings': ['update'] });
     const keys: SettingKey[] = [
@@ -135,8 +139,7 @@ export const updateMailSettingsFn = createServerFn({ method: 'POST' })
     if (data.password !== '') keys.push(SETTING_KEYS.mailPassword);
     assertNotForced(keys);
 
-    const orm = await initOrm();
-    await writeSettings(orm.em.fork(), {
+    await writeSettings(orm.em, {
       'mail:driver': data.driver,
       'mail:smtp:host': data.host,
       'mail:smtp:port': String(data.port),

@@ -1,4 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
+import { withOrmContext } from '../middleware';
 import { getRequestHeaders } from '@tanstack/react-start/server';
 import { auth } from '~/lib/auth';
 import type { AuthSession } from '~/db/types';
@@ -8,7 +9,9 @@ import { resolvePanelPermissions } from '../session';
  * Fetches the current session server-side (SSR).
  * Called in __root.tsx's beforeLoad via queryClient.fetchQuery.
  */
-export const getSession = createServerFn({ method: 'GET' }).handler(
+export const getSession = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(
   async (): Promise<AuthSession | null> => {
     const session = await auth.api.getSession({
       headers: getRequestHeaders(),

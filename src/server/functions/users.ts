@@ -1,75 +1,31 @@
 import { createServerFn } from '@tanstack/react-start';
 import { sql } from '@mikro-orm/postgresql';
 import { z } from 'zod';
-import { initOrm } from '~/db';
-import { Account, Server, Session, ServerUser, User, PanelRole } from '~/db/entities';
+import { PanelRole, User } from '~/db/entities';
 import { adminUsersList } from '~/lists/users';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
+import { requireUser, requirePanelPermission, HttpError } from '../session';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
 import {
-  requireUser,
-  requirePanelPermission,
-  HttpError,
-} from '../session';
+  assertNotSelf,
+  assertNotLastAdmin,
+  assertRoleExists,
+  requireUserById,
+  roleLabel,
+  banUser,
+  unbanUser,
+  deleteUser,
+} from '../users';
 import { auth } from '~/lib/auth';
-import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, type PanelRoleName } from '~/lib/permissions';
 import { usernameSchema } from '~/validators/auth';
 
 /**
  * Admin panel user management. Roles and per-server grants live in the
- * panel DB (source of truth), but ACCOUNT CREATION goes through
- * better-auth's own endpoints (admin create-user / sign-up) — never
- * hand-rolled rows: better-auth owns the user/account relationship
- * (scrypt hash, credential accountId === user.id, see
- * docs/concepts/users-accounts).
- *
- * Authorization stays on the panel side (`requirePanelPermission`): it
- * honors CUSTOM roles from the `role` table, which the admin plugin's
- * endpoint checks (static built-in roles only) don't know — the creation
- * endpoint is therefore called WITHOUT forwarding the actor's session.
- *
- * The admin plugin still provides the model (role/banned/ban_* columns)
- * and enforces bans at session creation; its tables are managed by
- * MikroORM — the better-auth CLI NEVER generates a migration in this
- * project.
+ * Roles/Sub-users pages — here: list, create (better-auth), role change,
+ * ban/unban, delete. All DB work goes through `server/users.ts` inside the
+ * request context opened by `withOrmContext`.
  */
-
-// ─── Guards (business rules) ────────────────────────────────────────────────
-
-/** Self-lockout protection: never change your own role / ban / delete yourself. */
-function assertNotSelf(actorId: string, targetId: string): void {
-  if (actorId === targetId) {
-    throw new HttpError(422, 'Tu ne peux pas faire cela sur ton propre compte');
-  }
-}
-
-/** Refuses to demote/ban/delete the LAST admin (lockout of the whole panel). */
-async function assertNotLastAdmin(targetRole: string): Promise<void> {
-  if (targetRole !== 'admin') return;
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const admins = await em.count(User, { role: 'admin' });
-  if (admins <= 1) {
-    throw new HttpError(409, 'Il doit rester au moins un administrateur');
-  }
-}
-
-/** The value of `user.role` must be a built-in name or an existing custom role. */
-async function assertRoleExists(roleId: string): Promise<void> {
-  if (PANEL_ROLES[roleId as PanelRoleName]) return;
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const row = await em.findOne(PanelRole, { id: roleId });
-  if (!row) throw new HttpError(422, `Le rôle « ${roleId} » n’existe pas`);
-}
-
-/** Display name of a role value (built-in label or custom role name). */
-function roleLabel(roleId: string, customRoles: { id: string; name: string }[]): string {
-  return (
-    BUILT_IN_ROLE_LABELS[roleId as PanelRoleName] ??
-    customRoles.find((r) => r.id === roleId)?.name ??
-    roleId
-  );
-}
 
 // ─── List (search + filter + sort + pagination) ───────────────────────────────
 
@@ -80,11 +36,10 @@ function roleLabel(roleId: string, customRoles: { id: string; name: string }[]):
  */
 export const listUsersFn = createServerFn({ method: 'POST' })
   .validator(adminUsersList.querySchema)
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ user: ['list'] });
-
-    const orm = await initOrm();
-    const em = orm.em.fork();
+    const em = orm.em;
 
     const { rows, rowCount } = await runListQuery(
       listQueryBuilder(em, User, adminUsersList),
@@ -127,19 +82,18 @@ export const listUsersFn = createServerFn({ method: 'POST' })
  * owner picker of the admin server page. Kept separate from the paginated list
  * function: a picker needs the whole set, not a page of it.
  */
-export const listUserOptionsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requirePanelPermission({ user: ['list'] });
+export const listUserOptionsFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requirePanelPermission({ user: ['list'] });
+    const users = await orm.em.find(User, {}, { orderBy: { name: 'asc' } });
 
-  const orm = await initOrm();
-  const em = orm.em.fork();
-  const users = await em.find(User, {}, { orderBy: { name: 'asc' } });
-
-  return users.map((user) => ({
-    id: user.id,
-    name: user.name ?? null,
-    email: user.email,
-  }));
-});
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name ?? null,
+      email: user.email,
+    }));
+  });
 
 // ─── Create ──────────────────────────────────────────────────────────────────
 
@@ -154,15 +108,14 @@ export const createUserFn = createServerFn({ method: 'POST' })
       role: z.string().min(1),
     }),
   )
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({
       user: ['create', ...(data.role !== 'user' ? (['set-role'] as const) : [])],
     });
     await assertRoleExists(data.role);
 
-    const orm = await initOrm();
-    const em = orm.em.fork();
-
+    const em = orm.em;
     const email = data.email.toLowerCase();
     const existing = await em.findOne(User, { email });
     if (existing) throw new HttpError(409, 'Un compte utilise déjà cet e-mail');
@@ -187,8 +140,7 @@ export const createUserFn = createServerFn({ method: 'POST' })
     // Panel-specific field better-auth's user model doesn't carry: `role`
     // (the endpoint only accepts the static built-in role names, not
     // custom role ids from the `role` table).
-    const target = await em.findOne(User, { id: user.id });
-    if (!target) throw new HttpError(500, 'La création du compte a échoué');
+    const target = await requireUserById(user.id);
     target.role = data.role;
     await em.flush();
 
@@ -199,19 +151,17 @@ export const createUserFn = createServerFn({ method: 'POST' })
 
 export const setUserRoleFn = createServerFn({ method: 'POST' })
   .validator(z.object({ userId: z.string().min(1), role: z.string().min(1) }))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const actor = await requirePanelPermission({ user: ['set-role'] });
     assertNotSelf(actor.id, data.userId);
     await assertRoleExists(data.role);
 
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const target = await em.findOne(User, { id: data.userId });
-    if (!target) throw new HttpError(404, 'Utilisateur introuvable');
+    const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
 
     target.role = data.role;
-    await em.flush();
+    await orm.em.flush();
 
     return { userId: data.userId, role: data.role };
   });
@@ -225,43 +175,25 @@ export const banUserFn = createServerFn({ method: 'POST' })
       banReason: z.string().max(255).optional(),
     }),
   )
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const actor = await requirePanelPermission({ user: ['ban'] });
     assertNotSelf(actor.id, data.userId);
 
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const target = await em.findOne(User, { id: data.userId });
-    if (!target) throw new HttpError(404, 'Utilisateur introuvable');
+    const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
-
-    // The admin plugin checks these columns at session creation
-    target.banned = true;
-    target.banReason = data.banReason ?? 'Compte suspendu par un administrateur';
-    target.banExpires = null; // permanent until lifted
-    // Revoke every active session immediately
-    const sessions = await em.find(Session, { userId: target.id });
-    em.remove(sessions);
-    await em.flush();
+    await banUser(target, data.banReason);
 
     return { userId: target.id, banned: true };
   });
 
 export const unbanUserFn = createServerFn({ method: 'POST' })
   .validator(z.object({ userId: z.string().min(1) }))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ user: ['ban'] });
-
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const target = await em.findOne(User, { id: data.userId });
-    if (!target) throw new HttpError(404, 'Utilisateur introuvable');
-
-    target.banned = false;
-    target.banReason = null;
-    target.banExpires = null;
-    await em.flush();
-
+    const target = await requireUserById(data.userId);
+    await unbanUser(target);
     return { userId: target.id, banned: false };
   });
 
@@ -269,31 +201,15 @@ export const unbanUserFn = createServerFn({ method: 'POST' })
 
 export const deleteUserFn = createServerFn({ method: 'POST' })
   .validator(z.object({ userId: z.string().min(1) }))
+  .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const actor = await requireUser();
     assertNotSelf(actor.id, data.userId);
     await requirePanelPermission({ user: ['delete'] });
 
-    const orm = await initOrm();
-    const em = orm.em.fork();
-    const target = await em.findOne(User, { id: data.userId });
-    if (!target) throw new HttpError(404, 'Utilisateur introuvable');
+    const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
-
-    const servers = await em.count(Server, { ownerId: data.userId });
-    if (servers > 0) {
-      throw new HttpError(409, `${servers} serveur(s) appartiennent encore à cet utilisateur`);
-    }
-
-    // Manual cleanup — the entities carry no FK relations (loose ids by design)
-    const sessions = await em.find(Session, { userId: target.id });
-    const accounts = await em.find(Account, { userId: target.id });
-    const grants = await em.find(ServerUser, { userId: target.id });
-    em.remove(sessions);
-    em.remove(accounts);
-    em.remove(grants);
-    em.remove(target);
-    await em.flush();
+    await deleteUser(target);
 
     return { deleted: true };
   });
