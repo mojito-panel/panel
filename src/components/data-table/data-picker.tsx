@@ -113,7 +113,7 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>Clique une ligne pour la choisir.</DialogDescription>

@@ -94,7 +94,7 @@ export const listAdminServersFn = createServerFn({ method: 'POST' })
     };
   });
 
-// ─── Detail (DB + live agent runtime state) ───────────────────────────────────
+// ─── Detail (DB only — the live status is a separate polled query) ──────────
 
 export const getAdminServerFn = createServerFn({ method: 'GET' })
   .validator(adminServerIdSchema)
@@ -114,31 +114,15 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
       .sort((a, b) => a.port - b.port)
       .map(allocationDto);
 
-    // Actual runtime status (may differ from the DB — agent best-effort,
-    // an unreachable node must not break the page)
-    let runtimeStatus = server.status;
-    let runtimeState: string | null = null;
-    try {
-      const info = await agentGetServer(node, server.id);
-      runtimeStatus = info.status;
-      runtimeState = info.runtimeState ?? null;
-      // Sync the persisted status
-      if (runtimeStatus !== server.status) {
-        server.status = runtimeStatus;
-        await em.flush();
-      }
-    } catch {
-      // Agent unreachable → serve the DB state
-    }
-
     const subuserCount = await em.count(ServerUser, { serverId: server.id });
     const backupCount = await em.count(Backup, { serverId: server.id });
 
     return {
       id: server.id,
       name: server.name,
-      status: runtimeStatus,
-      runtimeState,
+      // DB status — the header badge shows the LIVE status instead
+      // (getAdminServerStatusFn, polled), this is the fallback.
+      status: server.status,
       suspended: server.suspended,
       memoryMb: server.memoryMb,
       cpuCores: Number(server.cpuCores),
@@ -154,6 +138,37 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
       subuserCount,
       backupCount,
     };
+  });
+
+/**
+ * Live runtime status — ONE agent query (best-effort, like the node page's
+ * health ping), syncing the persisted status so the rest of the panel sees
+ * it too. Polled by the header at a regular interval; the DB status is the
+ * fallback while it is in flight.
+ */
+export const getAdminServerStatusFn = createServerFn({ method: 'GET' })
+  .validator(adminServerIdSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['read'] });
+    const { em, server } = await loadServer(data.serverId);
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Configuration du serveur incomplète');
+
+    let status = server.status;
+    try {
+      const info = await agentGetServer(node, server.id);
+      status = info.status;
+      // Sync the persisted status so the rest of the panel sees it too
+      if (status !== server.status) {
+        server.status = status;
+        await em.flush();
+      }
+    } catch {
+      // Agent unreachable → serve the DB status
+    }
+
+    return { status };
   });
 
 // ─── Update (name, owner transfer, limits) ────────────────────────────────────

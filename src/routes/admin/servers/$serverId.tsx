@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
 import {
   getAdminServerFn,
+  getAdminServerStatusFn,
   updateAdminServerFn,
   setAdminServerSuspendedFn,
   reinstallAdminServerFn,
@@ -38,6 +39,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Separator } from '~/components/ui/separator';
+import { Skeleton } from '~/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -62,7 +64,6 @@ interface AdminServerDto {
   id: string;
   name: string;
   status: string;
-  runtimeState: string | null;
   suspended: boolean;
   memoryMb: number;
   cpuCores: number;
@@ -106,6 +107,16 @@ function AdminServerPage() {
     queryFn: () => getServer({ data: { serverId } }),
   });
 
+  // LIVE runtime status — ONE agent query polled at a regular interval
+  // (like the node page's health ping); pending → the badge shows a
+  // skeleton, never blocks the page. The DB status is the fallback.
+  const getStatus = useServerFn(getAdminServerStatusFn);
+  const statusQuery = useQuery({
+    queryKey: ['admin-server-status', serverId],
+    queryFn: () => getStatus({ data: { serverId } }),
+    refetchInterval: 5000,
+  });
+
   if (query.isPending) {
     return <p className="text-muted-foreground">Chargement du serveur…</p>;
   }
@@ -123,8 +134,12 @@ function AdminServerPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{server.name}</h1>
-            <StatusBadge status={server.status} />
+            <h1 className="text-3xl leading-none font-bold tracking-tight">{server.name}</h1>
+            {statusQuery.isPending ? (
+              <Skeleton className="h-6 w-24 rounded-full" />
+            ) : (
+              <StatusBadge status={statusQuery.data?.status ?? server.status} />
+            )}
             {server.suspended && (
               <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">
                 Suspendu
