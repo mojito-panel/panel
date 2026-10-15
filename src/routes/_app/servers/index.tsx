@@ -98,27 +98,17 @@ function ServersPage() {
         </div>
       </div>
 
-      {query.data && query.data.rowCount === 0 ? (
-        <div className="rounded-lg border p-8 text-center">
-          <p className="text-muted-foreground">Aucun serveur pour l'instant.</p>
-          <Button className="mt-4" render={<Link to="/servers/new" />}>
-            <Plus />
-            Créer mon premier serveur
-          </Button>
-        </div>
-      ) : (
-        <DataTable
-          list={userServersList}
-          rows={query.data?.rows ?? []}
-          rowCount={query.data?.rowCount ?? 0}
-          search={search}
-          onSearchChange={onSearchChange}
-          isPending={query.isPending}
-          isFetching={query.isFetching}
-          error={query.error}
-          rowContext={{ deleting: remove.isPending, onDelete }}
-        />
-      )}
+      <DataTable
+        list={userServersList}
+        rows={query.data?.rows ?? []}
+        rowCount={query.data?.rowCount ?? 0}
+        search={search}
+        onSearchChange={onSearchChange}
+        isPending={query.isPending}
+        isFetching={query.isFetching}
+        error={query.error}
+        rowContext={{ deleting: remove.isPending, onDelete }}
+      />
 
       <p>
         <Button variant="ghost" render={<Link to="/" />}>

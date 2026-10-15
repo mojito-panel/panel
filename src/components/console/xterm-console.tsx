@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
 import '@xterm/xterm/css/xterm.css';
 import {
@@ -9,8 +9,8 @@ import {
   type InstallLogLine,
 } from '~/contract';
 import { getServerLogsFn, createConsoleTokenFn } from '~/server/functions/servers';
-
 import { consoleMessageEmoji, renderConsoleMessage, renderInstallLine } from './messages';
+import { Skeleton } from '~/components/ui/skeleton';
 
 export type ConsoleMode = 'connecting' | 'ws' | 'polling';
 
@@ -54,11 +54,11 @@ export function XtermConsole({
   onMode,
   onInstallStatus,
 }: XtermConsoleProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const cursorRef = useRef(0);
+  const [ready, setReady] = useState(false);
   const getLogs = useServerFn(getServerLogsFn);
   const createToken = useServerFn(createConsoleTokenFn);
-
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef(0);
   // Callbacks via refs: the WS connection must not be torn down on re-renders
   const onConnectionRef = useRef(onConnection);
   const onStatusRef = useRef(onStatus);
@@ -321,6 +321,7 @@ export function XtermConsole({
       term.unicode.activeVersion = '11';
       term.open(containerRef.current);
       fit.fit();
+      setReady(true);
 
       // The container's height is viewport-based (calc(100vh-26rem), floor
       // 400px): the ResizeObserver below re-fits the grid on every change.
@@ -353,11 +354,21 @@ export function XtermConsole({
   }, [serverId, getLogs, createToken]);
 
   // The caption lives in the page (card header) — this component renders
-  // only the terminal container.
+  // only the terminal container. Until the terminal has booted (dynamic
+  // import + open), the box shows terminal-shaped skeleton lines — never
+  // an empty black rectangle.
   return (
-    <div
-      ref={containerRef}
-      className="h-[calc(100vh-26rem)] min-h-[400px] overflow-hidden rounded-md bg-[#0d1117] p-2"
-    />
+    <div className="relative h-[calc(100vh-26rem)] min-h-[400px] overflow-hidden rounded-md bg-[#0d1117] p-2">
+      <div ref={containerRef} className="h-full w-full" />
+      {!ready && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col gap-2 p-2">
+          <Skeleton className="w-2/3 bg-[#30363d]" />
+          <Skeleton className="w-1/2 bg-[#30363d]" />
+          <Skeleton className="w-3/4 bg-[#30363d]" />
+          <Skeleton className="w-1/3 bg-[#30363d]" />
+          <Skeleton className="w-2/3 bg-[#30363d]" />
+        </div>
+      )}
+    </div>
   );
 }

@@ -24,7 +24,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
 import { InstallLogs, InstallNotice } from '~/components/console/install-panel';
-import { ErrorState, PageSkeleton } from '~/components/error/error-state';
+import { ErrorState } from '~/components/error/error-state';
 import { serverCan } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
@@ -215,12 +215,9 @@ function ServerConsolePage() {
       {runtimeQuery.isError && (
         <ErrorState message={runtimeQuery.error.message} onRetry={() => runtimeQuery.refetch()} />
       )}
-
-      {/* Status + grants still loading → skeletons for the power buttons */}
-      {(query.isPending || runtimeQuery.isPending) && !installActive && (
-        <PageSkeleton bare />
-      )}
-
+      {/* Status + grants still loading → the power buttons below simply stay
+          hidden until the queries settle; the console card shows its own
+          terminal-shaped skeleton (XtermConsole), no floating placeholder. */}
       {/* Live install — the steps stream into the console below, a one-line
           notice replaces the old progress banner */}
       {installActive && (
