@@ -48,11 +48,20 @@ export async function findPrimaryAllocation(serverId: string) {
 }
 
 /**
- * Pushes the server's primary allocation to the agent's cache — the new
- * port/ip apply at the NEXT start. A 404 (agent out of sync) is ignored,
+ * Pushes the server's full allocation to the agent's cache — primary
+ * port/ip plus the current memory/cpu limits, one complete record (the
+ * power start/restart flow uses it as the limits sync). The new values
+ * apply at the NEXT start. A 404 (agent out of sync) is ignored,
  * the DB stays the source of truth.
  */
-export async function pushPrimaryAllocation(server: { id: string; nodeId: string }): Promise<void> {
+export async function pushPrimaryAllocation(server: {
+  id: string;
+  nodeId: string;
+  // MikroORM Opt column type — Number() at the push, like every
+  // other read of these fields.
+  memoryMb: number | string;
+  cpuCores: number | string;
+}): Promise<void> {
   const em = orm.em;
   const node = await em.findOne(Node, { id: server.nodeId });
   if (!node) return;
@@ -64,6 +73,8 @@ export async function pushPrimaryAllocation(server: { id: string; nodeId: string
     await agentUpdateAllocation(node, server.id, {
       port: primary.port,
       ip: primary.ip,
+      memoryMb: Number(server.memoryMb),
+      cpuCores: Number(server.cpuCores),
     });
   } catch (err) {
     if (err instanceof AgentError && err.statusCode === 404) {

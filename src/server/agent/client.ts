@@ -193,15 +193,17 @@ export async function agentUpdateServerVariables(
 }
 
 /**
- * Pushes the server's PRIMARY allocation (Pelican "Network" page) to the
- * agent's cache — the new port/ip apply at the NEXT start, a running process
- * keeps its original environment (same semantics as the variable push).
+ * Pushes the server's FULL allocation (Pelican "Network" page + the power
+ * start/restart limits sync) to the agent's cache — the new port/ip/memory/
+ * cpu apply at the NEXT start, a running process keeps its original
+ * environment. The record is always complete: no partial chunks, the agent
+ * replaces its stored allocation wholesale.
  */
 export async function agentUpdateAllocation(
   node: INode,
   serverId: string,
-  allocation: { port: number; ip: string },
-): Promise<{ serverId: string; allocation: { port: number; memoryMb: number; ip: string } }> {
+  allocation: { port: number; ip: string; memoryMb: number; cpuCores: number },
+): Promise<{ serverId: string; allocation: { port: number; memoryMb: number; cpuCores: number; ip: string } }> {
   return agentCall(node, `/servers/${serverId}/allocation`, {
     method: 'POST',
     body: { allocation },

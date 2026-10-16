@@ -158,18 +158,26 @@ describe('sendCommandRequestSchema', () => {
 });
 
 describe('updateServerAllocationRequestSchema', () => {
-  it('validates a primary allocation update', () => {
+  it('validates a full allocation update (limits sync)', () => {
+    const result = updateServerAllocationRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      allocation: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a partial record (port/ip only)', () => {
     const result = updateServerAllocationRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       allocation: { port: 25565, ip: '192.168.1.10' },
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it('rejects a non-integer port', () => {
     const result = updateServerAllocationRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      allocation: { port: 25565.5, ip: '192.168.1.10' },
+      allocation: { port: 25565.5, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 1 },
     });
     expect(result.success).toBe(false);
   });
@@ -177,7 +185,7 @@ describe('updateServerAllocationRequestSchema', () => {
   it('rejects an empty ip', () => {
     const result = updateServerAllocationRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      allocation: { port: 25565, ip: '' },
+      allocation: { port: 25565, ip: '', memoryMb: 4096, cpuCores: 1 },
     });
     expect(result.success).toBe(false);
   });

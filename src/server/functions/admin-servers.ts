@@ -194,9 +194,9 @@ export const updateAdminServerFn = createServerFn({ method: 'POST' })
     await em.flush();
 
     // NOTE: memory/CPU are enforced by the agent through its stored
-    // allocation — there is no sync endpoint in the contract (V1), so a
-    // limit change reaches the agent on the next full (re)install. The
-    // backup limit is panel-side only and applies immediately.
+    // allocation — the power start/restart flow pushes the current
+    // record before every spawn, so a limit change applies on the next
+    // start. The backup limit is panel-side only and applies immediately.
     return { id: server.id, updated: true };
   });
 
@@ -354,14 +354,14 @@ export const deleteAdminServerFn = createServerFn({ method: 'POST' })
 // ─── Allocations (Pelican AllocationsRelationManager) ────────────────────────
 
 /**
- * Pushes the server's primary allocation to the agent's cache — the new
- * port/ip apply at the NEXT start. A 404 (agent out of sync) is tolerated:
- * the panel DB remains the source of truth. Same semantics as the Network
- * page's sync in servers.ts.
+ * Pushes the server's full allocation to the agent's cache — primary
+ * port/ip plus the current memory/cpu limits, one complete record. A 404
+ * (agent out of sync) is tolerated: the panel DB remains the source of
+ * truth. Same semantics as the Network page's sync in servers.ts.
  */
 async function pushPrimaryAllocation(
   em: EntityManager,
-  server: { id: string; nodeId: string },
+  server: { id: string; nodeId: string; memoryMb: number | string; cpuCores: number | string },
 ): Promise<void> {
   const node = await em.findOne(Node, { id: server.nodeId });
   if (!node) return;
@@ -373,6 +373,8 @@ async function pushPrimaryAllocation(
     await agentUpdateAllocation(node, server.id, {
       port: primary.port,
       ip: primary.ip,
+      memoryMb: Number(server.memoryMb),
+      cpuCores: Number(server.cpuCores),
     });
   } catch (err) {
     if (err instanceof AgentError && err.statusCode === 404) {

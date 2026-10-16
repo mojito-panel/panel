@@ -359,7 +359,7 @@ function ServerRecordTabs({
         >
         <CardSection
           title="Limites de ressources"
-          description="La mémoire et le CPU sont appliqués par l'agent à la prochaine (ré)installation complète — la limite de sauvegardes s'applique immédiatement."
+          description="La mémoire et le CPU sont poussés à l'agent au prochain démarrage (start/restart) — la limite de sauvegardes s'applique immédiatement."
         >
           <div className="grid gap-4 sm:grid-cols-3">
             <form.Field name="memoryMb">

@@ -91,16 +91,20 @@ export type UpdateServerVariablesRequest = z.infer<
 >;
 
 /**
- * Primary allocation update (Pelican "set primary allocation" / port change).
- * Same push semantics as the variable update: the agent refreshes its stored
- * entry (source of SERVER_PORT / SERVER_IP at start). The new values apply
- * on the NEXT start — a running process keeps its original environment.
+ * Allocation update (Pelican "set primary allocation" / port change, and
+ * the power start/restart limits sync). The FULL record is pushed every
+ * time — port, ip, memoryMb and cpuCores together, never partial chunks:
+ * the panel is the source of truth and the agent replaces its stored
+ * allocation wholesale. The new values apply on the NEXT start — a
+ * running process keeps its original environment.
  */
 export const updateServerAllocationRequestSchema = z.object({
   serverId: idSchema,
   allocation: z.object({
     port: z.number().int().positive(),
     ip: z.string().min(1),
+    memoryMb: z.number().int().positive(),
+    cpuCores: z.number().min(0).max(1024).default(0),
   }),
 });
 

@@ -23,10 +23,14 @@ import { DEFAULT_SFTP_PORT } from '~/contract';
 export async function pushAllocation(
   node: INode,
   serverId: string,
-  allocation: { port: number; ip: string },
+  allocation: { port: number; ip: string; memoryMb: number | string; cpuCores: number | string },
 ): Promise<void> {
   try {
-    await agentUpdateAllocation(node, serverId, allocation);
+    await agentUpdateAllocation(node, serverId, {
+      ...allocation,
+      memoryMb: Number(allocation.memoryMb),
+      cpuCores: Number(allocation.cpuCores),
+    });
   } catch (err) {
     if (err instanceof AgentError && err.statusCode === 404) {
       // tolerated — agent out of sync, DB remains the source of truth
@@ -198,7 +202,12 @@ export async function assignAllocation(
   if (!hadPrimary) {
     const node = await em.findOne(Node, { id: server.nodeId });
     if (node) {
-      await pushAllocation(node, server.id, { port: allocation.port, ip: allocation.ip });
+      await pushAllocation(node, server.id, {
+        port: allocation.port,
+        ip: allocation.ip,
+        memoryMb: server.memoryMb,
+        cpuCores: server.cpuCores,
+      });
     }
   }
 }
@@ -224,10 +233,22 @@ export async function revokeAllocation(allocation: IAllocation): Promise<void> {
   const server = await em.findOne(Server, { id: allocation.serverId });
   allocation.serverId = null;
   allocation.primary = false;
-  let promoted: { port: number; ip: string } | null = null;
+  let promoted: {
+    port: number;
+    ip: string;
+    memoryMb: number | string;
+    cpuCores: number | string;
+  } | null = null;
   if (wasPrimary && others.length > 0) {
     others[0].primary = true;
-    promoted = { port: others[0].port, ip: others[0].ip };
+    if (server) {
+      promoted = {
+        port: others[0].port,
+        ip: others[0].ip,
+        memoryMb: server.memoryMb,
+        cpuCores: server.cpuCores,
+      };
+    }
   }
   await em.flush();
 

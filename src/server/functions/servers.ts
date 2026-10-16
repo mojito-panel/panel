@@ -344,6 +344,14 @@ export const serverActionFn = createServerFn({ method: 'POST' })
       throw new HttpError(409, 'Ce serveur est suspendu — réactivation requise avant tout démarrage');
     }
 
+    // Limits sync: the agent builds the server's Job Object from its
+    // stored allocation — push the panel's current record before the
+    // spawn (install pushes it once; start/restart are the only refresh
+    // moments, nothing can change at runtime).
+    if (data.action === 'start' || data.action === 'restart') {
+      await pushPrimaryAllocation(server);
+    }
+
     const node = await requireNodeOf(server);
 
     try {
