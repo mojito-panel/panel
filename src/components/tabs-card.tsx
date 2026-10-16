@@ -28,8 +28,10 @@ export type TabsCardTab = {
 /**
  * Pelican-style tabbed card — a SINGLE card whose header carries the tab
  * buttons directly (no separate tabs row above the card) and whose content
- * renders the active tab. Inactive panels stay mounted, so forms keep
- * their state across tab switches.
+ * renders the active tab. Inactive panels UNMOUNT (base-ui Panel without
+ * forceMount): React-held state (e.g. TanStack Form) survives tab switches,
+ * but a <form> rendered in one tab is NOT in the DOM while another tab is
+ * active — never reference it from another tab (form="id" attribute).
  */
 export function TabsCard({
   defaultValue,

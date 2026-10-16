@@ -223,7 +223,7 @@ function ServerRecordTabs({
   const saveButton = (
     <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
       {([canSubmit, isSubmitting]) => (
-        <Button type="submit" form="admin-server-record" disabled={!canSubmit || isSubmitting || update.isPending}>
+        <Button type="submit" disabled={!canSubmit || isSubmitting || update.isPending}>
           {update.isPending ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       )}
@@ -347,6 +347,16 @@ function ServerRecordTabs({
       value: 'resources',
       label: 'Ressources',
       content: (
+        // Its own <form> — inactive tab panels UNMOUNT (base-ui), so a form
+        // element living in another tab cannot be referenced from here: the
+        // save button submits the form it is rendered inside.
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
         <CardSection
           title="Limites de ressources"
           description="La mémoire et le CPU sont appliqués par l'agent à la prochaine (ré)installation complète — la limite de sauvegardes s'applique immédiatement."
@@ -431,6 +441,7 @@ function ServerRecordTabs({
           </div>
           {canUpdate && <div className="mt-4">{saveButton}</div>}
         </CardSection>
+        </form>
       ),
     },
 
