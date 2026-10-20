@@ -46,7 +46,7 @@ export function buildAgentConfig(node: AgentConfigNode): string {
     'docker:',
     '  endpoint: \'npipe:////./pipe/docker_engine\'',
     '  isolation: process',
-    "  volume_root: 'C:\\\\server'",
+    "  volume_root: 'C:\\server'",
     'allowed_origins:',
     `  - ${node.panelUrl}`,
     '',
