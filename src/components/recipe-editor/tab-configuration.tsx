@@ -2,12 +2,11 @@ import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { FieldShell, KvRows, TagsInput } from './fields';
-import { RuntimePicker } from './runtime-picker';
 import type { RecipeForm } from './recipe-editor';
 
 /**
- * Tab « Configuration » of an app recipe — identity, required runtimes
- * and host requirements.
+ * Tab « Configuration » of a recipe — identity, container image and
+ * host requirements.
  */
 
 /** Row-level errors of a key/value list (`prefix[i].key` from the form errorMap). */
@@ -99,6 +98,25 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
             )}
           </form.Field>
 
+          <form.Field name="dockerImage">
+            {(field) => (
+              <FieldShell
+                id="recipe-docker-image"
+                label="Image Docker"
+                hint="Image Windows (servercore) du conteneur du serveur — elle embarque les runtimes (java, steamcmd…)."
+                errors={field.state.meta.errors}
+              >
+                <Input
+                  id="recipe-docker-image"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                  placeholder="ghcr.io/mojito/servercore-java:latest"
+                />
+              </FieldShell>
+            )}
+          </form.Field>
+
           <div className="md:col-span-2">
             <form.Field name="description">
               {(field) => (
@@ -138,27 +156,6 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
             )}
           </form.Field>
         </div>
-      </CardSection>
-
-      <CardSection
-        title="Runtimes"
-        description="Outils (java, steamcmd…) installés par l'agent dans le .bin du serveur avant l'application — le seul mécanisme d'outillage."
-      >
-        <form.Field name="requires">
-          {(field) => (
-            <FieldShell
-              id="recipe-requires"
-              label="Runtimes requis"
-              errors={field.state.meta.errors}
-            >
-              <RuntimePicker
-                value={field.state.value}
-                onChange={field.handleChange}
-                onBlur={field.handleBlur}
-              />
-            </FieldShell>
-          )}
-        </form.Field>
       </CardSection>
 
       <CardSection

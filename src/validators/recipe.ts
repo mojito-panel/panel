@@ -19,6 +19,13 @@ export const importRecipesSchema = z
 
 export type ImportRecipesDto = z.infer<typeof importRecipesSchema>;
 
+export const importEggSchema = z.object({
+  /** Raw PTDL_v2 egg JSON (textarea or .json file content). */
+  json: z.string().min(1, 'Le JSON de l’œuf est requis'),
+});
+
+export type ImportEggDto = z.infer<typeof importEggSchema>;
+
 export const getRecipeSchema = z.object({
   recipeId: z.string().min(1),
 });

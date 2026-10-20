@@ -3,12 +3,10 @@ import {
   RESERVED_ENV_NAMES,
   STOP_SIGNALS,
   safeParseRecipe,
-  safeParseRuntimeRecipe,
   validateBackupIncludePattern,
   type Recipe,
   type RunnerAction,
   type RunnerActionInput,
-  type RuntimeRecipe,
   type StopSignal,
 } from '~/contract';
 
@@ -139,7 +137,7 @@ export const actionValueSchema = z
       })
       .nullable(),
     // script
-    shell: z.enum(['bash', 'powershell', 'cmd']),
+    shell: z.enum(['powershell', 'cmd']),
   })
   .superRefine((action, ctx) => {
     const require = (field: string, message: string) => {
@@ -300,15 +298,12 @@ export type BackupValue = z.infer<typeof backupValueSchema>;
 // ─── Full editor value ───────────────────────────────────────────────────────
 
 /**
- * Cross-field checks shared by the app and runtime editor schemas:
- * duplicate variable envs, invalid variable patterns, runtime requires
- * (valid slugs, no duplicates), duplicate export env keys, update URL.
+ * Cross-field checks shared by the editor schemas: duplicate variable
+ * envs, invalid variable patterns, update URL.
  */
 function refineEditorValue(
   value: {
     variables: RecipeVariableValue[];
-    requires: string[];
-    exportEnv: KvPair[];
     updateUrl: string;
   },
   ctx: z.RefinementCtx,
@@ -345,40 +340,6 @@ function refineEditorValue(
     }
   });
 
-  // Runtime requires: valid slugs, no duplicates.
-  const seenRequires = new Set<string>();
-  value.requires.forEach((id, index) => {
-    if (!id) return;
-    if (!/^[a-z0-9-]+$/.test(id)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['requires', index],
-        message: 'ID de runtime invalide (minuscules, chiffres, tirets)',
-      });
-    } else if (seenRequires.has(id)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['requires', index],
-        message: `Runtime « ${id} » déjà requis`,
-      });
-    }
-    seenRequires.add(id);
-  });
-
-  // Duplicate keys in the export env
-  const exportKeys = new Set<string>();
-  value.exportEnv.forEach((pair, i) => {
-    if (!pair.key) return;
-    if (exportKeys.has(pair.key)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['exportEnv', i, 'key'],
-        message: `Clé « ${pair.key} » en double`,
-      });
-    }
-    exportKeys.add(pair.key);
-  });
-
   // Update URL must be a valid URL when set
   if (value.updateUrl && !z.url().safeParse(value.updateUrl).success) {
     ctx.addIssue({ code: 'custom', path: ['updateUrl'], message: 'URL invalide' });
@@ -395,15 +356,12 @@ export const recipeEditorSchema = z
     author: z.string().min(1, 'Auteur requis'),
     description: z.string(),
     tags: z.array(z.string()),
-    /** Runtime recipe ids required by this app (java, steamcmd…). */
-    requires: z.array(z.string()),
+    /** Windows container image the server runs in (carries java/steamcmd…). */
+    dockerImage: z.string().min(1, 'Image Docker requise'),
     updateUrl: z.string(),
     requirements: requirementsValueSchema,
     env: z.array(kvPairSchema),
     backup: backupValueSchema,
-    /** Runtime exports — used by the runtime editor only (apps have none). */
-    exportPath: z.boolean(),
-    exportEnv: z.array(kvPairSchema),
     variables: z.array(recipeVariableValueSchema),
     install: z.array(actionValueSchema),
     start: z.object({
@@ -451,47 +409,6 @@ export const recipeEditorSchema = z
 
 export type RecipeEditorValue = z.infer<typeof recipeEditorSchema>;
 
-// ─── Runtime editor schema ───────────────────────────────────────────────────
-
-/**
- * Validator of the RUNTIME recipe editor — the runtime-relevant fields
- * plus the app-only ones (start/logs/backup/runtime/env) declared WITHOUT
- * the app constraints: a runtime has none of them, they are carried in
- * the form value for shape compatibility with the shared tab components,
- * and never rendered nor emitted.
- */
-export const runtimeEditorSchema = z
-  .object({
-    id: z
-      .string()
-      .min(1, 'ID requis')
-      .regex(/^[a-z0-9-]+$/, 'Minuscules, chiffres et tirets uniquement'),
-    name: z.string().min(1, 'Nom requis'),
-    author: z.string().min(1, 'Auteur requis'),
-    description: z.string(),
-    tags: z.array(z.string()),
-    requires: z.array(z.string()),
-    updateUrl: z.string(),
-    requirements: requirementsValueSchema,
-    exportPath: z.boolean(),
-    exportEnv: z.array(kvPairSchema),
-    variables: z.array(recipeVariableValueSchema),
-    install: z.array(actionValueSchema),
-    // App-only fields, shape-checked but constraint-free (unused here)
-    env: z.array(kvPairSchema),
-    backup: backupValueSchema,
-    start: z.object({
-      command: z.string(),
-      stop: stopValueSchema.nullable(),
-      ready: readyValueSchema.nullable(),
-      workingDirectory: z.string(),
-    }),
-    logs: logsValueSchema,
-  })
-  .superRefine((value, ctx) => {
-    refineEditorValue(value, ctx);
-  });
-
 // ─── Defaults (create) ────────────────────────────────────────────────────────
 
 export function emptyRecipeEditorValue(): RecipeEditorValue {
@@ -501,13 +418,11 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     author: '',
     description: '',
     tags: [],
-    requires: [],
+    dockerImage: '',
     updateUrl: '',
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [],
     backup: { include: [] },
-    exportPath: true,
-    exportEnv: [],
     variables: [],
     install: [],
     start: {
@@ -518,11 +433,6 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     },
     logs: { mode: 'stdout', file: '', stripAnsi: false },
   };
-}
-
-/** Same shape, pre-filled for a NEW runtime recipe (exports default on). */
-export function emptyRuntimeEditorValue(): RecipeEditorValue {
-  return { ...emptyRecipeEditorValue() };
 }
 
 // ─── Hydration (edit) ─────────────────────────────────────────────────────────
@@ -538,9 +448,9 @@ function contractVariablesToEditor(variables: Recipe['variables']): RecipeVariab
     env: variable.env,
     description: variable.description ?? '',
     type: variable.type,
-    defaultValue: variable.defaultValue,
-    userViewable: variable.userViewable,
-    userEditable: variable.userEditable,
+    defaultValue: variable.default_value,
+    userViewable: variable.user_viewable,
+    userEditable: variable.user_editable,
     sort: variable.sort,
     required: variable.required,
     min: variable.min ?? 0,
@@ -570,7 +480,7 @@ function contractActionsToEditor(install: RunnerAction[]): ActionValue[] {
           action: 'extract',
           archive: action.archive,
           dest: action.dest,
-          stripComponents: action.stripComponents ?? 0,
+          stripComponents: action.strip_components ?? 0,
         };
       case 'write':
         return { ...base, action: 'write', file: action.file, content: action.content };
@@ -598,13 +508,13 @@ function contractActionsToEditor(install: RunnerAction[]): ActionValue[] {
           command: action.command,
           cwd: action.cwd ?? '',
           env: toPairs(action.env),
-          timeoutMs: action.timeoutMs ?? 0,
-          successCodes: (action.successCodes ?? []).map((code) => String(code)),
+          timeoutMs: action.timeout_ms ?? 0,
+          successCodes: (action.success_codes ?? []).map((code) => String(code)),
           tail: action.tail
             ? {
                 file: action.tail.file,
                 filter: action.tail.filter ?? '',
-                intervalMs: action.tail.intervalMs ?? 0,
+                intervalMs: action.tail.interval_ms ?? 0,
               }
             : null,
         };
@@ -614,7 +524,7 @@ function contractActionsToEditor(install: RunnerAction[]): ActionValue[] {
           action: 'script',
           shell: action.shell,
           content: action.content,
-          timeoutMs: action.timeoutMs ?? 0,
+          timeoutMs: action.timeout_ms ?? 0,
         };
     }
   });
@@ -623,10 +533,10 @@ function contractActionsToEditor(install: RunnerAction[]): ActionValue[] {
 /** Contract requirements → editor requirements (0 = absent). */
 function contractRequirementsToEditor(requirements: Recipe['requirements']): RequirementsValue {
   return {
-    minRamMb: requirements?.minRamMb ?? 0,
-    minDiskMb: requirements?.minDiskMb ?? 0,
-    minCpuPercent: requirements?.minCpuPercent ?? 0,
-    requiredCommands: requirements?.requiredCommands ?? [],
+    minRamMb: requirements?.min_ram_mb ?? 0,
+    minDiskMb: requirements?.min_disk_mb ?? 0,
+    minCpuPercent: requirements?.min_cpu_percent ?? 0,
+    requiredCommands: requirements?.required_commands ?? [],
   };
 }
 
@@ -638,13 +548,11 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     author: recipe.author,
     description: recipe.description ?? '',
     tags: recipe.tags ?? [],
-    requires: recipe.requires ?? [],
-    updateUrl: recipe.updateUrl ?? '',
+    dockerImage: recipe.docker_image,
+    updateUrl: recipe.update_url ?? '',
     requirements: contractRequirementsToEditor(recipe.requirements),
     env: toPairs(recipe.env),
     backup: { include: recipe.backup?.include ?? [] },
-    exportPath: true,
-    exportEnv: [],
     variables: contractVariablesToEditor(recipe.variables),
     install: contractActionsToEditor(recipe.install),
     start: {
@@ -653,38 +561,19 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
         ? {
             type: recipe.start.stop.type,
             value: recipe.start.stop.value,
-            timeoutMs: recipe.start.stop.timeoutMs,
+            timeoutMs: recipe.start.stop.timeout_ms,
           }
         : null,
       ready: recipe.start.ready
         ? { pattern: recipe.start.ready.pattern, strip: recipe.start.ready.strip ?? '' }
         : null,
-      workingDirectory: recipe.start.workingDirectory ?? '',
+      workingDirectory: recipe.start.working_directory ?? '',
     },
     logs: {
       mode: recipe.logs?.mode ?? 'stdout',
       file: recipe.logs?.file ?? '',
-      stripAnsi: recipe.logs?.stripAnsi ?? false,
+      stripAnsi: recipe.logs?.strip_ansi ?? false,
     },
-  };
-}
-
-/** Parsed runtime recipe (contract output — defaults applied) → editor value. */
-export function runtimeRecipeToEditorValue(recipe: RuntimeRecipe): RecipeEditorValue {
-  return {
-    ...emptyRecipeEditorValue(),
-    id: recipe.id,
-    name: recipe.name,
-    author: recipe.author,
-    description: recipe.description ?? '',
-    tags: recipe.tags ?? [],
-    requires: recipe.requires ?? [],
-    updateUrl: recipe.updateUrl ?? '',
-    requirements: contractRequirementsToEditor(recipe.requirements),
-    exportPath: recipe.export?.path ?? true,
-    exportEnv: toPairs(recipe.export?.env),
-    variables: contractVariablesToEditor(recipe.variables),
-    install: contractActionsToEditor(recipe.install),
   };
 }
 
@@ -704,9 +593,9 @@ function editorVariablesToContract(variables: RecipeVariableValue[]) {
       name: variable.name,
       description: variable.description || undefined,
       type: variable.type,
-      defaultValue: variable.defaultValue,
-      userViewable: variable.userViewable,
-      userEditable: variable.userEditable,
+      default_value: variable.defaultValue,
+      user_viewable: variable.userViewable,
+      user_editable: variable.userEditable,
       sort: variable.sort,
       required: variable.required,
       min: variable.type === 'number' && variable.min !== 0 ? variable.min : undefined,
@@ -734,7 +623,7 @@ function editorActionsToContract(actions: ActionValue[]): RunnerActionInput[] {
           action: 'extract',
           archive: action.archive,
           dest: action.dest,
-          stripComponents: action.stripComponents || undefined,
+          strip_components: action.stripComponents || undefined,
         };
       case 'write':
         return { action: 'write', file: action.file, content: action.content };
@@ -759,8 +648,8 @@ function editorActionsToContract(actions: ActionValue[]): RunnerActionInput[] {
           command: action.command,
           cwd: action.cwd || undefined,
           env: pairsToRecord(action.env),
-          timeoutMs: action.timeoutMs || undefined,
-          successCodes:
+          timeout_ms: action.timeoutMs || undefined,
+          success_codes:
             action.successCodes.length > 0
               ? action.successCodes.map((code) => Number(code)).filter((n) => !Number.isNaN(n))
               : undefined,
@@ -768,7 +657,7 @@ function editorActionsToContract(actions: ActionValue[]): RunnerActionInput[] {
             ? {
                 file: action.tail.file,
                 filter: action.tail.filter || undefined,
-                intervalMs: action.tail.intervalMs || undefined,
+                interval_ms: action.tail.intervalMs || undefined,
               }
             : undefined,
         };
@@ -777,7 +666,7 @@ function editorActionsToContract(actions: ActionValue[]): RunnerActionInput[] {
           action: 'script',
           shell: action.shell,
           content: action.content,
-          timeoutMs: action.timeoutMs || undefined,
+          timeout_ms: action.timeoutMs || undefined,
         };
     }
   });
@@ -790,17 +679,17 @@ function editorRequirementsToContract(requirements: RequirementsValue) {
     requirements.minCpuPercent ||
     requirements.requiredCommands.length > 0
     ? {
-        minRamMb: requirements.minRamMb || undefined,
-        minDiskMb: requirements.minDiskMb || undefined,
-        minCpuPercent: requirements.minCpuPercent || undefined,
-        requiredCommands:
+        min_ram_mb: requirements.minRamMb || undefined,
+        min_disk_mb: requirements.minDiskMb || undefined,
+        min_cpu_percent: requirements.minCpuPercent || undefined,
+        required_commands:
           requirements.requiredCommands.length > 0 ? requirements.requiredCommands : undefined,
       }
     : undefined;
 }
 
 /**
- * Editor value → app recipe JSON (contract input shape, empties stripped).
+ * Editor value → recipe JSON (contract input shape, empties stripped).
  * Returns `{ recipe }` on success, or `{ issues }` when the contract
  * schema rejects the value (final validation before send).
  */
@@ -808,18 +697,15 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
   recipe?: Recipe;
   issues?: string[];
 } {
-  const requires = value.requires.map((id) => id.trim()).filter(Boolean);
-
   const recipe = {
-    schemaVersion: 1,
-    type: 'app' as const,
+    schema_version: 3,
     id: value.id,
     name: value.name,
     author: value.author,
     description: value.description || undefined,
     tags: value.tags,
-    requires: requires.length > 0 ? requires : undefined,
-    updateUrl: value.updateUrl || undefined,
+    docker_image: value.dockerImage,
+    update_url: value.updateUrl || undefined,
     requirements: editorRequirementsToContract(value.requirements),
     env: pairsToRecord(value.env),
     backup: (() => {
@@ -834,7 +720,7 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
         ? {
             type: value.start.stop.type,
             value: value.start.stop.value,
-            timeoutMs: value.start.stop.timeoutMs || 30000,
+            timeout_ms: value.start.stop.timeoutMs || 30000,
           }
         : undefined,
       ready: value.start.ready
@@ -843,12 +729,12 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
             strip: value.start.ready.strip || undefined,
           }
         : undefined,
-      workingDirectory: value.start.workingDirectory || undefined,
+      working_directory: value.start.workingDirectory || undefined,
     },
     logs: {
       mode: value.logs.mode,
       file: value.logs.mode === 'file' ? value.logs.file : undefined,
-      stripAnsi: value.logs.stripAnsi,
+      strip_ansi: value.logs.stripAnsi,
     },
   };
 
@@ -859,47 +745,6 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
   return {
     issues: parsed.error.issues.map(
       (issue) => `${issue.path.join('.') || 'recipe'} : ${issue.message}`,
-    ),
-  };
-}
-
-/**
- * Runtime editor value → runtime recipe JSON (start/logs/backup are NOT
- * part of a runtime and are dropped). Returns `{ recipe }` on success,
- * or `{ issues }` when the contract rejects the value.
- */
-export function runtimeEditorValueToRecipe(value: RecipeEditorValue): {
-  recipe?: RuntimeRecipe;
-  issues?: string[];
-} {
-  const requires = value.requires.map((id) => id.trim()).filter(Boolean);
-
-  const recipe = {
-    schemaVersion: 1,
-    type: 'runtime' as const,
-    id: value.id,
-    name: value.name,
-    author: value.author,
-    description: value.description || undefined,
-    tags: value.tags,
-    requires: requires.length > 0 ? requires : undefined,
-    updateUrl: value.updateUrl || undefined,
-    requirements: editorRequirementsToContract(value.requirements),
-    variables: editorVariablesToContract(value.variables),
-    install: editorActionsToContract(value.install),
-    export: {
-      path: value.exportPath,
-      env: pairsToRecord(value.exportEnv),
-    },
-  };
-
-  const parsed = safeParseRuntimeRecipe(recipe);
-  if (parsed.success) {
-    return { recipe: parsed.data };
-  }
-  return {
-    issues: parsed.error.issues.map(
-      (issue) => `${issue.path.join('.') || 'runtime'} : ${issue.message}`,
     ),
   };
 }
@@ -942,9 +787,6 @@ export function findUnknownVariablesInEditorValue(value: RecipeEditorValue): str
     for (const pair of action.configFind) collect(pair.value);
     if (action.tail) collect(action.tail.file);
   }
-
-  // Runtime exports (runtime editor) — templated with the runtime's variables
-  for (const pair of value.exportEnv) collect(pair.value);
 
   return [...used].filter((name) => !declared.has(name));
 }

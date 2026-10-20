@@ -4,7 +4,6 @@ import { Node, Recipe, Server, ServerUser, Allocation } from '~/db/entities';
 import { userServersList } from '~/lists/user-servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import { resolveRuntimeRecipes } from './runtimes';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import type { Recipe as RecipeContract } from '~/contract';
 import {
@@ -226,7 +225,6 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
         serverId: server.id,
         name: server.name,
         recipe: normalizeStoredRecipe(recipe.json),
-        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
         installDir: `servers/${server.id}`,
         allocation: {
@@ -392,7 +390,6 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     try {
       const result = await agentReinstallServer(node, server.id, {
         recipe: normalizeStoredRecipe(recipe.json),
-        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
       });
       // The reinstall now runs in the background — the console shows the
@@ -411,7 +408,6 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
             serverId: server.id,
             name: server.name,
             recipe: normalizeStoredRecipe(recipe.json),
-            runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
             allocation: {
@@ -458,12 +454,12 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
     const recipe = await requireRecipeOf(server);
     const recipeJson = recipe.json as RecipeContract;
 
-    // Merge: only userEditable variables accept the submitted values, the
+    // Merge: only user_editable variables accept the submitted values, the
     // others keep their current value (Pelican semantics — non-editable
     // variables are read-only for the owner)
     const variables: Record<string, string | number | boolean> = { ...server.variables };
     for (const variable of recipeJson.variables ?? []) {
-      if (variable.userEditable && data.variables[variable.env] !== undefined) {
+      if (variable.user_editable && data.variables[variable.env] !== undefined) {
         variables[variable.env] = data.variables[variable.env];
       }
     }

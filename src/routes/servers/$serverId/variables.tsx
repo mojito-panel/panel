@@ -101,16 +101,16 @@ function ServerVariablesPage() {
   const definitions = [...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort);
   // Narrowed above (recipe.start is null without server.variables.read)
   const start = server.recipe.start;
-  const editable = definitions.filter((v) => v.userViewable && v.userEditable);
-  const readonly = definitions.filter((v) => v.userViewable && !v.userEditable);
-  const defaults = new Map(definitions.map((v) => [v.env, v.defaultValue]));
+  const editable = definitions.filter((v) => v.user_viewable && v.user_editable);
+  const readonly = definitions.filter((v) => v.user_viewable && !v.user_editable);
+  const defaults = new Map(definitions.map((v) => [v.env, v.default_value]));
 
   const form = useForm({
     validators: { onChange: makeUpdateServerVariablesSchema(definitions) },
     defaultValues: {
       serverId,
       variables: Object.fromEntries(
-        definitions.map((v) => [v.env, server.variables[v.env] ?? v.defaultValue]),
+        definitions.map((v) => [v.env, server.variables[v.env] ?? v.default_value]),
       ) as Record<string, string | number | boolean>,
     },
     onSubmit: ({ value }) => mutation.mutate(value.variables),
@@ -172,7 +172,7 @@ function ServerVariablesPage() {
         </CardContent>
       </Card>
 
-      {/* ─── Read-only variables (userViewable, not userEditable) ─── */}
+      {/* ─── Read-only variables (user_viewable, not user_editable) ─── */}
       {readonly.length > 0 && (
         <Card>
           <CardHeader>
@@ -187,7 +187,7 @@ function ServerVariablesPage() {
               <VariableField
                 key={variable.env}
                 variable={variable}
-                value={server.variables[variable.env] ?? variable.defaultValue}
+                value={server.variables[variable.env] ?? variable.default_value}
                 onChange={() => {}}
                 disabled
               />

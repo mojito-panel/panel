@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 /**
- * Zod schema of the recipe (egg) — v1 format (the only one).
- * Feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first:
- * no Docker, no mandatory bash script (`script` action as an open fallback).
+ * Zod schema of the recipe (egg) — v3 format (the only one).
+ * Feature parity with Pelican eggs (PTDL_v2), Windows-first: servers run
+ * in Windows containers (Docker Engine on Windows), the recipe carries
+ * the `docker_image` and declarative install actions — no mandatory bash
+ * script (`script` action as an open fallback, powershell/cmd shells).
  *
  * `{{ENV_VAR}}` templating (UPPERCASE) everywhere: commands, files, URLs.
  * Resolution: agent system variables > server variables > recipe defaults > fixed env.
@@ -18,12 +20,6 @@ export const RESERVED_ENV_NAMES = [
   'SERVER_PORT',
   'SERVER_IP',
   'SERVER_INSTALL_DIR',
-  // Runtime-scoped: injected by the agent ONLY while a runtime recipe's
-  // install steps run (and when resolving its export env) — it points at
-  // the runtime's own directory (.bin/<runtime-id>). Never declared as a
-  // recipe variable; app recipes receive its effect through the exported
-  // env (e.g. JAVA_HOME), never raw.
-  'RUNTIME_DIR',
 ] as const;
 
 export type ReservedEnvName = (typeof RESERVED_ENV_NAMES)[number];
@@ -54,11 +50,11 @@ export const recipeVariableSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   type: variableTypeSchema,
-  defaultValue: z.union([z.string(), z.number(), z.boolean()]),
+  default_value: z.union([z.string(), z.number(), z.boolean()]),
   /** Visible to the user (otherwise: admin-only technical variable). */
-  userViewable: z.boolean().default(true),
+  user_viewable: z.boolean().default(true),
   /** Editable by the user (otherwise: read-only on the panel side). */
-  userEditable: z.boolean().default(true),
+  user_editable: z.boolean().default(true),
   sort: z.number().int().default(0),
   required: z.boolean().default(false),
   min: z.number().optional(),
@@ -73,10 +69,10 @@ export type RecipeVariable = z.infer<typeof recipeVariableSchema>;
 // ─── Requirements ─────────────────────────────────────────────────────────────
 
 export const recipeRequirementsSchema = z.object({
-  minRamMb: z.number().int().positive().optional(),
-  minDiskMb: z.number().int().positive().optional(),
-  minCpuPercent: z.number().int().min(1).max(100).optional(),
-  requiredCommands: z.array(z.string()).optional(),
+  min_ram_mb: z.number().int().positive().optional(),
+  min_disk_mb: z.number().int().positive().optional(),
+  min_cpu_percent: z.number().int().min(1).max(100).optional(),
+  required_commands: z.array(z.string()).optional(),
 });
 
 export type RecipeRequirements = z.infer<typeof recipeRequirementsSchema>;
@@ -96,7 +92,7 @@ const extractActionSchema = z.object({
   action: z.literal('extract'),
   archive: z.string().min(1),
   dest: z.string().min(1),
-  stripComponents: z.number().int().min(0).optional(),
+  strip_components: z.number().int().min(0).optional(),
 });
 
 const writeActionSchema = z.object({
@@ -145,7 +141,7 @@ const commandTailSchema = z.object({
     }, 'Regex de filtre invalide')
     .optional(),
   /** Poll interval in ms (default 1000). */
-  intervalMs: z.number().int().min(100).max(10_000).optional(),
+  interval_ms: z.number().int().min(100).max(10_000).optional(),
 });
 
 const commandActionSchema = z.object({
@@ -153,26 +149,27 @@ const commandActionSchema = z.object({
   command: z.string().min(1),
   cwd: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
-  timeoutMs: z.number().int().positive().optional(),
+  timeout_ms: z.number().int().positive().optional(),
   /**
    * Exit codes treated as success (default: [0]).
    * e.g. steamcmd exits 7 after a self-update ("Update complete, launching...")
    * even when the requested job succeeded.
    */
-  successCodes: z.array(z.number().int()).optional(),
+  success_codes: z.array(z.number().int()).optional(),
   /** Tail a log file while the command runs (live progress, e.g. steamcmd). */
   tail: commandTailSchema.optional(),
 });
 
 /**
- * Open fallback: runs a script via a host shell.
+ * Open fallback: runs a script via a shell INSIDE the game container
+ * (powershell or cmd — the agent has no host-side shell of its own).
  * For everything the declarative actions do not cover.
  */
 const scriptActionSchema = z.object({
   action: z.literal('script'),
-  shell: z.enum(['bash', 'powershell', 'cmd']),
+  shell: z.enum(['powershell', 'cmd']),
   content: z.string().min(1),
-  timeoutMs: z.number().int().positive().optional(),
+  timeout_ms: z.number().int().positive().optional(),
 });
 
 export const runnerActionSchema = z.discriminatedUnion('action', [
@@ -201,7 +198,7 @@ const stopCommandConfigSchema = z.object({
   /** Command written to the server's stdin (e.g. "stop", "quit"). */
   value: z.string().min(1),
   /** Delay before a force kill after the graceful stop. */
-  timeoutMs: z.number().int().positive().default(30000),
+  timeout_ms: z.number().int().positive().default(30000),
 });
 
 const stopSignalConfigSchema = z.object({
@@ -209,7 +206,7 @@ const stopSignalConfigSchema = z.object({
   /** Signal sent to the server process instead of a stdin command. */
   value: z.enum(STOP_SIGNALS),
   /** Delay before a force kill after the graceful stop (SIGKILL skips it). */
-  timeoutMs: z.number().int().positive().default(30000),
+  timeout_ms: z.number().int().positive().default(30000),
 });
 
 export const stopConfigSchema = z.discriminatedUnion('type', [
@@ -236,7 +233,7 @@ export const logsConfigSchema = z.object({
   mode: z.enum(['stdout', 'file']).default('stdout'),
   /** Log file to follow (required if mode = file). */
   file: z.string().optional(),
-  stripAnsi: z.boolean().default(false),
+  strip_ansi: z.boolean().default(false),
 });
 
 export type LogsConfig = z.infer<typeof logsConfigSchema>;
@@ -293,7 +290,7 @@ export const backupConfigSchema = z.object({
   /**
    * Glob patterns of the files/directories included in a backup, relative
    * to the server root (`world`, `plugins/*`, `*.properties`). Absent → the
-   * agent archives the whole install dir except its own `.bin/` tools.
+   * agent archives the whole install dir.
    */
   include: z.array(backupIncludePatternSchema).min(1).max(BACKUP_INCLUDE_MAX_PATTERNS),
 });
@@ -306,30 +303,29 @@ export const startConfigSchema = z.object({
   command: z.string().min(1),
   stop: stopConfigSchema.optional(),
   ready: readyConfigSchema.optional(),
-  workingDirectory: z.string().optional(),
+  working_directory: z.string().optional(),
 });
 
 export type StartConfig = z.infer<typeof startConfigSchema>;
 
-// ─── Full recipe ───────────────────────────────────────────────────────────
+// ─── Full recipe ────────────────────────────────────────────────────────────
 
 export const recipeSchema = z.object({
-  /** Recipe format version — v1 is the only supported one. */
-  schemaVersion: z.literal(1),
+  /** Recipe format version — v3 is the only supported one. */
+  schema_version: z.literal(3),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
-  /**
-   * Recipe kind: 'app' (a game server, with start/backup) or 'runtime'
-   * (a tool like java/steamcmd installed inside the app's install, no
-   * start/backup). Runtime recipes are validated by `runtimeRecipeSchema`,
-   * never here.
-   */
-  type: z.literal('app'),
   name: z.string().min(1),
   author: z.string().min(1),
   description: z.string().optional(),
   tags: z.array(z.string()).default([]),
   /** URL of a recipe update JSON (Pelican's meta.update_url equivalent). */
-  updateUrl: z.string().url().optional(),
+  update_url: z.string().url().optional(),
+  /**
+   * Windows Docker image the server's container is created from — it
+   * carries the runtimes (JDK, steamcmd…); the agent never installs
+   * tools itself, it is image-agnostic.
+   */
+  docker_image: z.string().min(1),
   requirements: recipeRequirementsSchema.optional(),
   variables: z.array(recipeVariableSchema).default([]),
   install: z.array(runnerActionSchema).default([]),
@@ -339,14 +335,6 @@ export const recipeSchema = z.object({
   backup: backupConfigSchema.optional(),
   /** Fixed environment variables injected at spawn. */
   env: z.record(z.string(), z.string()).optional(),
-  /**
-   * Runtime recipes this app requires (by their recipe id/slug) —
-   * needed at INSTALL *and* RUN (any recipe change re-installs the
-   * server, so there is no separate install-time-only lifecycle).
-   * The panel resolves the ids against its recipe table and pushes the
-   * resolved runtime recipes with the install request.
-   */
-  requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')).default([]),
 });
 
 export type Recipe = z.infer<typeof recipeSchema>;
@@ -356,70 +344,6 @@ export type RecipeInput = z.input<typeof recipeSchema>;
 
 /** Input type of a runner action (fields with optional defaults). */
 export type RunnerActionInput = z.input<typeof runnerActionSchema>;
-
-// ─── Runtime recipes ────────────────────────────────────────────────────────
-
-/**
- * What a runtime recipe exports to its dependents (the app and the other
- * runtimes that require it), templated with the runtime's own resolved
- * variables — `{{RUNTIME_DIR}}` points at the runtime's install dir.
- */
-export const runtimeExportSchema = z.object({
-  /** Prepend the runtime's dir to PATH (default true — java/steamcmd binaries). */
-  path: z.boolean().default(true),
-  /** Fixed env exported to the dependents (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
-  env: z.record(z.string(), z.string()).optional(),
-});
-
-export type RuntimeExport = z.infer<typeof runtimeExportSchema>;
-
-/**
- * A RUNTIME recipe: a tool (java, steamcmd…) provisioned inside the
- * app's install by the SAME runner, under the SAME job limits and sandbox
- * as the app's steps — the agent carries no tool-specific code. Minimal
- * by contract: install steps + variables only, NO start/logs/backup, no
- * power actions of its own. A runtime may require other runtimes.
- *
- * Variable resolution: SERVER variables win over the runtime's own
- * defaults — the app declares the user-facing JAVA_VERSION, the runtime
- * declares the fallback default; the agent merges server > runtime.
- */
-export const runtimeRecipeSchema = z.object({
-  schemaVersion: z.literal(1),
-  type: z.literal('runtime'),
-  id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
-  name: z.string().min(1),
-  author: z.string().min(1),
-  description: z.string().optional(),
-  tags: z.array(z.string()).default([]),
-  updateUrl: z.string().url().optional(),
-  requirements: recipeRequirementsSchema.optional(),
-  requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')).default([]),
-  variables: z.array(recipeVariableSchema).default([]),
-  install: z.array(runnerActionSchema).default([]),
-  export: runtimeExportSchema.optional(),
-});
-
-export type RuntimeRecipe = z.infer<typeof runtimeRecipeSchema>;
-
-/** Detects a runtime recipe BEFORE schema validation (dispatches the parse). */
-export function isRuntimeRecipeJson(data: unknown): boolean {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    (data as Record<string, unknown>).type === 'runtime'
-  );
-}
-
-/** Validates a raw JSON object as a runtime recipe. Throws a ZodError. */
-export function parseRuntimeRecipe(data: unknown): RuntimeRecipe {
-  return runtimeRecipeSchema.parse(data);
-}
-
-/** Validates a raw JSON object as a runtime recipe, without throwing. */
-export function safeParseRuntimeRecipe(data: unknown) {
-  return runtimeRecipeSchema.safeParse(data);
-}
 
 // ─── Validation helpers ────────────────────────────────────────────────────
 
@@ -465,7 +389,7 @@ export function findUnknownVariables(recipe: Recipe): string[] {
   };
 
   collectFrom(recipe.start.command);
-  if (recipe.start.workingDirectory) collectFrom(recipe.start.workingDirectory);
+  if (recipe.start.working_directory) collectFrom(recipe.start.working_directory);
   if (recipe.start.ready) collectFrom(recipe.start.ready.pattern);
   if (recipe.start.stop) collectFrom(recipe.start.stop.value);
 

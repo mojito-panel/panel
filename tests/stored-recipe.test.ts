@@ -1,71 +1,64 @@
 import { describe, it, expect } from 'vitest';
-import { parseRecipe, parseRuntimeRecipe } from '../src/contract/recipe-schema';
+import { parseRecipe } from '../src/contract/recipe-schema';
 import { normalizeStoredRecipe } from '../src/lib/stored-recipe';
 
 /**
- * Stored recipes saved before the v1 cutover carry schemaVersion 2/3 (and
- * v2 has no `type`) — every read path upgrades them in memory, so they
- * must come out valid against the v1 contract.
+ * Stored recipes saved before the v3 cutover carry schema_version 1|2 plus
+ * the legacy `type`/`requires` fields — every read path upgrades them in
+ * memory, so they must come out shaped for the v3 contract. A legacy recipe
+ * still missing `docker_image` is NOT fixed in memory (the agent rejects
+ * the install — the recipe must be rewritten for containers).
  */
 describe('normalizeStoredRecipe', () => {
-  const v2App = {
-    schemaVersion: 2,
+  const v1App = {
+    schema_version: 1,
+    type: 'app',
     id: 'vanilla',
     name: 'Vanilla',
     author: 'mojito',
+    docker_image: 'ghcr.io/mojito/windows-jdk21:latest',
+    requires: ['java'],
     start: { command: 'java -jar server.jar' },
   };
 
-  it('upgrades a stored v2 recipe (no type) to a v1 app recipe', () => {
-    const normalized = normalizeStoredRecipe(v2App);
-    expect(normalized.schemaVersion).toBe(1);
-    expect(normalized.type).toBe('app');
+  it('upgrades a stored v1 recipe to the v3 shape (type/requires stripped)', () => {
+    const normalized = normalizeStoredRecipe(v1App);
+    expect(normalized.schema_version).toBe(3);
+    expect(normalized.type).toBeUndefined();
+    expect(normalized.requires).toBeUndefined();
     expect(() => parseRecipe(normalized)).not.toThrow();
   });
 
-  it('upgrades a stored v3 app recipe to v1 (type and requires kept)', () => {
+  it('upgrades a stored v2 recipe (no type) to the v3 shape', () => {
     const normalized = normalizeStoredRecipe({
-      ...v2App,
-      schemaVersion: 3,
-      type: 'app',
-      requires: ['java'],
-    });
-    expect(normalized.schemaVersion).toBe(1);
-    expect(normalized.type).toBe('app');
-    expect(normalized.requires).toEqual(['java']);
-    expect(() => parseRecipe(normalized)).not.toThrow();
-  });
-
-  it('upgrades a stored v3 runtime recipe to v1 (type kept)', () => {
-    const normalized = normalizeStoredRecipe({
-      schemaVersion: 3,
-      type: 'runtime',
-      id: 'java',
-      name: 'Java',
+      schema_version: 2,
+      id: 'vanilla',
+      name: 'Vanilla',
       author: 'mojito',
-      install: [],
+      docker_image: 'ghcr.io/mojito/windows-jdk21:latest',
+      start: { command: 'java -jar server.jar' },
     });
-    expect(normalized.schemaVersion).toBe(1);
-    expect(normalized.type).toBe('runtime');
-    expect(() => parseRuntimeRecipe(normalized)).not.toThrow();
+    expect(normalized.schema_version).toBe(3);
+    expect(() => parseRecipe(normalized)).not.toThrow();
   });
 
-  it('returns an already-v1 recipe untouched (same reference)', () => {
-    const v1 = {
-      schemaVersion: 1,
-      type: 'app',
+  it('returns an already-v3 recipe untouched (same reference)', () => {
+    const v3 = {
+      schema_version: 3,
       id: 'x',
       name: 'n',
       author: 'a',
+      docker_image: 'img',
       start: { command: 'c' },
     };
-    expect(normalizeStoredRecipe(v1)).toBe(v1);
+    expect(normalizeStoredRecipe(v3)).toBe(v3);
   });
 
   it('does not mutate the stored JSON', () => {
-    const stored = { ...v2App };
+    const stored = { ...v1App };
     normalizeStoredRecipe(stored);
-    expect(stored.schemaVersion).toBe(2);
-    expect(stored.type).toBeUndefined();
+    expect(stored.schema_version).toBe(1);
+    expect(stored.type).toBe('app');
+    expect(stored.requires).toEqual(['java']);
   });
 });

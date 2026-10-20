@@ -44,8 +44,7 @@ function NewServerPage() {
   });
 
   const nodes = nodesQuery.data ?? [];
-  // Only apps can be installed as a server — runtimes are picked by the editor.
-  const recipes = (recipesQuery.data ?? []).filter((recipe) => recipe.type === 'app');
+  const recipes = recipesQuery.data ?? [];
 
   const mutation = useMutation({
     mutationFn: async (data: CreateServerDto) => {
@@ -95,7 +94,7 @@ function NewServerPage() {
     form.setFieldValue('recipeId', recipeId);
     const recipe = recipes.find((p) => p.id === recipeId);
     for (const variable of recipe?.variables ?? []) {
-      form.setFieldValue(`variables.${variable.env}`, variable.defaultValue);
+      form.setFieldValue(`variables.${variable.env}`, variable.default_value);
     }
   };
 
@@ -306,7 +305,7 @@ function NewServerPage() {
               {(recipeId) => {
                 const recipe = recipes.find((p) => p.id === recipeId);
                 const recipeVariables = (recipe?.variables ?? [])
-                  .filter((v) => v.userViewable && v.userEditable)
+                  .filter((v) => v.user_viewable && v.user_editable)
                   .sort((a, b) => a.sort - b.sort);
                 if (recipeVariables.length === 0) return null;
                 return (

@@ -73,22 +73,22 @@ const serversList: DefinedList<Row> = defineList<Row>({
   },
 });
 
-/** Raw-fragment target (the recipe `type` filter reading a JSON column). */
+/** Raw-fragment target (a JSON column filter, e.g. the recipe docker image). */
 const recipesList: DefinedList<Row> = defineList<Row>({
   name: 'test-recipes',
   alias: 'r',
   defaultSort: { column: 'name', desc: false },
   columns: {
     name: { header: 'Recette', cell: (row) => row.name, sort: field('name') },
-    type: {
-      header: 'Type',
+    image: {
+      header: 'Image',
       cell: (row) => row.status,
       filter: {
         control: 'choice',
-        target: expr(`"r"."json"->>'type'`),
+        target: expr(`"r"."json"->>'docker_image'`),
         options: [
-          { value: 'app', label: 'Application' },
-          { value: 'runtime', label: 'Runtime' },
+          { value: 'ghcr.io/mojito/windows-jdk21:latest', label: 'JDK 21' },
+          { value: 'ghcr.io/mojito/steamcmd:latest', label: 'SteamCMD' },
         ],
       },
     },
@@ -362,8 +362,8 @@ describe('mikroORM mapping', () => {
   });
 
   it('filters on a raw fragment target (JSON column)', () => {
-    const sql = sqlOf(recipesList, { type: 'app' });
-    expect(sql).toContain(`"r"."json"->>'type' = 'app'`);
+    const sql = sqlOf(recipesList, { image: 'ghcr.io/mojito/windows-jdk21:latest' });
+    expect(sql).toContain(`"r"."json"->>'docker_image' = 'ghcr.io/mojito/windows-jdk21:latest'`);
   });
 
   it('filters a nullable column on both states', () => {

@@ -6,11 +6,8 @@ import { orm } from './orm';
 import { HttpError } from './session';
 import {
   parseRecipe,
-  parseRuntimeRecipe,
-  isRuntimeRecipeJson,
   recipeVariableSchema,
   type Recipe as RecipeDefinition,
-  type RuntimeRecipe,
   type RecipeVariable,
 } from '~/contract';
 
@@ -20,14 +17,9 @@ import {
  * request context (the `withOrmContext` middleware).
  */
 
-/** Parses raw JSON and validates it against the contract (app or runtime recipe). */
-export function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
+/** Parses raw JSON and validates it against the contract (recipe v3). */
+export function parseRecipeJson(raw: string): RecipeDefinition {
   const parsed: unknown = JSON.parse(raw);
-  // Runtime recipes have their own schema (no start/backup) — dispatch
-  // before the app schema, which rejects them (start is required there).
-  if (isRuntimeRecipeJson(parsed)) {
-    return parseRuntimeRecipe(parsed);
-  }
   return parseRecipe(parsed);
 }
 
@@ -40,7 +32,7 @@ export function recipeErrorMessage(err: unknown): string {
 }
 
 /** Validates a raw recipe string, mapping the error to a 400 HttpError. */
-export function assertValidRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
+export function assertValidRecipeJson(raw: string): RecipeDefinition {
   try {
     return parseRecipeJson(raw);
   } catch (err) {
@@ -53,7 +45,7 @@ export function assertValidRecipeJson(raw: string): RecipeDefinition | RuntimeRe
  * a re-import updates the definition, like Pelican eggs).
  */
 export async function upsertRecipe(
-  recipeJson: RecipeDefinition | RuntimeRecipe,
+  recipeJson: RecipeDefinition,
 ): Promise<{ slug: string; name: string; created: boolean }> {
   const em = orm.em;
   const existing = await em.findOne(Recipe, { slug: recipeJson.id });
@@ -61,7 +53,7 @@ export async function upsertRecipe(
 
   if (existing) {
     existing.name = recipeJson.name;
-    existing.schemaVersion = recipeJson.schemaVersion;
+    existing.schemaVersion = recipeJson.schema_version;
     existing.json = recipeJson;
     existing.updatedAt = now;
     await em.flush();
@@ -72,7 +64,7 @@ export async function upsertRecipe(
     id: nanoid(),
     slug: recipeJson.id,
     name: recipeJson.name,
-    schemaVersion: recipeJson.schemaVersion,
+    schemaVersion: recipeJson.schema_version,
     json: recipeJson,
     createdAt: now,
     updatedAt: now,
@@ -88,7 +80,7 @@ export async function upsertRecipe(
  * silently overwriting.
  */
 export async function createRecipe(
-  recipeJson: RecipeDefinition | RuntimeRecipe,
+  recipeJson: RecipeDefinition,
 ): Promise<{ id: string; slug: string; name: string }> {
   const em = orm.em;
 
@@ -102,7 +94,7 @@ export async function createRecipe(
     id: nanoid(),
     slug: recipeJson.id,
     name: recipeJson.name,
-    schemaVersion: recipeJson.schemaVersion,
+    schemaVersion: recipeJson.schema_version,
     json: recipeJson,
     createdAt: now,
     updatedAt: now,
@@ -119,7 +111,7 @@ export async function createRecipe(
  */
 export async function updateRecipe(
   recipeId: string,
-  recipeJson: RecipeDefinition | RuntimeRecipe,
+  recipeJson: RecipeDefinition,
 ): Promise<{ id: string; slug: string; name: string }> {
   const em = orm.em;
 
@@ -134,7 +126,7 @@ export async function updateRecipe(
   }
 
   recipe.name = recipeJson.name;
-  recipe.schemaVersion = recipeJson.schemaVersion;
+  recipe.schemaVersion = recipeJson.schema_version;
   recipe.json = recipeJson;
   recipe.updatedAt = new Date();
   await em.flush();

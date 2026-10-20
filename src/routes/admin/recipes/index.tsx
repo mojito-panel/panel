@@ -17,6 +17,7 @@ import { Plus, Upload } from 'lucide-react';
 import {
   listRecipesFn,
   importRecipesFn,
+  importEggFn,
   getRecipeFn,
   deleteRecipeFn,
 } from '~/server/functions/admin';
@@ -57,6 +58,7 @@ function AdminRecipesPage() {
 
   const listRecipes = useServerFn(listRecipesFn);
   const importRecipes = useServerFn(importRecipesFn);
+  const importEgg = useServerFn(importEggFn);
   const getRecipe = useServerFn(getRecipeFn);
   const deleteRecipe = useServerFn(deleteRecipeFn);
 
@@ -71,6 +73,21 @@ function AdminRecipesPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
     },
+  });
+
+  const importEggMutation = useMutation({
+    mutationFn: async (input: { json: string }) => {
+      const result = await importEgg({ data: input });
+      return result;
+    },
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      toast.success(`Œuf « ${result.name} » importé (${result.created ? 'créé' : 'mis à jour'})`);
+      // The egg never maps fully (install scripts, features…) — every
+      // warning is shown so the admin knows what to complete.
+      for (const warning of result.warnings) toast.warning(warning);
+    },
+    onError: (error) => toast.error(error.message),
   });
 
   const remove = useMutation({
@@ -102,6 +119,19 @@ function AdminRecipesPage() {
     const files = formData
       .getAll('recipeFiles')
       .filter((f): f is File => f instanceof File && f.size > 0);
+
+    // Egg import (PTDL_v2) — independent of the recipe JSONs above.
+    const eggText = String(formData.get('eggJson') ?? '').trim();
+    const eggFiles = formData
+      .getAll('eggFiles')
+      .filter((f): f is File => f instanceof File && f.size > 0);
+    if (eggText || eggFiles.length > 0) {
+      importEggMutation.reset();
+      const eggContents = await Promise.all(eggFiles.map((f) => f.text()));
+      for (const json of [eggText, ...eggContents].filter((s) => s.length > 0)) {
+        importEggMutation.mutate({ json });
+      }
+    }
 
     if (!rawText && !url && files.length === 0) return;
 
@@ -139,7 +169,7 @@ function AdminRecipesPage() {
         <CardHeader>
           <CardTitle>Recettes</CardTitle>
           <CardDescription>
-            Eggs (format v1, compatible Pelican-like) installables sur les serveurs.
+            Recettes (format v3, œufs Pelican importables) installables sur les serveurs.
           </CardDescription>
           <CardAction>
             <div className="flex gap-2">
@@ -206,7 +236,7 @@ function AdminRecipesPage() {
                   id="recipeJson"
                   name="recipeJson"
                   rows={8}
-                  placeholder={'{\n  "schemaVersion": 1,\n  "type": "app",\n  "id": "ma-recette",\n  …'}
+                  placeholder={'{\n  "schema_version": 3,\n  "id": "ma-recette",\n  …'}
                   className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
                 />
               </div>
@@ -233,6 +263,32 @@ function AdminRecipesPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Les URLs GitHub (blob) sont converties en raw automatiquement.
+                </p>
+              </div>
+
+              {/* ─── Egg import (PTDL_v2) — mapped, install scripts ignored ─── */}
+              <div className="space-y-2 rounded-md border p-3">
+                <Label htmlFor="eggJson">Œuf Pelican (PTDL_v2, texte)</Label>
+                <textarea
+                  id="eggJson"
+                  name="eggJson"
+                  rows={4}
+                  placeholder={'{\n  "meta": { "version": "PTDL_v2" },\n  …'}
+                  className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
+                />
+                <Label htmlFor="eggFiles">Fichiers d'œuf (.json)</Label>
+                <input
+                  id="eggFiles"
+                  name="eggFiles"
+                  type="file"
+                  multiple
+                  accept=".json,application/json"
+                  className="flex w-full rounded-md border border-input bg-background p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-xs file:text-secondary-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Variables, démarrage/arrêt, fichiers de config et image Docker sont
+                  importés — les scripts d'installation sont ignorés (la section
+                  Installation est à réécrire avec les actions déclaratives).
                 </p>
               </div>
 

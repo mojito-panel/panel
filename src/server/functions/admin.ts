@@ -51,11 +51,13 @@ import {
 } from '~/validators/node';
 import {
   importRecipesSchema,
+  importEggSchema,
   getRecipeSchema,
   createRecipeSchema,
   updateRecipeSchema,
   deleteRecipeSchema,
 } from '~/validators/recipe';
+import { importEgg } from '~/contract/egg-import';
 import type { RecipeVariable } from '~/contract';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
@@ -442,8 +444,7 @@ async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
 
 /**
  * Admin recipe list (/admin/recipes) — filter/sort/pagination run in the
- * database (`adminRecipesList`). The recipe kind lives only in the JSON payload
- * (`json->>'type'`), which the `type` filter query reads for equality.
+ * database (`adminRecipesList`).
  */
 export const listRecipesFn = createServerFn({ method: 'POST' })
   .validator(adminRecipesList.querySchema)
@@ -464,11 +465,12 @@ export const listRecipesFn = createServerFn({ method: 'POST' })
         id: recipe.id,
         slug: recipe.slug,
         name: recipe.name,
-        type: recipe.json.type === 'runtime' ? 'runtime' : 'app',
+        dockerImage:
+          typeof recipe.json.docker_image === 'string' ? recipe.json.docker_image : '',
         /** Number of declared variables (auto-generated form at creation). */
         variableCount: storedRecipeVariables(recipe.json).length,
         updateUrl:
-          typeof recipe.json.updateUrl === 'string' ? recipe.json.updateUrl : null,
+          typeof recipe.json.update_url === 'string' ? recipe.json.update_url : null,
         createdAt: recipe.createdAt,
         updatedAt: recipe.updatedAt,
       })),
@@ -476,9 +478,8 @@ export const listRecipesFn = createServerFn({ method: 'POST' })
   });
 
 /**
- * Picker options: the FULL recipe set (apps AND runtimes) with their variable
- * definitions — used by the server creation form (apps) and the recipe editor's
- * runtime picker (runtimes). Unpaginated, unlike `listRecipesFn`.
+ * Picker options: the FULL recipe set with their variable definitions —
+ * used by the server creation form. Unpaginated, unlike `listRecipesFn`.
  */
 export const listRecipeOptionsFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
@@ -490,13 +491,11 @@ export const listRecipeOptionsFn = createServerFn({ method: 'GET' })
         id: string;
         slug: string;
         name: string;
-        type: 'app' | 'runtime';
         variables: RecipeVariable[];
       } => ({
         id: recipe.id,
         slug: recipe.slug,
         name: recipe.name,
-        type: recipe.json.type === 'runtime' ? 'runtime' : 'app',
         variables: storedRecipeVariables(recipe.json),
       }),
     );
@@ -535,6 +534,37 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
     }
 
     return { imported, failed };
+  });
+
+/**
+ * PTDL_v2 (Pelican egg) import: maps the egg to a recipe v3 and upserts
+ * it. The mapping warnings (install scripts ignored, unsupported parsers…)
+ * travel back to the UI — the admin completes the install section with
+ * the declarative actions.
+ */
+export const importEggFn = createServerFn({ method: 'POST' })
+  .validator(importEggSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.recipes': ['create'] });
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data.json);
+    } catch {
+      throw new HttpError(400, 'JSON invalide');
+    }
+
+    let recipeJson;
+    let warnings: string[];
+    try {
+      ({ recipe: recipeJson, warnings } = importEgg(parsed));
+    } catch (err) {
+      throw new HttpError(400, `Œuf invalide : ${recipeErrorMessage(err)}`);
+    }
+
+    const saved = await upsertRecipe(recipeJson);
+    return { ...saved, warnings };
   });
 
 export const getRecipeFn = createServerFn({ method: 'POST' })

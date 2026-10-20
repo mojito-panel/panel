@@ -525,7 +525,6 @@ function ActionCard({
                             <SelectContent>
                               <SelectItem value="powershell">powershell</SelectItem>
                               <SelectItem value="cmd">cmd</SelectItem>
-                              <SelectItem value="bash">bash</SelectItem>
                             </SelectContent>
                           </Select>
                         </FieldShell>

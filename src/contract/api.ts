@@ -33,7 +33,7 @@ export type Id = z.infer<typeof idSchema>;
 export const serverAllocationSchema = z.object({
   port: z.number().int().positive(),
   memoryMb: z.number().int().positive(),
-  /** CPU limit in cores — Job Object CPU rate (0 = unlimited, halves OK: 1.5). */
+  /** CPU limit in cores (0 = unlimited, halves OK: 1.5). */
   cpuCores: z.number().min(0).max(1024).default(0),
   ip: z.string().default('0.0.0.0'),
 });
@@ -44,13 +44,6 @@ export const installServerRequestSchema = z.object({
   serverId: idSchema,
   name: z.string().min(1),
   recipe: z.unknown(), // Recipe validated on the panel side, passed as-is
-  /**
-   * The runtime recipes resolved from the app's `requires` (panel
-   * side, transitively, in no particular order) — the agent re-sorts
-   * them topologically and validates the graph closure. Empty = no
-   * runtime required.
-   */
-  runtimes: z.array(z.unknown()).optional(),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   installDir: z.string().min(1),
   allocation: serverAllocationSchema,
@@ -67,8 +60,6 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
 export const reinstallServerRequestSchema = z.object({
   serverId: idSchema,
   recipe: z.unknown(), // Recipe validated by the agent, passed as-is
-  /** Resolved runtime recipes — same as the install request. */
-  runtimes: z.array(z.unknown()).optional(),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 

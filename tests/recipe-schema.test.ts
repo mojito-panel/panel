@@ -7,31 +7,30 @@ import {
   findUnknownVariables,
   validateVariableValue,
   validateBackupIncludePattern,
-  type Recipe,
 } from '../src/contract/recipe-schema';
 
 /**
- * Paper-style egg — covers all recipe features:
+ * Paper-style egg — covers all recipe v3 features:
  * UPPERCASE env variables, system variables, configFile parser,
- * ready detection with strip, logs, runtime, fixed env.
+ * ready detection with strip, logs, docker image, fixed env.
  */
 const validPaperRecipe = {
-  schemaVersion: 1 as const,
-  type: 'app' as const,
+  schema_version: 3 as const,
   id: 'minecraft-paper',
   name: 'Paper',
   author: 'papermc',
   description: 'High performance Spigot fork.',
   tags: ['minecraft', 'java'],
-  requirements: { minRamMb: 512, requiredCommands: ['java'] },
+  docker_image: 'ghcr.io/mojito/windows-jdk21:latest',
+  requirements: { min_ram_mb: 512, required_commands: ['java'] },
   variables: [
     {
       env: 'MINECRAFT_VERSION',
       name: 'Minecraft Version',
       type: 'string' as const,
-      defaultValue: 'latest',
-      userViewable: true,
-      userEditable: true,
+      default_value: 'latest',
+      user_viewable: true,
+      user_editable: true,
       sort: 0,
       required: true,
     },
@@ -39,20 +38,20 @@ const validPaperRecipe = {
       env: 'SERVER_JARFILE',
       name: 'Server Jar File',
       type: 'string' as const,
-      defaultValue: 'server.jar',
-      userViewable: true,
-      userEditable: true,
+      default_value: 'server.jar',
+      user_viewable: true,
+      user_editable: true,
       sort: 1,
       required: true,
-      pattern: '^([\w\d._-]+)(\.jar)$',
+      pattern: '^([\\w\\d._-]+)(\\.jar)$',
     },
     {
       env: 'BUILD_NUMBER',
       name: 'Build Number',
       type: 'string' as const,
-      defaultValue: 'latest',
-      userViewable: false,
-      userEditable: false,
+      default_value: 'latest',
+      user_viewable: false,
+      user_editable: false,
       sort: 2,
     },
   ],
@@ -73,10 +72,10 @@ const validPaperRecipe = {
   ],
   start: {
     command: 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}',
-    stop: { type: 'command' as const, value: 'stop', timeoutMs: 30000 },
-    ready: { pattern: 'Done \([0-9.]+s\)! For help', strip: '\[.*?\] ' },
+    stop: { type: 'command' as const, value: 'stop', timeout_ms: 30000 },
+    ready: { pattern: 'Done \\([0-9.]+s\\)! For help', strip: '\\[.*?\\] ' },
   },
-  logs: { mode: 'stdout' as const, stripAnsi: true },
+  logs: { mode: 'stdout' as const, strip_ansi: true },
   env: { JAVA_OPTS: '-XX:+UseG1GC' },
 };
 
@@ -86,14 +85,14 @@ describe('recipeSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects an incorrect schemaVersion', () => {
-    const result = recipeSchema.safeParse({ ...validPaperRecipe, schemaVersion: 2 });
+  it('rejects an incorrect schema_version', () => {
+    const result = recipeSchema.safeParse({ ...validPaperRecipe, schema_version: 2 });
     expect(result.success).toBe(false);
   });
 
-  it('rejects a missing type', () => {
-    const { type: _type, ...withoutType } = validPaperRecipe;
-    const result = recipeSchema.safeParse(withoutType);
+  it('rejects a missing docker image', () => {
+    const { docker_image: _image, ...withoutImage } = validPaperRecipe;
+    const result = recipeSchema.safeParse(withoutImage);
     expect(result.success).toBe(false);
   });
 
@@ -105,7 +104,7 @@ describe('recipeSchema', () => {
   it('rejects a variable with a lowercase env name', () => {
     const result = recipeSchema.safeParse({
       ...validPaperRecipe,
-      variables: [{ env: 'version', name: 'Version', type: 'string', defaultValue: 'latest' }],
+      variables: [{ env: 'version', name: 'Version', type: 'string', default_value: 'latest' }],
     });
     expect(result.success).toBe(false);
   });
@@ -113,7 +112,7 @@ describe('recipeSchema', () => {
   it('rejects a variable using a reserved system name', () => {
     const result = recipeSchema.safeParse({
       ...validPaperRecipe,
-      variables: [{ env: 'SERVER_MEMORY', name: 'RAM', type: 'number', defaultValue: 1024 }],
+      variables: [{ env: 'SERVER_MEMORY', name: 'RAM', type: 'number', default_value: 1024 }],
     });
     expect(result.success).toBe(false);
   });
@@ -126,12 +125,20 @@ describe('recipeSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects a bash script (Windows shells only)', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
+      install: [{ action: 'script', shell: 'bash', content: 'echo hello' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects a variable with a duplicated env', () => {
     const result = recipeSchema.safeParse({
       ...validPaperRecipe,
       variables: [
-        { env: 'MINECRAFT_VERSION', name: 'V1', type: 'string', defaultValue: 'a' },
-        { env: 'MINECRAFT_VERSION', name: 'V2', type: 'string', defaultValue: 'b' },
+        { env: 'MINECRAFT_VERSION', name: 'V1', type: 'string', default_value: 'a' },
+        { env: 'MINECRAFT_VERSION', name: 'V2', type: 'string', default_value: 'b' },
       ],
     });
     // No uniqueness constraint at the Zod level (checked by the panel on import)
@@ -140,11 +147,11 @@ describe('recipeSchema', () => {
 
   it('accepts a minimal recipe (no install, no variables)', () => {
     const minimal = {
-      schemaVersion: 1 as const,
-      type: 'app' as const,
+      schema_version: 3 as const,
       id: 'test',
       name: 'Test',
       author: 'me',
+      docker_image: 'mcr.microsoft.com/windows/servercore:ltsc2022',
       start: { command: 'echo hello' },
     };
     const result = recipeSchema.safeParse(minimal);
@@ -183,7 +190,7 @@ describe('recipeSchema', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.start.stop?.value).toBe(value);
-        expect(result.data.start.stop?.timeoutMs).toBe(30000);
+        expect(result.data.start.stop?.timeout_ms).toBe(30000);
       }
     }
   });
@@ -199,13 +206,13 @@ describe('recipeSchema', () => {
   it('applies Pelican-style defaults to variables', () => {
     const result = recipeSchema.safeParse({
       ...validPaperRecipe,
-      variables: [{ env: 'SIMPLE', name: 'Simple', type: 'string', defaultValue: 'x' }],
+      variables: [{ env: 'SIMPLE', name: 'Simple', type: 'string', default_value: 'x' }],
     });
     expect(result.success).toBe(true);
     if (result.success) {
       const v = result.data.variables[0];
-      expect(v.userViewable).toBe(true);
-      expect(v.userEditable).toBe(true);
+      expect(v.user_viewable).toBe(true);
+      expect(v.user_editable).toBe(true);
       expect(v.sort).toBe(0);
       expect(v.required).toBe(false);
     }
@@ -276,7 +283,7 @@ describe('findUnknownVariables', () => {
 });
 
 describe('validateVariableValue (Laravel rules equivalent)', () => {
-  const base = { env: 'RAM_MB', name: 'RAM', type: 'number' as const, defaultValue: 1024 };
+  const base = { env: 'RAM_MB', name: 'RAM', type: 'number' as const, default_value: 1024 };
 
   it('validates a number within bounds', () => {
     expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 2048)).toBeNull();
@@ -296,7 +303,7 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
       env: 'JAR',
       name: 'Jar',
       type: 'string' as const,
-      defaultValue: 'server.jar',
+      default_value: 'server.jar',
       pattern: /^([\w\d._-]+)(\.jar)$/.source,
     };
     expect(validateVariableValue(varDef, 'server.jar')).toBeNull();
@@ -308,7 +315,7 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
       env: 'DIFFICULTY',
       name: 'Difficulty',
       type: 'string' as const,
-      defaultValue: 'normal',
+      default_value: 'normal',
       options: ['easy', 'normal', 'hard'],
     };
     expect(validateVariableValue(varDef, 'normal')).toBeNull();
@@ -318,11 +325,11 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
 
 describe('backup config (recipe-declared archive contents)', () => {
   const base = {
-    schemaVersion: 1 as const,
-    type: 'app' as const,
+    schema_version: 3 as const,
     id: 'backup-recipe',
     name: 'Backup',
     author: 'me',
+    docker_image: 'mcr.microsoft.com/windows/servercore:ltsc2022',
     start: { command: 'java -jar app.jar' },
   };
 

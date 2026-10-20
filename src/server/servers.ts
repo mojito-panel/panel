@@ -21,7 +21,6 @@ import {
  * `withOrmContext` middleware) — they use the request-scoped EM via
  * `orm.em`, NEVER a manual `fork()`.
  */
-import { resolveRuntimeRecipes } from './functions/runtimes';
 
 /** Loads the node hosting a server (500 when its row is gone). */
 export async function requireNodeOf(server: { nodeId: string }): Promise<INode> {
@@ -157,7 +156,6 @@ export async function installServer(
       serverId,
       name: input.name,
       recipe: normalizeStoredRecipe(recipe.json),
-      runtimes: await resolveRuntimeRecipes(em, recipe.json),
       variables: input.variables,
       installDir: `servers/${serverId}`,
       allocation: {

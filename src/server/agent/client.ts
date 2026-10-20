@@ -118,8 +118,6 @@ export async function agentInstallServer(
     serverId: string;
     name: string;
     recipe: unknown;
-    /** Resolved runtime recipes (panel-side graph walk). */
-    runtimes?: unknown[];
     variables: Record<string, string | number | boolean>;
     installDir: string;
     allocation: { port: number; memoryMb: number; cpuCores: number; ip?: string };
@@ -155,14 +153,12 @@ export async function agentReinstallServer(
   serverId: string,
   body: {
     recipe: unknown;
-    /** Resolved runtime recipes (panel-side graph walk). */
-    runtimes?: unknown[];
     variables: Record<string, string | number | boolean>;
   },
 ): Promise<AgentReinstallResponse> {
   return agentCall(node, `/servers/${serverId}/reinstall`, {
     method: 'POST',
-    body: { recipe: body.recipe, runtimes: body.runtimes ?? [], variables: body.variables },
+    body: { recipe: body.recipe, variables: body.variables },
   });
 }
 

@@ -1,17 +1,14 @@
 import { Link } from '@tanstack/react-router';
 import { Download, Pencil, RefreshCw } from 'lucide-react';
-import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { defineList, expr, field } from '~/lists/define';
+import { defineList, field } from '~/lists/define';
 
 /**
  * /admin/recipes — every recipe imported in the panel (Pelican "Eggs").
  *
  * One definition for the whole page: the columns below are what the table
  * renders AND what the query may filter/sort on. Filtering, sorting and
- * pagination run in the database; the previous version loaded every recipe and
- * filtered the kind client-side. The recipe kind lives ONLY in the JSON payload
- * (`json->>'type'`), hence the raw fragment target.
+ * pagination run in the database.
  */
 
 /** Row of the admin recipes list (what the server function returns). */
@@ -19,7 +16,7 @@ export interface AdminRecipeRow {
   id: string;
   name: string;
   slug: string;
-  type: 'app' | 'runtime';
+  dockerImage: string;
   variableCount: number;
   updateUrl: string | null;
   createdAt: Date;
@@ -57,22 +54,16 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
         </div>
       ),
     },
-    type: {
-      header: 'Type',
+    image: {
+      header: 'Image',
       cell: (recipe) => (
-        <Badge variant={recipe.type === 'runtime' ? 'default' : 'secondary'}>
-          {recipe.type === 'runtime' ? 'Runtime' : 'Application'}
-        </Badge>
+        <span
+          className="block max-w-xs truncate font-mono text-xs text-muted-foreground"
+          title={recipe.dockerImage}
+        >
+          {recipe.dockerImage || '—'}
+        </span>
       ),
-      // The kind lives only in the JSON payload: equality on the JSON path.
-      filter: {
-        control: 'choice',
-        target: expr(`"r"."json"->>'type'`),
-        options: [
-          { value: 'app', label: 'Application' },
-          { value: 'runtime', label: 'Runtime' },
-        ],
-      },
     },
     variables: {
       header: 'Variables',
