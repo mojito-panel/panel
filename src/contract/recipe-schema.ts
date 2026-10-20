@@ -326,6 +326,12 @@ export const recipeSchema = z.object({
    * tools itself, it is image-agnostic.
    */
   docker_image: z.string().min(1),
+  /**
+   * Pelican egg syntax: label → image, rendered by the panel as the
+   * per-server Docker Image dropdown. The selected image is stored per
+   * server and pushed to the agent as the recipe's docker_image.
+   */
+  docker_images: z.record(z.string(), z.string()).optional(),
   requirements: recipeRequirementsSchema.optional(),
   variables: z.array(recipeVariableSchema).default([]),
   install: z.array(runnerActionSchema).default([]),
