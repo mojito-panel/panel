@@ -13,6 +13,18 @@ export const adminServerIdSchema = z.object({
 export type AdminServerIdDto = z.infer<typeof adminServerIdSchema>;
 
 /**
+ * Deletion — `force` is the dead-node escape hatch: the agent cleanup is
+ * skipped when the agent is unreachable, the leftover install is
+ * reconciled once the node answers again.
+ */
+export const adminDeleteServerSchema = z.object({
+  serverId: z.string().min(1),
+  force: z.boolean().optional(),
+});
+
+export type AdminDeleteServerDto = z.infer<typeof adminDeleteServerSchema>;
+
+/**
  * Update form (Pelican "information" + "environment configuration" tabs,
  * adapted): identity + owner transfer + resource limits. The wire schema —
  * the form reuses it and adds the serverId at submit time.

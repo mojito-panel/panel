@@ -187,8 +187,16 @@ export async function installServer(
  * Deletes a server: agent cleanup first (tolerant on 404), then DB —
  * allocations return to the node's free pool, sub-user grants and backup
  * rows die with the server. Same identity map all along.
+ *
+ * `force` (the "node is dead" escape hatch): when the agent is UNREACHABLE
+ * (or answers with any non-404 error) the deletion proceeds anyway — the
+ * panel DB is the source of truth, and the leftover agent-side install is
+ * cleaned up by `reconcileNodeServers` once the node answers again.
  */
-export async function deleteServer(server: IServer): Promise<void> {
+export async function deleteServer(
+  server: IServer,
+  options: { force?: boolean } = {},
+): Promise<void> {
   const em = orm.em;
   const node = await em.findOne(Node, { id: server.nodeId });
 
@@ -198,7 +206,9 @@ export async function deleteServer(server: IServer): Promise<void> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (!(err instanceof AgentError) || err.statusCode !== 404) {
-        throw new HttpError(502, `Suppression échouée côté agent : ${message}`);
+        if (!options.force) {
+          throw new HttpError(502, `Suppression échouée côté agent : ${message}`);
+        }
       }
     }
   }

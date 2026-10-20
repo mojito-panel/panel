@@ -55,12 +55,17 @@ function AdminServersPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (server: AdminServerRow) => deleteServer({ data: { serverId: server.id } }),
+    mutationFn: (input: { server: AdminServerRow; force?: boolean }) =>
+      deleteServer({ data: { serverId: input.server.id, force: input.force } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-servers'] });
       toast.success('Serveur supprimé');
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error, input) => {
+      toast.error(error.message);
+      // Agent unreachable → offer the force retry for THIS row.
+      if (input && !input.force) setForceTarget(input.server);
+    },
   });
 
   // Search updates write the WHOLE validated query back (reducer form would
@@ -70,6 +75,10 @@ function AdminServersPage() {
 
   // Pending deletion target — the ConfirmDialog renders on top of it.
   const [serverToDelete, setServerToDelete] = useState<AdminServerRow | null>(null);
+
+  // Row whose deletion failed against an unreachable agent — the force
+  // dialog offers the panel-only retry.
+  const [forceTarget, setForceTarget] = useState<AdminServerRow | null>(null);
 
 
   return (
@@ -106,12 +115,29 @@ function AdminServersPage() {
           if (!open) setServerToDelete(null);
         }}
         onConfirm={() => {
-          if (serverToDelete) remove.mutate(serverToDelete);
+          if (serverToDelete) remove.mutate({ server: serverToDelete });
           setServerToDelete(null);
         }}
         title={`Supprimer « ${serverToDelete?.name} » ?`}
         description="Le dossier sera effacé sur le node."
         confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
+
+      <ConfirmDialog
+        open={forceTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setForceTarget(null);
+        }}
+        onConfirm={() => {
+          if (forceTarget) remove.mutate({ server: forceTarget, force: true });
+          setForceTarget(null);
+        }}
+        title={`Supprimer « ${forceTarget?.name} » sans l’agent ?`}
+        description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."
+        confirmLabel="Supprimer quand même"
         cancelLabel="Annuler"
         destructive
         pending={remove.isPending}

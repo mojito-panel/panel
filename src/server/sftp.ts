@@ -1,12 +1,11 @@
 import '@tanstack/react-start/server-only';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { verifyPassword } from 'better-auth/crypto';
 import { orm, runWithOrmContext } from './orm';
-import { Account, Node, Server, User } from '~/db/entities';
+import { Account, Server, User } from '~/db/entities';
 import { sftpAuthRequestSchema } from '~/contract';
 import { toSftpPermissions } from '~/lib/permissions';
 import { parseSftpUsername } from '~/lib/sftp';
-import { decryptSecret } from './crypto';
+import { findNodeByToken } from './node-token';
 import { loadServerForViewer } from './session';
 
 /**
@@ -27,34 +26,6 @@ import { loadServerForViewer } from './session';
 /** Uniform failure reply (JSON, French message shown by SFTP clients). */
 function reject(): Response {
   return Response.json({ error: 'Identifiants SFTP invalides' }, { status: 403 });
-}
-
-/** SHA-256 of a secret — equalizes lengths for the constant-time compare. */
-function sha256(value: string): Buffer {
-  return createHash('sha256').update(value).digest();
-}
-
-/**
- * Finds the node whose agent token matches the Bearer credential. Tokens
- * are stored encrypted at rest — each is decrypted and compared in
- * constant time (never string equality).
- */
-async function findNodeByToken(bearer: string) {
-  const em = orm.em;
-  const nodes = await em.find(Node, {});
-  const bearerHash = sha256(bearer);
-  for (const node of nodes) {
-    let token: string;
-    try {
-      token = decryptSecret(node.agentToken);
-    } catch {
-      continue; // undecryptable legacy row — never a match
-    }
-    if (timingSafeEqual(sha256(token), bearerHash)) {
-      return node;
-    }
-  }
-  return null;
 }
 
 /**

@@ -715,8 +715,8 @@ function ServerActionsPanel({
   });
 
   const remove = useMutation({
-    mutationFn: async () => {
-      const result = await deleteServer({ data: { serverId } });
+    mutationFn: async (force: boolean) => {
+      const result = await deleteServer({ data: { serverId, force } });
       await queryClient.invalidateQueries({ queryKey: ['admin-servers'] });
       return result;
     },
@@ -732,6 +732,7 @@ function ServerActionsPanel({
   const [confirmSuspendOpen, setConfirmSuspendOpen] = useState(false);
   const [confirmReinstallOpen, setConfirmReinstallOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmForceDeleteOpen, setConfirmForceDeleteOpen] = useState(false);
 
   if (!canUpdate && !canDelete) {
     return (
@@ -809,6 +810,15 @@ function ServerActionsPanel({
               <Trash2 />
               {remove.isPending ? 'Suppression…' : 'Supprimer'}
             </Button>
+            {remove.isError && (
+              <Button
+                variant="destructive"
+                disabled={remove.isPending}
+                onClick={() => setConfirmForceDeleteOpen(true)}
+              >
+                Supprimer quand même
+              </Button>
+            )}
           </CardSection>
         </>
       )}
@@ -846,12 +856,27 @@ function ServerActionsPanel({
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
         onConfirm={() => {
-          remove.mutate();
+          remove.mutate(false);
           setConfirmDeleteOpen(false);
         }}
         title={`Supprimer « ${name} » ?`}
         description="Le dossier sera effacé."
         confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmForceDeleteOpen}
+        onOpenChange={setConfirmForceDeleteOpen}
+        onConfirm={() => {
+          remove.mutate(true);
+          setConfirmForceDeleteOpen(false);
+        }}
+        title={`Supprimer « ${name} » sans l’agent ?`}
+        description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."
+        confirmLabel="Supprimer quand même"
         cancelLabel="Annuler"
         destructive
         pending={remove.isPending}

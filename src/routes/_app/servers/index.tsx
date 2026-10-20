@@ -41,6 +41,10 @@ function ServersPage() {
   const deleteServer = useServerFn(deleteServerFn);
   const [toDelete, setToDelete] = useState<UserServerRow | null>(null);
 
+  // Row whose deletion failed against an unreachable agent — the force
+  // dialog offers the panel-only retry.
+  const [forceTarget, setForceTarget] = useState<UserServerRow | null>(null);
+
   const query = useQuery({
     queryKey: ['servers', search],
     queryFn: () => listServers({ data: search }),
@@ -48,13 +52,16 @@ function ServersPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (server: UserServerRow) =>
-      deleteServer({ data: { serverId: server.id, after: 0 } }),
+    mutationFn: (input: { server: UserServerRow; force?: boolean }) =>
+      deleteServer({ data: { serverId: input.server.id, force: input.force } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
       toast.success('Serveur supprimé');
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error, input) => {
+      toast.error(error.message);
+      if (input && !input.force) setForceTarget(input.server);
+    },
   });
 
   // Search updates write the WHOLE validated query back (reducer form would
@@ -122,12 +129,26 @@ function ServersPage() {
         open={toDelete !== null}
         onOpenChange={(open) => !open && setToDelete(null)}
         onConfirm={() => {
-          if (toDelete) remove.mutate(toDelete);
+          if (toDelete) remove.mutate({ server: toDelete });
           setToDelete(null);
         }}
         title={toDelete ? `Supprimer « ${toDelete.name} » ?` : ''}
         description="Le dossier sera effacé."
         confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
+      <ConfirmDialog
+        open={forceTarget !== null}
+        onOpenChange={(open) => !open && setForceTarget(null)}
+        onConfirm={() => {
+          if (forceTarget) remove.mutate({ server: forceTarget, force: true });
+          setForceTarget(null);
+        }}
+        title={forceTarget ? `Supprimer « ${forceTarget.name} » sans l’agent ?` : ''}
+        description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."
+        confirmLabel="Supprimer quand même"
         cancelLabel="Annuler"
         destructive
         pending={remove.isPending}

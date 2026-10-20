@@ -15,12 +15,13 @@ import {
   agentServerAction,
   agentReinstallServer,
   agentInstallServer,
-  agentDeleteServer,
   agentUpdateAllocation,
   AgentError,
 } from '../agent/client';
+import { deleteServer } from '../servers';
 import {
   adminServerIdSchema,
+  adminDeleteServerSchema,
   updateAdminServerSchema,
   setAdminServerSuspendedSchema,
   adminServerAllocationActionSchema,
@@ -311,40 +312,12 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
 // ─── Deletion (admin variant of deleteServerFn, panel-level gate) ────────────
 
 export const deleteAdminServerFn = createServerFn({ method: 'POST' })
-  .validator(adminServerIdSchema)
+  .validator(adminDeleteServerSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['delete'] });
-    const { em, server } = await loadServer(data.serverId);
-
-    const node = await em.findOne(Node, { id: server.nodeId });
-
-    // Agent cleanup (tolerant: if the agent no longer knows the server, continue)
-    if (node) {
-      try {
-        await agentDeleteServer(node, server.id);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!(err instanceof AgentError) || err.statusCode !== 404) {
-          throw new HttpError(502, `Suppression échouée côté agent : ${message}`);
-        }
-      }
-    }
-
-    // DB deletion — the server's allocations return to the node's free pool
-    const allocations = await em.find(Allocation, { serverId: server.id });
-    for (const allocation of allocations) {
-      allocation.serverId = null;
-      allocation.primary = false;
-    }
-    // Backups rows and sub-user grants die with the server
-    const backups = await em.find(Backup, { serverId: server.id });
-    em.remove(backups);
-    const grants = await em.find(ServerUser, { serverId: server.id });
-    em.remove(grants);
-    em.remove(server);
-    await em.flush();
-
+    const { server } = await loadServer(data.serverId);
+    await deleteServer(server, { force: data.force });
     return { deleted: true };
   });
 

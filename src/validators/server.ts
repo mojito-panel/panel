@@ -65,6 +65,16 @@ export const serverLogsQuerySchema = z.object({
 });
 
 /**
+ * Server deletion — `force` is the dead-node escape hatch: the agent
+ * cleanup is skipped when the agent is unreachable, the leftover install
+ * is reconciled once the node answers again.
+ */
+export const deleteServerSchema = z.object({
+  serverId: z.string().min(1),
+  force: z.boolean().optional(),
+});
+
+/**
  * Variable update — built dynamically from the recipe's variable definitions
  * so the form gets per-variable validation (type, min/max, pattern, options,
  * required) reusing the contract's own rules. Non-editable variables are

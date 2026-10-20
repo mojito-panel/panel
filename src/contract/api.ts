@@ -709,4 +709,6 @@ export const AGENT_ROUTES = {
  */
 export const PANEL_ROUTES = {
   sftpAuth: 'POST /api/sftp/auth',
+  /** Agent boot GC: the ids of the servers the panel still knows on the calling node. */
+  agentServers: 'GET /api/agent/servers',
 } as const;

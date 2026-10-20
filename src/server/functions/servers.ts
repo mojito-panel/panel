@@ -46,6 +46,7 @@ import {
   sendCommandSchema,
   serverDetailQuerySchema,
   serverLogsQuerySchema,
+  deleteServerSchema,
   serverAllocationActionSchema,
 } from '~/validators/server';
 import { isHttpsScheme } from '~/validators/node';
@@ -587,12 +588,12 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
 // ─── Deletion ──────────────────────────────────────────────────────────────
 
 export const deleteServerFn = createServerFn({ method: 'POST' })
-  .validator(serverLogsQuerySchema)
+  .validator(deleteServerSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server } = await requireServerOwner(data.serverId, user);
-    await deleteServer(server);
+    await deleteServer(server, { force: data.force });
     return { deleted: true };
   });
 

@@ -42,6 +42,7 @@ function ServerSettingsPage() {
   const queryClient = useQueryClient();
   const [askReinstall, setAskReinstall] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
+  const [askForceDelete, setAskForceDelete] = useState(false);
   const getServer = useServerFn(getServerFn);
   const reinstall = useServerFn(reinstallServerFn);
   const deleteServer = useServerFn(deleteServerFn);
@@ -62,7 +63,7 @@ function ServerSettingsPage() {
   });
 
   const remove = useMutation({
-    mutationFn: () => deleteServer({ data: { serverId, after: 0 } }),
+    mutationFn: (force: boolean) => deleteServer({ data: { serverId, force } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
     },
@@ -184,7 +185,16 @@ function ServerSettingsPage() {
               </span>
             )}
             {remove.isError && (
-              <span className="ml-2 text-sm text-destructive">{remove.error.message}</span>
+              <>
+                <span className="ml-2 text-sm text-destructive">{remove.error.message}</span>
+                <Button
+                  variant="destructive"
+                  onClick={() => setAskForceDelete(true)}
+                  disabled={remove.isPending}
+                >
+                  Supprimer quand même
+                </Button>
+              </>
             )}
           </CardFooter>
         </Card>
@@ -207,12 +217,26 @@ function ServerSettingsPage() {
         open={askDelete}
         onOpenChange={setAskDelete}
         onConfirm={() => {
-          remove.mutate();
+          remove.mutate(false);
           setAskDelete(false);
         }}
         title={server ? `Supprimer « ${server.name} » ?` : ''}
         description="Le dossier sera effacé."
         confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
+      <ConfirmDialog
+        open={askForceDelete}
+        onOpenChange={setAskForceDelete}
+        onConfirm={() => {
+          remove.mutate(true);
+          setAskForceDelete(false);
+        }}
+        title={server ? `Supprimer « ${server.name} » sans l’agent ?` : ''}
+        description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."
+        confirmLabel="Supprimer quand même"
         cancelLabel="Annuler"
         destructive
         pending={remove.isPending}
