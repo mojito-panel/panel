@@ -1,6 +1,7 @@
 import '@tanstack/react-start/server-only';
 import { nanoid } from '~/lib/nanoid';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
+import { resolveRuntimeRecipes } from './functions/runtimes';
 import type { Recipe as RecipeContract, ServerStatus } from '~/contract';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
 import type { IBackup, INode, IServer, IUser } from '~/db/types';
@@ -156,6 +157,7 @@ export async function installServer(
       serverId,
       name: input.name,
       recipe: normalizeStoredRecipe(recipe.json),
+      runtimes: await resolveRuntimeRecipes(orm.em, recipe.json),
       variables: input.variables,
       installDir: `servers/${serverId}`,
       allocation: {

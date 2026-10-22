@@ -5,6 +5,7 @@ import { userServersList } from '~/lists/user-servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
+import { resolveRuntimeRecipes } from './runtimes';
 import type { Recipe as RecipeContract } from '~/contract';
 import {
   requireUser,
@@ -226,6 +227,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
         serverId: server.id,
         name: server.name,
         recipe: normalizeStoredRecipe(recipe.json),
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
         installDir: `servers/${server.id}`,
         allocation: {
@@ -391,6 +393,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     try {
       const result = await agentReinstallServer(node, server.id, {
         recipe: normalizeStoredRecipe(recipe.json),
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
       });
       // The reinstall now runs in the background — the console shows the
@@ -409,6 +412,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
             serverId: server.id,
             name: server.name,
             recipe: normalizeStoredRecipe(recipe.json),
+            runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
             allocation: {

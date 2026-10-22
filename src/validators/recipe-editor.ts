@@ -2,9 +2,12 @@ import { z } from 'zod';
 import {
   RESERVED_ENV_NAMES,
   STOP_SIGNALS,
+  isRuntimeRecipeJson,
   safeParseRecipe,
+  safeParseRuntimeRecipe,
   validateBackupIncludePattern,
   type Recipe,
+  type RuntimeRecipe,
   type RunnerAction,
   type RunnerActionInput,
   type StopSignal,
@@ -352,20 +355,27 @@ export const recipeEditorSchema = z
       .string()
       .min(1, 'ID requis')
       .regex(/^[a-z0-9-]+$/, 'Minuscules, chiffres et tirets uniquement'),
+    /** Recipe kind: 'app' (game server) or 'runtime' (tool: java, steamcmd…). */
+    recipeType: z.enum(['app', 'runtime']),
     name: z.string().min(1, 'Nom requis'),
     author: z.string().min(1, 'Auteur requis'),
     description: z.string(),
     tags: z.array(z.string()),
-    /** Windows container image the server runs in (carries java/steamcmd…). */
-    dockerImage: z.string().min(1, 'Image Docker requise'),
     updateUrl: z.string(),
     requirements: requirementsValueSchema,
+    /** Runtime recipe ids this recipe requires (app AND runtime both). */
+    requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')),
+    /** Runtime export: prepend the runtime dir to PATH (default true). */
+    exportPath: z.boolean(),
+    /** Runtime export: fixed env pairs (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
+    exportEnv: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
     backup: backupValueSchema,
     variables: z.array(recipeVariableValueSchema),
     install: z.array(actionValueSchema),
     start: z.object({
-      command: z.string().min(1, 'Commande de démarrage requise'),
+      /** Required for an app — a runtime recipe has no start command. */
+      command: z.string(),
       stop: stopValueSchema.nullable(),
       ready: readyValueSchema.nullable(),
       workingDirectory: z.string(),
@@ -374,6 +384,23 @@ export const recipeEditorSchema = z
   })
   .superRefine((value, ctx) => {
     refineEditorValue(value, ctx);
+
+    // Only an app recipe starts — a runtime has no start command.
+    if (value.recipeType === 'app' && !value.start.command.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['start', 'command'],
+        message: 'Commande de démarrage requise',
+      });
+    }
+    // Only a runtime exports — an app recipe has nothing to export.
+    if (value.recipeType === 'runtime' && value.requires.includes(value.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['requires'],
+        message: 'La recette ne peut pas se requérir elle-même',
+      });
+    }
 
     // Duplicate keys in key/value lists
     const checkPairs = (pairs: KvPair[], path: (string | number)[]) => {
@@ -409,17 +436,48 @@ export const recipeEditorSchema = z
 
 export type RecipeEditorValue = z.infer<typeof recipeEditorSchema>;
 
+/** Parsed runtime recipe (contract output — defaults applied) → editor value. */
+export function runtimeToEditorValue(recipe: RuntimeRecipe): RecipeEditorValue {
+  return {
+    id: recipe.id,
+    recipeType: 'runtime',
+    name: recipe.name,
+    author: recipe.author,
+    description: recipe.description ?? '',
+    tags: recipe.tags ?? [],
+    updateUrl: recipe.update_url ?? '',
+    requires: recipe.requires ?? [],
+    exportPath: recipe.export?.path ?? true,
+    exportEnv: toPairs(recipe.export?.env),
+    requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
+    env: [],
+    backup: { include: [] },
+    variables: contractVariablesToEditor(recipe.variables),
+    install: contractActionsToEditor(recipe.install),
+    start: {
+      command: '',
+      stop: null,
+      ready: null,
+      workingDirectory: '',
+    },
+    logs: { mode: 'stdout', file: '', stripAnsi: false },
+  };
+}
+
 // ─── Defaults (create) ────────────────────────────────────────────────────────
 
 export function emptyRecipeEditorValue(): RecipeEditorValue {
   return {
     id: '',
+    recipeType: 'app',
     name: '',
     author: '',
     description: '',
     tags: [],
-    dockerImage: '',
     updateUrl: '',
+    requires: [],
+    exportPath: true,
+    exportEnv: [],
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [],
     backup: { include: [] },
@@ -544,12 +602,15 @@ function contractRequirementsToEditor(requirements: Recipe['requirements']): Req
 export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
   return {
     id: recipe.id,
+    recipeType: 'app',
     name: recipe.name,
     author: recipe.author,
     description: recipe.description ?? '',
     tags: recipe.tags ?? [],
-    dockerImage: recipe.docker_image,
     updateUrl: recipe.update_url ?? '',
+    requires: recipe.requires ?? [],
+    exportPath: true,
+    exportEnv: [],
     requirements: contractRequirementsToEditor(recipe.requirements),
     env: toPairs(recipe.env),
     backup: { include: recipe.backup?.include ?? [] },
@@ -691,54 +752,74 @@ function editorRequirementsToContract(requirements: RequirementsValue) {
 /**
  * Editor value → recipe JSON (contract input shape, empties stripped).
  * Returns `{ recipe }` on success, or `{ issues }` when the contract
- * schema rejects the value (final validation before send).
+ * schema rejects the value (final validation before send). Runtime
+ * recipes go through the runtime schema — they carry no start/backup.
  */
 export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
-  recipe?: Recipe;
+  recipe?: Recipe | RuntimeRecipe;
   issues?: string[];
 } {
-  const recipe = {
-    schema_version: 3,
+  const common = {
+    schema_version: 4,
+    type: value.recipeType,
     id: value.id,
     name: value.name,
     author: value.author,
     description: value.description || undefined,
     tags: value.tags,
-    docker_image: value.dockerImage,
     update_url: value.updateUrl || undefined,
-    requirements: editorRequirementsToContract(value.requirements),
-    env: pairsToRecord(value.env),
-    backup: (() => {
-      const include = value.backup.include.map((p) => p.trim()).filter(Boolean);
-      return include.length > 0 ? { include } : undefined;
-    })(),
+    requires: value.requires.filter(Boolean),
     variables: editorVariablesToContract(value.variables),
     install: editorActionsToContract(value.install),
-    start: {
-      command: value.start.command,
-      stop: value.start.stop
-        ? {
-            type: value.start.stop.type,
-            value: value.start.stop.value,
-            timeout_ms: value.start.stop.timeoutMs || 30000,
-          }
-        : undefined,
-      ready: value.start.ready
-        ? {
-            pattern: value.start.ready.pattern,
-            strip: value.start.ready.strip || undefined,
-          }
-        : undefined,
-      working_directory: value.start.workingDirectory || undefined,
-    },
-    logs: {
-      mode: value.logs.mode,
-      file: value.logs.mode === 'file' ? value.logs.file : undefined,
-      strip_ansi: value.logs.stripAnsi,
-    },
   };
 
-  const parsed = safeParseRecipe(recipe);
+  const recipe =
+    value.recipeType === 'runtime'
+      ? (() => {
+          const env = pairsToRecord(value.exportEnv) ?? {};
+          return {
+            ...common,
+            export: {
+              path: value.exportPath,
+              env: Object.keys(env).length > 0 ? env : undefined,
+            },
+          };
+        })()
+      : {
+          ...common,
+          requirements: editorRequirementsToContract(value.requirements),
+          env: pairsToRecord(value.env),
+          backup: (() => {
+            const include = value.backup.include.map((p) => p.trim()).filter(Boolean);
+            return include.length > 0 ? { include } : undefined;
+          })(),
+          start: {
+            command: value.start.command,
+            stop: value.start.stop
+              ? {
+                  type: value.start.stop.type,
+                  value: value.start.stop.value,
+                  timeout_ms: value.start.stop.timeoutMs || 30000,
+                }
+              : undefined,
+            ready: value.start.ready
+              ? {
+                  pattern: value.start.ready.pattern,
+                  strip: value.start.ready.strip || undefined,
+                }
+              : undefined,
+            working_directory: value.start.workingDirectory || undefined,
+          },
+          logs: {
+            mode: value.logs.mode,
+            file: value.logs.mode === 'file' ? value.logs.file : undefined,
+            strip_ansi: value.logs.stripAnsi,
+          },
+        };
+
+  const parsed = isRuntimeRecipeJson(recipe)
+    ? safeParseRuntimeRecipe(recipe)
+    : safeParseRecipe(recipe);
   if (parsed.success) {
     return { recipe: parsed.data };
   }

@@ -465,8 +465,6 @@ export const listRecipesFn = createServerFn({ method: 'POST' })
         id: recipe.id,
         slug: recipe.slug,
         name: recipe.name,
-        dockerImage:
-          typeof recipe.json.docker_image === 'string' ? recipe.json.docker_image : '',
         /** Number of declared variables (auto-generated form at creation). */
         variableCount: storedRecipeVariables(recipe.json).length,
         updateUrl:

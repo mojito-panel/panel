@@ -12,16 +12,15 @@ import {
 /**
  * Paper-style egg — covers all recipe v3 features:
  * UPPERCASE env variables, system variables, configFile parser,
- * ready detection with strip, logs, docker image, fixed env.
+ * ready detection with strip, logs, fixed env.
  */
 const validPaperRecipe = {
-  schema_version: 3 as const,
+  schema_version: 4 as const,
   id: 'minecraft-paper',
   name: 'Paper',
   author: 'papermc',
   description: 'High performance Spigot fork.',
   tags: ['minecraft', 'java'],
-  docker_image: 'ghcr.io/mojito/windows-jdk21:latest',
   requirements: { min_ram_mb: 512, required_commands: ['java'] },
   variables: [
     {
@@ -90,10 +89,17 @@ describe('recipeSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects a missing docker image', () => {
-    const { docker_image: _image, ...withoutImage } = validPaperRecipe;
-    const result = recipeSchema.safeParse(withoutImage);
-    expect(result.success).toBe(false);
+  it('strips the legacy docker image fields (v4 is native)', () => {
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
+      docker_image: 'ghcr.io/mojito/windows-jdk21:latest',
+      docker_images: { Java17: 'img:17' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty('docker_image');
+      expect(result.data).not.toHaveProperty('docker_images');
+    }
   });
 
   it('rejects an id with invalid characters', () => {
@@ -147,11 +153,10 @@ describe('recipeSchema', () => {
 
   it('accepts a minimal recipe (no install, no variables)', () => {
     const minimal = {
-      schema_version: 3 as const,
+      schema_version: 4 as const,
       id: 'test',
       name: 'Test',
       author: 'me',
-      docker_image: 'mcr.microsoft.com/windows/servercore:ltsc2022',
       start: { command: 'echo hello' },
     };
     const result = recipeSchema.safeParse(minimal);
@@ -325,11 +330,10 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
 
 describe('backup config (recipe-declared archive contents)', () => {
   const base = {
-    schema_version: 3 as const,
+    schema_version: 4 as const,
     id: 'backup-recipe',
     name: 'Backup',
     author: 'me',
-    docker_image: 'mcr.microsoft.com/windows/servercore:ltsc2022',
     start: { command: 'java -jar app.jar' },
   };
 

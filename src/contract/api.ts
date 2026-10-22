@@ -44,6 +44,8 @@ export const installServerRequestSchema = z.object({
   serverId: idSchema,
   name: z.string().min(1),
   recipe: z.unknown(), // Recipe validated on the panel side, passed as-is
+  /** Resolved runtime recipes of the app's requires graph (installed first). */
+  runtimes: z.array(z.unknown()).default([]),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   installDir: z.string().min(1),
   allocation: serverAllocationSchema,
@@ -60,6 +62,8 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
 export const reinstallServerRequestSchema = z.object({
   serverId: idSchema,
   recipe: z.unknown(), // Recipe validated by the agent, passed as-is
+  /** Resolved runtime recipes of the app's requires graph (installed first). */
+  runtimes: z.array(z.unknown()).default([]),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 

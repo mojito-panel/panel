@@ -7,13 +7,15 @@ import {
 } from './recipe-schema';
 
 /**
- * PTDL_v2 (Pelican egg) import — maps an egg JSON to a recipe v3.
+ * PTDL_v2 (Pelican egg) import — maps an egg JSON to a recipe v4.
  *
- * Eggs are Linux/bash artifacts: only the declarative parts map 1:1
- * (variables, startup/stop/ready, docker image, config.files). The install
- * scripts are IGNORED — they run bash against a Linux image — so the import
- * always returns a warning: the install section must be rewritten with the
- * declarative actions (download/extract/write/replace/configFile/command).
+ * Eggs are Linux/bash/docker artifacts: only the declarative parts map 1:1
+ * (variables, startup/stop/ready, config.files). The install scripts are
+ * IGNORED — they run bash against a Linux image — and the docker images
+ * are IGNORED too — the agent runs native Windows processes, the recipe
+ * provisions its own runtimes — so the import always returns warnings:
+ * the install section must be rewritten with the declarative actions
+ * (download/extract/write/replace/configFile/command).
  */
 
 // ─── Egg schemas (subset of PTDL_v2 that we map) ────────────────────────────
@@ -196,23 +198,17 @@ export function importEgg(raw: unknown): { recipe: Recipe; warnings: string[] } 
     ]);
   }
 
-  // Docker image: first entry of the map (eggs for multiple images differ
-  // only by tag — the admin picks the variant after the import).
+  // Docker images: the native process model has no image — the declared
+  // images are informational, the runtimes come from the recipe's own
+  // download/extract actions (a warning tells the admin to provision them).
   const imageMap = egg.docker_images ?? egg.docker_image ?? {};
-  const docker_image = Object.keys(imageMap)[0];
-  if (!docker_image) {
-    throw new z.ZodError([
-      {
-        code: 'custom',
-        path: ['docker_images'],
-        message: 'L’œuf ne déclare aucune image Docker',
-        input: imageMap,
-      },
-    ]);
-  }
-  if (Object.keys(imageMap).length > 1) {
+  if (Object.keys(imageMap).length === 0) {
     warnings.push(
-      `Plusieurs images Docker déclarées — « ${docker_image} » retenue (${Object.values(imageMap).join(', ')}).`,
+      "L'œuf ne déclare aucune image Docker (le modèle natif n'en a pas besoin — les runtimes se provisionnent par les actions de la recette).",
+    );
+  } else {
+    warnings.push(
+      `Images Docker de l'œuf ignorées (${Object.values(imageMap).join(', ')}) — le modèle natif provisionne ses runtimes par les actions de la recette.`,
     );
   }
 
@@ -252,12 +248,11 @@ export function importEgg(raw: unknown): { recipe: Recipe; warnings: string[] } 
   const logsConfig = egg.config?.logs?.custom ? egg.config?.logs?.location : undefined;
 
   const recipe = recipeSchema.parse({
-    schema_version: 3,
+    schema_version: 4,
     id: slugify(egg.name),
     name: egg.name,
     author: egg.author || 'import',
     description: egg.description || undefined,
-    docker_image,
     update_url: egg.update_url || undefined,
     variables,
     install,

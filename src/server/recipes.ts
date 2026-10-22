@@ -5,10 +5,13 @@ import { Recipe, Server } from '~/db/entities';
 import { orm } from './orm';
 import { HttpError } from './session';
 import {
+  isRuntimeRecipeJson,
   parseRecipe,
+  parseRuntimeRecipe,
   recipeVariableSchema,
   type Recipe as RecipeDefinition,
   type RecipeVariable,
+  type RuntimeRecipe,
 } from '~/contract';
 
 /**
@@ -17,9 +20,15 @@ import {
  * request context (the `withOrmContext` middleware).
  */
 
-/** Parses raw JSON and validates it against the contract (recipe v3). */
-export function parseRecipeJson(raw: string): RecipeDefinition {
+/**
+ * Parses raw JSON and validates it against the contract (recipe v4) —
+ * runtime recipes (type: runtime) are validated by their own schema.
+ */
+export function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
   const parsed: unknown = JSON.parse(raw);
+  if (isRuntimeRecipeJson(parsed)) {
+    return parseRuntimeRecipe(parsed);
+  }
   return parseRecipe(parsed);
 }
 
@@ -32,7 +41,7 @@ export function recipeErrorMessage(err: unknown): string {
 }
 
 /** Validates a raw recipe string, mapping the error to a 400 HttpError. */
-export function assertValidRecipeJson(raw: string): RecipeDefinition {
+export function assertValidRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
   try {
     return parseRecipeJson(raw);
   } catch (err) {
@@ -45,7 +54,7 @@ export function assertValidRecipeJson(raw: string): RecipeDefinition {
  * a re-import updates the definition, like Pelican eggs).
  */
 export async function upsertRecipe(
-  recipeJson: RecipeDefinition,
+  recipeJson: RecipeDefinition | RuntimeRecipe,
 ): Promise<{ slug: string; name: string; created: boolean }> {
   const em = orm.em;
   const existing = await em.findOne(Recipe, { slug: recipeJson.id });
@@ -80,7 +89,7 @@ export async function upsertRecipe(
  * silently overwriting.
  */
 export async function createRecipe(
-  recipeJson: RecipeDefinition,
+  recipeJson: RecipeDefinition | RuntimeRecipe,
 ): Promise<{ id: string; slug: string; name: string }> {
   const em = orm.em;
 
@@ -111,7 +120,7 @@ export async function createRecipe(
  */
 export async function updateRecipe(
   recipeId: string,
-  recipeJson: RecipeDefinition,
+  recipeJson: RecipeDefinition | RuntimeRecipe,
 ): Promise<{ id: string; slug: string; name: string }> {
   const em = orm.em;
 

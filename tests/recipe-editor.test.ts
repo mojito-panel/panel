@@ -15,12 +15,15 @@ import {
 function fullEditorValue(): RecipeEditorValue {
   return {
     id: 'my-recipe',
+    recipeType: 'app',
     name: 'My recipe',
     author: 'steader@example.com',
     description: 'A test recipe',
     tags: ['minecraft'],
-    dockerImage: 'ghcr.io/mojito/windows-jdk21:latest',
     updateUrl: 'https://example.com/recipe.json',
+    requires: ['java'],
+    exportPath: true,
+    exportEnv: [],
     requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],
     backup: { include: ['world', 'plugins/*', 'server.properties'] },
@@ -88,9 +91,9 @@ describe('recipe editor schema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects a missing docker image', () => {
+  it('rejects a missing start command', () => {
     const value = fullEditorValue();
-    value.dockerImage = '';
+    value.start = { ...value.start, command: '' };
     expect(recipeEditorSchema.safeParse(value).success).toBe(false);
   });
 
@@ -191,10 +194,10 @@ describe('recipeEditorValueToRecipe', () => {
     expect(result.success).toBe(false);
   });
 
-  it('always emits a v3 recipe carrying the docker image', () => {
+  it('always emits a v4 recipe without any docker image', () => {
     const { recipe } = recipeEditorValueToRecipe(fullEditorValue());
-    expect(recipe?.schema_version).toBe(3);
-    expect(recipe?.docker_image).toBe('ghcr.io/mojito/windows-jdk21:latest');
+    expect(recipe?.schema_version).toBe(4);
+    expect(recipe).not.toHaveProperty('docker_image');
   });
 });
 

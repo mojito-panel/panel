@@ -1,12 +1,20 @@
 import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { Checkbox } from '~/components/ui/checkbox';
 import { FieldShell, KvRows, TagsInput } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
 /**
- * Tab « Configuration » of a recipe — identity, container image and
- * host requirements.
+ * Tab « Configuration » of a recipe — identity, type (app/runtime),
+ * required runtimes, runtime export and host requirements.
  */
 
 /** Row-level errors of a key/value list (`prefix[i].key` from the form errorMap). */
@@ -31,6 +39,30 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
         description="Nom, auteur et description de la recette."
       >
         <div className="grid gap-4 md:grid-cols-2">
+          <form.Field name="recipeType">
+            {(field) => (
+              <FieldShell
+                id="recipe-type"
+                label="Type de recette"
+                hint="app = serveur de jeu · runtime = outil installé dans le .bin des apps qui le requièrent (java, steamcmd…)."
+                errors={field.state.meta.errors}
+              >
+                <Select
+                  value={field.state.value}
+                  onValueChange={(value) => field.handleChange(value as 'app' | 'runtime')}
+                >
+                  <SelectTrigger id="recipe-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="app">Serveur de jeu (app)</SelectItem>
+                    <SelectItem value="runtime">Runtime (outil)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldShell>
+            )}
+          </form.Field>
+
           <form.Field name="id">
             {(field) => (
               <FieldShell
@@ -98,25 +130,6 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
             )}
           </form.Field>
 
-          <form.Field name="dockerImage">
-            {(field) => (
-              <FieldShell
-                id="recipe-docker-image"
-                label="Image Docker"
-                hint="Image Windows (servercore) du conteneur du serveur — elle embarque les runtimes (java, steamcmd…)."
-                errors={field.state.meta.errors}
-              >
-                <Input
-                  id="recipe-docker-image"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  placeholder="ghcr.io/mojito/servercore-java:latest"
-                />
-              </FieldShell>
-            )}
-          </form.Field>
-
           <div className="md:col-span-2">
             <form.Field name="description">
               {(field) => (
@@ -157,6 +170,87 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
           </form.Field>
         </div>
       </CardSection>
+
+      <CardSection
+        title="Runtimes requis"
+        description="Runtimes (outils) installés dans le .bin du serveur avant les étapes de la recette — java, steamcmd… Le panel résout le graphe et pousse les recettes runtime à chaque installation."
+      >
+        <form.Field name="requires">
+          {(field) => (
+            <FieldShell
+              id="recipe-requires"
+              label="IDs des runtimes requis"
+              hint="IDs (slugs) des recettes runtime, séparés par des virgules. Un runtime peut en exiger un autre."
+              errors={field.state.meta.errors}
+            >
+              <TagsInput
+                id="recipe-requires"
+                value={field.state.value}
+                onChange={field.handleChange}
+                onBlur={field.handleBlur}
+                placeholder="steamcmd, java"
+              />
+            </FieldShell>
+          )}
+        </form.Field>
+      </CardSection>
+
+      <form.Subscribe selector={(s) => s.values.recipeType}>
+        {(recipeType) =>
+          recipeType === 'runtime' && (
+            <CardSection
+              title="Export runtime"
+              description="Ce que le runtime exporte à ses dépendants (la recette app et les autres runtimes) : PATH et variables d'environnement. RUNTIME_DIR pointe vers le dossier du runtime."
+            >
+              <form.Field name="exportPath">
+                {(field) => (
+                  <FieldShell
+                    id="recipe-export-path"
+                    label="Ajouter au PATH"
+                    hint="Préfixe le dossier du runtime au PATH des étapes et du spawn (binaires à la racine : java.exe, steamcmd.exe…)."
+                    errors={field.state.meta.errors}
+                  >
+                    <Checkbox
+                      id="recipe-export-path"
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => field.handleChange(checked === true)}
+                      onBlur={field.handleBlur}
+                    />
+                  </FieldShell>
+                )}
+              </form.Field>
+              <form.Field name="exportEnv">
+                {(field) => (
+                  <FieldShell
+                    id="recipe-export-env"
+                    label="Variables exportées"
+                    hint="Ex : JAVA_HOME → {{RUNTIME_DIR}}."
+                    errors={field.state.meta.errors}
+                  >
+                    <form.Subscribe
+                      selector={(s) =>
+                        (s.errorMap.onChange as { fields?: Record<string, readonly unknown[]> } | undefined)
+                          ?.fields ?? {}
+                      }
+                    >
+                      {(errorFields) => (
+                        <KvRows
+                          pairs={field.state.value}
+                          onChange={field.handleChange}
+                          keyPlaceholder="JAVA_HOME"
+                          valuePlaceholder="{{RUNTIME_DIR}}"
+                          addLabel="Ajouter un export"
+                          errors={pairErrors('exportEnv', errorFields)}
+                        />
+                      )}
+                    </form.Subscribe>
+                  </FieldShell>
+                )}
+              </form.Field>
+            </CardSection>
+          )
+        }
+      </form.Subscribe>
 
       <CardSection
         title="Environnement fixe"

@@ -16,7 +16,6 @@ export interface AdminRecipeRow {
   id: string;
   name: string;
   slug: string;
-  dockerImage: string;
   variableCount: number;
   updateUrl: string | null;
   createdAt: Date;
@@ -52,17 +51,6 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
           </Link>
           <p className="text-xs text-muted-foreground">{recipe.slug}</p>
         </div>
-      ),
-    },
-    image: {
-      header: 'Image',
-      cell: (recipe) => (
-        <span
-          className="block max-w-xs truncate font-mono text-xs text-muted-foreground"
-          title={recipe.dockerImage}
-        >
-          {recipe.dockerImage || '—'}
-        </span>
       ),
     },
     variables: {

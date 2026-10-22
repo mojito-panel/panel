@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
 /**
- * Zod schema of the recipe (egg) — v3 format (the only one).
+ * Zod schema of the recipe (egg) — v4 format (the only one).
  * Feature parity with Pelican eggs (PTDL_v2), Windows-first: servers run
- * in Windows containers (Docker Engine on Windows), the recipe carries
- * the `docker_image` and declarative install actions — no mandatory bash
- * script (`script` action as an open fallback, powershell/cmd shells).
+ * as native Windows processes (Job Object + dedicated user), the recipe
+ * provisions its own runtimes (JDK, steamcmd) with declarative
+ * `download`/`extract` actions into `.bin/…` — no docker image, no
+ * mandatory bash script (`script` action as an open fallback,
+ * powershell/cmd shells).
  *
  * `{{ENV_VAR}}` templating (UPPERCASE) everywhere: commands, files, URLs.
  * Resolution: agent system variables > server variables > recipe defaults > fixed env.
@@ -20,6 +22,7 @@ export const RESERVED_ENV_NAMES = [
   'SERVER_PORT',
   'SERVER_IP',
   'SERVER_INSTALL_DIR',
+  'RUNTIME_DIR',
 ] as const;
 
 export type ReservedEnvName = (typeof RESERVED_ENV_NAMES)[number];
@@ -31,6 +34,7 @@ export const SYSTEM_VARIABLES_SCHEMA = {
   SERVER_PORT: 'number — port principal alloue',
   SERVER_IP: 'string — IP d ecoute (0.0.0.0 par defaut)',
   SERVER_INSTALL_DIR: 'string — dossier d installation du serveur',
+  RUNTIME_DIR: 'string — repere du runtime en cours d installation (runtime uniquement)',
 } as const;
 
 // ─── Recipe variables (Pelican EggVariable equivalent) ─────────────────────
@@ -312,26 +316,21 @@ export type StartConfig = z.infer<typeof startConfigSchema>;
 
 export const recipeSchema = z.object({
   /** Recipe format version — v3 is the only supported one. */
-  schema_version: z.literal(3),
+  schema_version: z.literal(4),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
+  /**
+   * Recipe kind: 'app' (a game server, with start/backup) or 'runtime'
+   * (a tool like java/steamcmd installed inside the app's install, no
+   * start/backup). Runtime recipes are validated by `runtimeRecipeSchema`,
+   * never here.
+   */
+  type: z.literal('app').default('app'),
   name: z.string().min(1),
   author: z.string().min(1),
   description: z.string().optional(),
   tags: z.array(z.string()).default([]),
   /** URL of a recipe update JSON (Pelican's meta.update_url equivalent). */
   update_url: z.string().url().optional(),
-  /**
-   * Windows Docker image the server's container is created from — it
-   * carries the runtimes (JDK, steamcmd…); the agent never installs
-   * tools itself, it is image-agnostic.
-   */
-  docker_image: z.string().min(1),
-  /**
-   * Pelican egg syntax: label → image, rendered by the panel as the
-   * per-server Docker Image dropdown. The selected image is stored per
-   * server and pushed to the agent as the recipe's docker_image.
-   */
-  docker_images: z.record(z.string(), z.string()).optional(),
   requirements: recipeRequirementsSchema.optional(),
   variables: z.array(recipeVariableSchema).default([]),
   install: z.array(runnerActionSchema).default([]),
@@ -341,9 +340,81 @@ export const recipeSchema = z.object({
   backup: backupConfigSchema.optional(),
   /** Fixed environment variables injected at spawn. */
   env: z.record(z.string(), z.string()).optional(),
+  /**
+   * Runtime recipes this app requires (by their recipe id/slug) —
+   * needed at INSTALL *and* RUN (any recipe change re-installs the
+   * server, so there is no separate install-time-only lifecycle).
+   * The panel resolves the ids against its recipe table and pushes the
+   * resolved runtime recipes with the install request.
+   */
+  requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')).default([]),
 });
 
 export type Recipe = z.infer<typeof recipeSchema>;
+
+// ─── Runtime recipes ────────────────────────────────────────────────────────
+
+/**
+ * What a runtime recipe exports to its dependents (the app and the other
+ * runtimes that require it), templated with the runtime's own resolved
+ * variables — `{{RUNTIME_DIR}}` points at the runtime's install dir.
+ */
+export const runtimeExportSchema = z.object({
+  /** Prepend the runtime's dir to PATH (default true — java/steamcmd binaries). */
+  path: z.boolean().default(true),
+  /** Fixed env exported to the dependents (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
+  env: z.record(z.string(), z.string()).optional(),
+});
+
+export type RuntimeExport = z.infer<typeof runtimeExportSchema>;
+
+/**
+ * A RUNTIME recipe: a tool (java, steamcmd…) provisioned inside the
+ * app's install by the SAME runner, under the SAME job limits and the
+ * server's dedicated user — the agent carries no tool-specific code.
+ * Minimal by contract: install steps + variables only, NO
+ * start/logs/backup, no power actions of its own. A runtime may require
+ * other runtimes.
+ *
+ * Variable resolution: SERVER variables win over the runtime's own
+ * defaults — the app declares the user-facing JAVA_VERSION, the runtime
+ * declares the fallback default; the agent merges server > runtime.
+ */
+export const runtimeRecipeSchema = z.object({
+  schema_version: z.literal(4),
+  type: z.literal('runtime'),
+  id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
+  name: z.string().min(1),
+  author: z.string().min(1),
+  description: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  update_url: z.string().url().optional(),
+  requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')).default([]),
+  variables: z.array(recipeVariableSchema).default([]),
+  install: z.array(runnerActionSchema).default([]),
+  export: runtimeExportSchema.optional(),
+});
+
+export type RuntimeRecipe = z.infer<typeof runtimeRecipeSchema>;
+
+/** Detects a runtime recipe BEFORE schema validation (dispatches the parse). */
+export function isRuntimeRecipeJson(data: unknown): boolean {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as Record<string, unknown>).type === 'runtime'
+  );
+}
+
+/** Validates a raw JSON object as a runtime recipe. Throws a ZodError. */
+export function parseRuntimeRecipe(data: unknown): RuntimeRecipe {
+  return runtimeRecipeSchema.parse(data);
+}
+
+/** Validates a raw JSON object as a runtime recipe, without throwing. */
+export function safeParseRuntimeRecipe(data: unknown) {
+  return runtimeRecipeSchema.safeParse(data);
+}
 
 /** Input type of the recipe schema (fields with optional defaults). */
 export type RecipeInput = z.input<typeof recipeSchema>;

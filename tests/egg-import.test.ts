@@ -79,7 +79,7 @@ describe('importEgg (PTDL_v2)', () => {
   it('maps an egg to a contract-valid recipe v3', () => {
     const { recipe } = importEgg(paperEgg);
     expect(() => parseRecipe(recipe)).not.toThrow();
-    expect(recipe.schema_version).toBe(3);
+    expect(recipe.schema_version).toBe(4);
     expect(recipe.id).toBe('paper');
     expect(recipe.name).toBe('Paper');
     expect(recipe.update_url).toBe('https://example.com/egg.json');
@@ -131,10 +131,10 @@ describe('importEgg (PTDL_v2)', () => {
     expect(warnings.some((w) => w.includes("scripts d'installation"))).toBe(true);
   });
 
-  it('warns when several docker images are declared and keeps the first', () => {
+  it('warns that the declared docker images are ignored (native model)', () => {
     const { recipe, warnings } = importEgg(paperEgg);
-    expect(recipe.docker_image).toBe('ghcr.io/parkervcp/yolks:java_21');
-    expect(warnings.some((w) => w.includes('Plusieurs images'))).toBe(true);
+    expect(recipe).not.toHaveProperty('docker_image');
+    expect(warnings.some((w) => w.includes('Images Docker'))).toBe(true);
   });
 
   it('warns about ignored features', () => {
@@ -142,9 +142,11 @@ describe('importEgg (PTDL_v2)', () => {
     expect(warnings.some((w) => w.includes('failover'))).toBe(true);
   });
 
-  it('throws when the egg declares no docker image at all', () => {
+  it('imports an egg without any docker image (warning, not an error)', () => {
     const { docker_images: _i, docker_image: _d, ...noImage } = paperEgg;
-    expect(() => importEgg(noImage)).toThrow();
+    const { recipe, warnings } = importEgg(noImage);
+    expect(recipe.id).toBeTruthy();
+    expect(warnings.some((w) => w.toLowerCase().includes('docker'))).toBe(true);
   });
 
   it('throws on a non-PTDL_v2 version', () => {

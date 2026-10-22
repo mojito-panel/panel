@@ -6,6 +6,7 @@ import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db
 import { adminServersList } from '~/lists/servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
+import { resolveRuntimeRecipes } from './runtimes';
 import {
   requirePanelPermission,
   HttpError,
@@ -261,6 +262,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
     try {
       const result = await agentReinstallServer(node, server.id, {
         recipe: recipe.json,
+        runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
       });
       // The reinstall runs in the background — the admin follows it from
@@ -279,6 +281,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
             serverId: server.id,
             name: server.name,
             recipe: recipe.json,
+            runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
             allocation: {

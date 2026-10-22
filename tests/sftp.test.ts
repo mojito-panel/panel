@@ -126,7 +126,7 @@ describe('buildAgentConfig', () => {
     expect(yaml).toContain('sftp:\n  enabled: true\n  host: 0.0.0.0\n  port: 2022\n');
   });
 
-  it('emits a volume_root with a single backslash (docker bind specs escape backslashes)', () => {
+  it('emits the dedicated users section (native process model)', () => {
     const yaml = buildAgentConfig({
       name: 'node1',
       fqdn: 'node1.example.com',
@@ -135,6 +135,6 @@ describe('buildAgentConfig', () => {
       agentToken: 'a'.repeat(40),
       panelUrl: 'http://panel.example.com',
     });
-    expect(yaml).toContain("docker:\n  endpoint: 'npipe:////./pipe/docker_engine'\n  isolation: process\n  volume_root: 'C:\\server'\n");
+    expect(yaml).toContain('users:\n  prefix: mojito-\n  group: MojitoServers\n');
   });
 });

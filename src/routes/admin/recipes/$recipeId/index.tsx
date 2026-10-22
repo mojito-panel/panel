@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 
 import { Download, Trash2 } from 'lucide-react';
-import { parseRecipe } from '~/contract';
+import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract';
 import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
 import { adminRecipesList } from '~/lists/recipes';
 import { Button } from '~/components/ui/button';
@@ -13,6 +13,7 @@ import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
 import {
   recipeEditorValueToRecipe,
   recipeToEditorValue,
+  runtimeToEditorValue,
   type RecipeEditorValue,
 } from '~/validators/recipe-editor';
 
@@ -121,8 +122,12 @@ function EditRecipePage() {
   );
 
   // Stored JSON → contract recipe (defaults applied) → editor value.
+  // Runtime recipes hydrate through their own conversion (no start).
   // The whole page remounts via `key` when the server data changes.
-  const initial = recipeToEditorValue(parseRecipe(JSON.parse(query.data.json)));
+  const storedJson = JSON.parse(query.data.json);
+  const initial = isRuntimeRecipeJson(storedJson)
+    ? runtimeToEditorValue(parseRuntimeRecipe(storedJson))
+    : recipeToEditorValue(parseRecipe(storedJson));
 
   return (
     <RecipeEditor

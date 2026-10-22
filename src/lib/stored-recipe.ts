@@ -1,26 +1,34 @@
 /**
- * Stored recipe normalization (panel DB → contract v3).
+ * Stored recipe normalization (panel DB → contract v4).
  *
- * Recipes saved before the v3 cutover carry `schemaVersion: 1|2` and a
- * `type`/`requires` pair that no longer exists — the structural leftovers
- * are stripped IN MEMORY wherever a stored recipe leaves the panel (the
- * edit page's JSON, the install/reinstall pushes to the agent). Editing a
- * legacy recipe (or re-importing its file) writes v3 back to the DB.
+ * Recipes saved before the v4 cutover carry `schema_version: 3` and a
+ * `docker_image`/`docker_images` pair that no longer exists — the
+ * structural leftovers are stripped IN MEMORY wherever a stored recipe
+ * leaves the panel (the edit page's JSON, the install/reinstall pushes
+ * to the agent). Editing a legacy recipe (or re-importing its file)
+ * writes v4 back to the DB.
  *
- * A legacy recipe still needs a `dockerImage` (new in v3, required):
- * when absent the push is left as-is and the agent rejects the install
- * with a validation error — the recipe must be rewritten for containers.
+ * The runtimes an old recipe kept in its image (JDK, steamcmd) are NOT
+ * provisioned automatically: the pushed recipe is left runnable-looking
+ * but its install/start commands must be rewritten with declarative
+ * download/extract actions — the agent rejects the install otherwise.
  */
 
 /**
- * Upgrades a stored recipe JSON to the v3 contract shape: schemaVersion →
- * 3, legacy `type`/`requires` fields dropped. Already-v3 recipes are
- * returned as-is. `dockerImage` is NOT invented when missing (see header).
+ * Upgrades a stored recipe JSON to the v4 contract shape: schema_version
+ * → 4, legacy `docker_image`/`docker_images` fields dropped. Already-v4
+ * recipes are returned as-is.
  */
 export function normalizeStoredRecipe<T extends Record<string, unknown>>(
   json: T,
 ): T {
-  if (json.schema_version === 3) return json;
-  const { type: _type, requires: _requires, ...rest } = json;
-  return { ...rest, schema_version: 3 } as unknown as T;
+  if (json.schema_version === 4) return json;
+  const {
+    docker_image: _dockerImage,
+    docker_images: _dockerImages,
+    type: _type,
+    requires: _requires,
+    ...rest
+  } = json;
+  return { ...rest, schema_version: 4 } as unknown as T;
 }
