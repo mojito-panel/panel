@@ -86,7 +86,7 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
       sort: field('updatedAt'),
       cell: (recipe) => (
         <span className="text-muted-foreground">
-          {recipe.updatedAt.toLocaleDateString('fr-FR')}
+          {recipe.updatedAt.toLocaleString('fr-FR')}
         </span>
       ),
     },

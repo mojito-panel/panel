@@ -33,8 +33,17 @@ export async function buildRecipeSnapshot(
   em: EntityManager,
   recipeJson: Record<string, unknown> | null | undefined,
 ): Promise<ServerRecipeSnapshot> {
-  const app = normalizeStoredRecipe((recipeJson ?? {}) as Record<string, unknown>) as RecipeContract;
-  const runtimes = (await resolveRuntimeRecipes(em, recipeJson)) as Record<string, unknown>[];
+  // DEEP CLONE on the entity boundary: the recipe JSONs are LIVE
+  // MikroORM entity objects (a v4 recipe passes through normalization
+  // untouched) — storing references on the server row means any later
+  // in-place edit of the snapshot would silently write through into
+  // the recipe row. The snapshot owns a fully detached copy.
+  const app = structuredClone(
+    normalizeStoredRecipe((recipeJson ?? {}) as Record<string, unknown>),
+  ) as RecipeContract;
+  const runtimes = (await resolveRuntimeRecipes(em, recipeJson)).map(
+    (runtime) => structuredClone(runtime),
+  ) as Record<string, unknown>[];
 
   // The runtime recipes are normalized (v4) but still carry their own
   // variable declarations — the merge needs them before they leave.
@@ -57,8 +66,12 @@ async function runtimeSlugs(
   recipeJson: Record<string, unknown> | null | undefined,
 ): Promise<string[]> {
   const seen = new Set<string>();
+  // COPY, never alias: for a v4 recipe `recipeJson` IS the live entity's
+  // json object — the walk shifts its queue dry, aliasing `requires`
+  // would empty the array on the managed entity and the next flush
+  // would persist the emptied graph to the recipe row.
   const queue: string[] = Array.isArray(recipeJson?.requires)
-    ? (recipeJson.requires as string[])
+    ? [...(recipeJson.requires as string[])]
     : [];
   while (queue.length > 0) {
     const id = queue.shift()!;

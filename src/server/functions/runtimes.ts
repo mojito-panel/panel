@@ -23,8 +23,12 @@ export async function resolveRuntimeRecipes(
 ): Promise<unknown[]> {
   const resolved: unknown[] = [];
   const seen = new Set<string>();
+  // COPY, never alias: for a v4 recipe `recipeJson` IS the live entity's
+  // json object — aliasing `requires` as the walk queue would let
+  // shift() empty the array IN PLACE on the managed entity, and the
+  // next flush of the request persists the emptied graph to the row.
   const queue: string[] = Array.isArray(recipeJson?.requires)
-    ? (recipeJson.requires as string[])
+    ? [...(recipeJson.requires as string[])]
     : [];
 
   while (queue.length > 0) {
