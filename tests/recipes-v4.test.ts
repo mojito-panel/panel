@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { safeParseRecipe } from '../src/contract/recipe-schema';
 
 /**
- * The three recipes of the recipes repo must always validate against the
+ * The recipes of the recipes repo must always validate against the
  * CURRENT contract version — a recipe drift breaks installs, not tests.
  */
 const recipesRoot = join(__dirname, '..', '..', 'recipes');
 const recipeFiles = [
   'minecraft/vanilla/recipe-minecraft-vanilla.json',
+  'steamcmd/enshrouded/recipe-enshrouded.json',
   'steamcmd/icarus/recipe-icarus.json',
+  'steamcmd/palworld/recipe-palworld.json',
   'steamcmd/ricochet/recipe-ricochet.json',
 ];
 

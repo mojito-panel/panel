@@ -43,7 +43,7 @@ describe('recipes tree', () => {
 
   it('validates every app recipe against the app schema', () => {
     const apps = FILES.filter(([path, json]) => !isRuntimeRecipeJson(json) && !path.includes('runtimes'));
-    expect(apps.length).toBe(3); // vanilla, icarus, ricochet
+    expect(apps.length).toBe(5); // vanilla, enshrouded, icarus, palworld, ricochet
     for (const [, json] of apps) {
       const recipe: Recipe = parseRecipe(json);
       expect(recipe.type).toBe('app');
@@ -72,6 +72,8 @@ describe('recipes tree', () => {
     }
     expect(appRequires['minecraft-vanilla']).toContain('java');
     expect(appRequires['icarus']).toContain('steamcmd');
+    expect(appRequires['palworld']).toContain('steamcmd');
+    expect(appRequires['enshrouded']).toContain('steamcmd');
     expect(appRequires['ricochet']).toContain('steamcmd');
   });
 

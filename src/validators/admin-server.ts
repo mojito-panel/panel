@@ -43,10 +43,11 @@ export type AdminChangeServerRecipeDto = z.infer<typeof adminChangeServerRecipeS
 export const updateAdminServerFormSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
   ownerId: z.string().min(1, 'Choisis un propriétaire'),
+  /** RAM limit in MB — 0 = unlimited (no Job Object commit cap). */
   memoryMb: z
     .number()
     .int()
-    .min(512, 'La RAM doit être >= 512 Mo')
+    .min(0, 'La RAM doit être >= 0 Mo (0 = illimité)')
     .max(65536, 'La RAM doit être <= 65536 Mo'),
   /** CPU limit in cores — floats allowed (1.5), 0 = unlimited. */
   cpuCores: z

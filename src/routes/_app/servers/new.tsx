@@ -262,10 +262,14 @@ function NewServerPage() {
                   <Input
                     id="memoryMb"
                     type="number"
+                    min="0"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(Number(e.target.value))}
                     onBlur={field.handleBlur}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    0 = illimité (pas de limite de commit).
+                  </p>
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">
                       {field.state.meta.errors[0]?.message}

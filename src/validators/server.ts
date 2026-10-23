@@ -8,10 +8,11 @@ export const createServerSchema = z.object({
   recipeId: z.string().min(1, 'Choisis une recette'),
   /** Free allocation claimed from the node's pool (Pelican semantics). */
   allocationId: z.string().min(1, 'Choisis une allocation'),
+  /** RAM limit in MB — 0 = unlimited (no Job Object commit cap). */
   memoryMb: z
     .number()
     .int()
-    .min(512, 'La RAM doit être >= 512 Mo')
+    .min(0, 'La RAM doit être >= 0 Mo (0 = illimité)')
     .max(65536, 'La RAM doit être <= 65536 Mo'),
   /** CPU limit in cores — floats allowed (1.5), 0 = unlimited. */
   cpuCores: z

@@ -135,7 +135,13 @@ function ServerSettingsPage() {
           />
           <InfoRow
             label="Mémoire allouée"
-            value={server?.resources ? `${server.resources.memoryMb} Mo` : '—'}
+            value={
+              server?.resources
+                ? Number(server.resources.memoryMb) > 0
+                  ? `${server.resources.memoryMb} Mo`
+                  : 'Illimité'
+                : '—'
+            }
           />
           <InfoRow
             label="CPU alloué"

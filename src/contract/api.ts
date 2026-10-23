@@ -32,7 +32,8 @@ export type Id = z.infer<typeof idSchema>;
 /** Server resources (network + compute) — source of system variables (SERVER_PORT, SERVER_MEMORY...). */
 export const serverResourcesSchema = z.object({
   port: z.number().int().positive(),
-  memoryMb: z.number().int().positive(),
+  /** Memory limit in MB — 0 = unlimited (no Job Object commit cap). */
+  memoryMb: z.number().int().min(0),
   /** CPU limit in cores (0 = unlimited, halves OK: 1.5). */
   cpuCores: z.number().min(0).max(1024).default(0),
   ip: z.string().default('0.0.0.0'),
@@ -105,7 +106,8 @@ export const updateServerResourcesRequestSchema = z.object({
   resources: z.object({
     port: z.number().int().positive(),
     ip: z.string().min(1),
-    memoryMb: z.number().int().positive(),
+    /** Memory limit in MB — 0 = unlimited (no Job Object commit cap). */
+    memoryMb: z.number().int().min(0),
     cpuCores: z.number().min(0).max(1024).default(0),
     /** Secondary ports (non-primary allocations) — see serverResourcesSchema. */
     ports: z.array(z.number().int().positive()).default([]),

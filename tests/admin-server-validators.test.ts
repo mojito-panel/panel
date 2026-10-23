@@ -52,9 +52,14 @@ describe('updateAdminServerSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects memory below the minimum', () => {
-    const result = updateAdminServerSchema.safeParse({ ...valid, memoryMb: 256 });
+  it('rejects negative memory', () => {
+    const result = updateAdminServerSchema.safeParse({ ...valid, memoryMb: -1 });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts unlimited memory (0)', () => {
+    const result = updateAdminServerSchema.safeParse({ ...valid, memoryMb: 0 });
+    expect(result.success).toBe(true);
   });
 
   it('rejects a fractional backup limit', () => {

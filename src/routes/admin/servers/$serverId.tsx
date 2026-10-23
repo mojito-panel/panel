@@ -374,17 +374,20 @@ function ServerRecordTabs({
             <form.Field name="memoryMb">
               {(field) => (
                 <div className="space-y-2">
-                  <Label htmlFor="admin-server-memory">Mémoire (Mo)</Label>
+                  <Label htmlFor="admin-server-memory">Mémoire (Mo, 0 = illimité)</Label>
                   {canUpdate ? (
                     <Input
                       id="admin-server-memory"
                       type="number"
+                      min="0"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(Number(e.target.value))}
                       onBlur={field.handleBlur}
                     />
                   ) : (
-                    <p className="py-2 font-medium">{field.state.value} Mo</p>
+                    <p className="py-2 font-medium">
+                      {field.state.value === 0 ? 'Illimité' : `${field.state.value} Mo`}
+                    </p>
                   )}
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">
