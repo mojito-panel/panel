@@ -19,8 +19,8 @@ import { orm } from '../orm';
 import {
   requireNodeOf,
   requireRecipeOf,
-  findPrimaryAllocation,
   pushServerResources,
+  secondaryPorts,
   installServer,
   deleteServer,
   syncRuntimeStatus,
@@ -219,7 +219,8 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
 
     const node = await requireNodeOf(server);
     const recipe = await requireRecipeOf(server);
-    const allocation = await findPrimaryAllocation(server.id);
+    const allocations = await orm.em.find(Allocation, { serverId: server.id });
+    const allocation = allocations.find((a) => a.primary);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
@@ -235,6 +236,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
           memoryMb: server.memoryMb,
           cpuCores: Number(server.cpuCores),
           ip: allocation.ip,
+          ports: secondaryPorts(allocations),
         },
       });
       server.status = 'installing';
@@ -387,7 +389,8 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     // The CURRENT recipe is sent — an update of the recipe JSON is picked up
     // on reinstall, like an egg update in Pelican.
     const recipe = await requireRecipeOf(server);
-    const allocation = await findPrimaryAllocation(server.id);
+    const allocations = await orm.em.find(Allocation, { serverId: server.id });
+    const allocation = allocations.find((a) => a.primary);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
@@ -420,6 +423,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
               memoryMb: server.memoryMb,
               cpuCores: Number(server.cpuCores),
               ip: allocation.ip,
+              ports: secondaryPorts(allocations),
             },
           });
           server.status = 'installing';

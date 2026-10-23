@@ -127,6 +127,8 @@ export async function agentInstallServer(
       memoryMb: number;
       cpuCores: number;
       ip?: string;
+      /** Secondary ports (non-primary allocations) — see serverResourcesSchema. */
+      ports?: number[];
     };
   },
 ): Promise<AgentInstallResponse> {
@@ -212,10 +214,12 @@ export async function agentUpdateResources(
     ip: string;
     memoryMb: number;
     cpuCores: number;
+    /** Secondary ports (non-primary allocations) — see serverResourcesSchema. */
+    ports?: number[];
   },
 ): Promise<{
   serverId: string;
-  resources: { port: number; memoryMb: number; cpuCores: number; ip: string };
+  resources: { port: number; memoryMb: number; cpuCores: number; ip: string; ports?: number[] };
 }> {
   return agentCall(node, `/servers/${serverId}/resources`, {
     method: 'POST',

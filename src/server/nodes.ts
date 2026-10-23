@@ -7,6 +7,7 @@ import { orm } from './orm';
 import { HttpError } from './session';
 import { encryptSecret } from './crypto';
 import { agentHealth, agentUpdateResources, AgentError } from './agent/client';
+import { secondaryPorts } from './servers';
 import { DEFAULT_SFTP_PORT } from '~/contract';
 
 /**
@@ -28,6 +29,8 @@ export async function pushResources(
     ip: string;
     memoryMb: number | string;
     cpuCores: number | string;
+    /** Secondary ports (non-primary allocations) — see serverResourcesSchema. */
+    ports?: number[];
   },
 ): Promise<void> {
   try {
@@ -207,11 +210,13 @@ export async function assignAllocation(
   if (!hadPrimary) {
     const node = await em.findOne(Node, { id: server.nodeId });
     if (node) {
+      const assigned = await em.find(Allocation, { serverId: server.id });
       await pushResources(node, server.id, {
         port: allocation.port,
         ip: allocation.ip,
         memoryMb: server.memoryMb,
         cpuCores: server.cpuCores,
+        ports: secondaryPorts(assigned),
       });
     }
   }
@@ -243,6 +248,7 @@ export async function revokeAllocation(allocation: IAllocation): Promise<void> {
     ip: string;
     memoryMb: number | string;
     cpuCores: number | string;
+    ports?: number[];
   } | null = null;
   if (wasPrimary && others.length > 0) {
     others[0].primary = true;
@@ -252,6 +258,7 @@ export async function revokeAllocation(allocation: IAllocation): Promise<void> {
         ip: others[0].ip,
         memoryMb: server.memoryMb,
         cpuCores: server.cpuCores,
+        ports: secondaryPorts(others),
       };
     }
   }

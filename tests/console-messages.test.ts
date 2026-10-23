@@ -85,3 +85,24 @@ describe('formatBytes', () => {
     expect(formatBytes(1258291)).toMatch(/ MB$/);
   });
 });
+
+describe('watchdog events', () => {
+  it('renders the watchdog violation and squat codes with params and an emoji', () => {
+    const violation = renderConsoleMessage('watchdog.violation', {
+      protocol: 'tcp',
+      port: '27015',
+      pid: '4242',
+    });
+    const squat = renderConsoleMessage('watchdog.squat', {
+      protocol: 'tcp',
+      port: '25565',
+      pid: '4242',
+      user: 'mojito-abc',
+    });
+    // Structure only — the text itself is content, the params must flow.
+    expect(violation).toContain('27015');
+    expect(squat).toContain('mojito-abc');
+    expect(consoleMessageEmoji('watchdog.violation')).not.toBe('');
+    expect(consoleMessageEmoji('watchdog.squat')).not.toBe('');
+  });
+});

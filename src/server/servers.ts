@@ -48,6 +48,18 @@ export async function findPrimaryAllocation(serverId: string) {
 }
 
 /**
+ * Secondary ports of a server — its non-primary allocations. Pushed with
+ * the resources record so the agent knows the FULL allowed port set
+ * (its watchdog attributes listening sockets against it).
+ */
+export function secondaryPorts(allocations: { primary?: boolean | null; port: number }[]): number[] {
+  return allocations
+    .filter((a) => !a.primary)
+    .map((a) => Number(a.port))
+    .sort((a, b) => a - b);
+}
+
+/**
  * Pushes the server's full resources to the agent's cache — primary
  * port/ip plus the current memory/cpu limits, one complete record (the
  * power start/restart flow uses it as the limits sync). The new values
@@ -65,9 +77,8 @@ export async function pushServerResources(server: {
   const em = orm.em;
   const node = await em.findOne(Node, { id: server.nodeId });
   if (!node) return;
-  const primary = (await em.find(Allocation, { serverId: server.id })).find(
-    (a) => a.primary,
-  );
+  const assigned = await em.find(Allocation, { serverId: server.id });
+  const primary = assigned.find((a) => a.primary);
   if (!primary) return;
   try {
     await agentUpdateResources(node, server.id, {
@@ -75,6 +86,7 @@ export async function pushServerResources(server: {
       ip: primary.ip,
       memoryMb: Number(server.memoryMb),
       cpuCores: Number(server.cpuCores),
+      ports: secondaryPorts(assigned),
     });
   } catch (err) {
     if (err instanceof AgentError && err.statusCode === 404) {

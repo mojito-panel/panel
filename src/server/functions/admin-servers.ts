@@ -19,7 +19,7 @@ import {
   agentUpdateResources,
   AgentError,
 } from '../agent/client';
-import { deleteServer } from '../servers';
+import { deleteServer, secondaryPorts } from '../servers';
 import {
   adminServerIdSchema,
   adminDeleteServerSchema,
@@ -254,9 +254,10 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
     const recipe = await em.findOne(Recipe, { id: server.recipeId });
     if (!recipe) throw new HttpError(500, 'Recette introuvable');
 
-    const allocation = (await em.find(Allocation, { serverId: server.id }))
-      .sort((a, b) => a.port - b.port)
-      .find((a) => a.primary);
+    const allocations = (await em.find(Allocation, { serverId: server.id })).sort(
+      (a, b) => a.port - b.port,
+    );
+    const allocation = allocations.find((a) => a.primary);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
 
     try {
@@ -289,6 +290,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
               memoryMb: server.memoryMb,
               cpuCores: Number(server.cpuCores),
               ip: allocation.ip,
+              ports: secondaryPorts(allocations),
             },
           });
           server.status = 'installing';
@@ -338,9 +340,8 @@ async function pushServerResources(
 ): Promise<void> {
   const node = await em.findOne(Node, { id: server.nodeId });
   if (!node) return;
-  const primary = (await em.find(Allocation, { serverId: server.id })).find(
-    (a) => a.primary,
-  );
+  const assigned = await em.find(Allocation, { serverId: server.id });
+  const primary = assigned.find((a) => a.primary);
   if (!primary) return;
   try {
     await agentUpdateResources(node, server.id, {
@@ -348,6 +349,7 @@ async function pushServerResources(
       ip: primary.ip,
       memoryMb: Number(server.memoryMb),
       cpuCores: Number(server.cpuCores),
+      ports: secondaryPorts(assigned),
     });
   } catch (err) {
     if (err instanceof AgentError && err.statusCode === 404) {

@@ -353,7 +353,7 @@ sequenceDiagram
 | `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
 | `GET /servers/:serverId/install` | Installation status + logs (end-of-install sync + polling fallback) |
 | `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
-| `POST /servers/:serverId/resources` | Resources sync (port/ip/memory/cpu of the next start, refused if an install is in progress) — see §6 |
+| `POST /servers/:serverId/resources` | Resources sync (port/ip/ports/memory/cpu of the next start, refused if an install is in progress) — see §6 |
 | `GET /servers` | List of the agent's servers |
 | `GET /servers/:serverId` | Runtime info (status, recent logs) |
 | `GET /servers/:serverId/logs?after=N` | Incremental logs (console fallback) |

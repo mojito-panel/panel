@@ -53,6 +53,12 @@ const CATALOG: Record<string, (params: Params) => string> = {
   'power.restart': () => 'Restarting the server…',
   'power.kill': () => 'Killing the server process…',
   'server.online': () => 'Server is online',
+
+  // ─── Port watchdog (agent audits listening sockets vs the allocation) ────
+  'watchdog.violation': (p) =>
+    `Watchdog: this server is listening on non-allocated ${p.protocol} port ${p.port} (PID ${p.pid})`,
+  'watchdog.squat': (p) =>
+    `Watchdog: allocated ${p.protocol} port ${p.port} is already in use by PID ${p.pid} (user ${p.user})`,
 };
 
 /** Emoji prefix per message code (empty string = no emoji). */
@@ -66,6 +72,8 @@ const EMOJI: Record<string, string> = {
   'power.restart': '🚦',
   'power.kill': '🚦',
   'server.online': '🚀',
+  'watchdog.violation': '🐕‍🦺',
+  'watchdog.squat': '🐕‍🦺',
 };
 
 /** Renders a coded message — null when the code is unknown (old agent). */

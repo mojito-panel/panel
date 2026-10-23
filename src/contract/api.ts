@@ -36,6 +36,13 @@ export const serverResourcesSchema = z.object({
   /** CPU limit in cores (0 = unlimited, halves OK: 1.5). */
   cpuCores: z.number().min(0).max(1024).default(0),
   ip: z.string().default('0.0.0.0'),
+  /**
+   * Secondary ports of the server (its non-primary allocations) — the
+   * agent's allowed port set is [port, ...ports]. Purely informational
+   * for the port watchdog (recipes keep templating SERVER_PORT from the
+   * primary).
+   */
+  ports: z.array(z.number().int().positive()).default([]),
 });
 
 export type ServerResourcesPayload = z.infer<typeof serverResourcesSchema>;
@@ -100,6 +107,8 @@ export const updateServerResourcesRequestSchema = z.object({
     ip: z.string().min(1),
     memoryMb: z.number().int().positive(),
     cpuCores: z.number().min(0).max(1024).default(0),
+    /** Secondary ports (non-primary allocations) — see serverResourcesSchema. */
+    ports: z.array(z.number().int().positive()).default([]),
   }),
 });
 

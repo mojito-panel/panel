@@ -197,6 +197,42 @@ describe('updateServerResourcesRequestSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts secondary ports in the record', () => {
+    const result = updateServerResourcesRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      resources: {
+        port: 25565,
+        ip: '192.168.1.10',
+        memoryMb: 4096,
+        cpuCores: 0,
+        ports: [25566, 27015],
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.resources.ports).toEqual([25566, 27015]);
+    }
+  });
+
+  it('defaults the secondary ports to an empty list (old agent record)', () => {
+    const result = updateServerResourcesRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      resources: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.resources.ports).toEqual([]);
+    }
+  });
+
+  it('rejects an invalid secondary port', () => {
+    const result = updateServerResourcesRequestSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      resources: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0, ports: [0] },
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('serverInfoSchema', () => {
