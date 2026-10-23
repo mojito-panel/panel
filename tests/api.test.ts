@@ -18,7 +18,7 @@ import {
   consoleErrorSchema,
   installStatusSchema,
   nodeStatsSchema,
-  updateServerAllocationRequestSchema,
+  updateServerResourcesRequestSchema,
   HEALTH_TOKEN_TTL_SECONDS,
   healthTokenPayloadSchema,
   healthServerMessageSchema,
@@ -57,15 +57,15 @@ describe('installServerRequestSchema', () => {
       recipe: { id: 'minecraft' },
       variables: { RAM_MB: 2048, motd: 'Hello' },
       installDir: 'C:\\PanelData\\servers\\abc',
-      allocation: { port: 25565, memoryMb: 4096 },
+      resources: { port: 25565, memoryMb: 4096 },
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.allocation.ip).toBe('0.0.0.0'); // default
+      expect(result.data.resources.ip).toBe('0.0.0.0'); // default
     }
   });
 
-  it('rejects an install without allocation', () => {
+  it('rejects an install without resources', () => {
     const result = installServerRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
       name: 'my-server',
@@ -83,11 +83,11 @@ describe('installServerRequestSchema', () => {
       recipe: {},
       variables: {},
       installDir: '/tmp',
-      allocation: { port: 25565, memoryMb: 4096, cpuCores: 1.5 },
+      resources: { port: 25565, memoryMb: 4096, cpuCores: 1.5 },
     });
     expect(fractional.success).toBe(true);
     if (fractional.success) {
-      expect(fractional.data.allocation.cpuCores).toBe(1.5);
+      expect(fractional.data.resources.cpuCores).toBe(1.5);
     }
 
     const omitted = installServerRequestSchema.safeParse({
@@ -96,11 +96,11 @@ describe('installServerRequestSchema', () => {
       recipe: {},
       variables: {},
       installDir: '/tmp',
-      allocation: { port: 25565, memoryMb: 4096 },
+      resources: { port: 25565, memoryMb: 4096 },
     });
     expect(omitted.success).toBe(true);
     if (omitted.success) {
-      expect(omitted.data.allocation.cpuCores).toBe(0); // 0 = unlimited
+      expect(omitted.data.resources.cpuCores).toBe(0); // 0 = unlimited
     }
   });
 
@@ -115,13 +115,13 @@ describe('installServerRequestSchema', () => {
     expect(
       installServerRequestSchema.safeParse({
         ...base,
-        allocation: { port: 25565, memoryMb: 4096, cpuCores: -0.5 },
+        resources: { port: 25565, memoryMb: 4096, cpuCores: -0.5 },
       }).success,
     ).toBe(false);
     expect(
       installServerRequestSchema.safeParse({
         ...base,
-        allocation: { port: 25565, memoryMb: 4096, cpuCores: 2048 },
+        resources: { port: 25565, memoryMb: 4096, cpuCores: 2048 },
       }).success,
     ).toBe(false);
   });
@@ -157,43 +157,43 @@ describe('sendCommandRequestSchema', () => {
   });
 });
 
-describe('updateServerAllocationRequestSchema', () => {
-  it('validates a full allocation update (limits sync)', () => {
-    const result = updateServerAllocationRequestSchema.safeParse({
+describe('updateServerResourcesRequestSchema', () => {
+  it('validates a full resources update (limits sync)', () => {
+    const result = updateServerResourcesRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      allocation: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0 },
+      resources: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0 },
     });
     expect(result.success).toBe(true);
   });
 
   it('rejects a partial record (port/ip only)', () => {
-    const result = updateServerAllocationRequestSchema.safeParse({
+    const result = updateServerResourcesRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      allocation: { port: 25565, ip: '192.168.1.10' },
+      resources: { port: 25565, ip: '192.168.1.10' },
     });
     expect(result.success).toBe(false);
   });
 
   it('rejects a non-integer port', () => {
-    const result = updateServerAllocationRequestSchema.safeParse({
+    const result = updateServerResourcesRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      allocation: { port: 25565.5, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 1 },
+      resources: { port: 25565.5, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 1 },
     });
     expect(result.success).toBe(false);
   });
 
   it('rejects an empty ip', () => {
-    const result = updateServerAllocationRequestSchema.safeParse({
+    const result = updateServerResourcesRequestSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
-      allocation: { port: 25565, ip: '', memoryMb: 4096, cpuCores: 1 },
+      resources: { port: 25565, ip: '', memoryMb: 4096, cpuCores: 1 },
     });
     expect(result.success).toBe(false);
   });
 
   it('rejects an empty serverId', () => {
-    const result = updateServerAllocationRequestSchema.safeParse({
+    const result = updateServerResourcesRequestSchema.safeParse({
       serverId: '',
-      allocation: { port: 25565, ip: '192.168.1.10' },
+      resources: { port: 25565, ip: '192.168.1.10' },
     });
     expect(result.success).toBe(false);
   });

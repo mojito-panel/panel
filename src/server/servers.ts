@@ -11,7 +11,7 @@ import {
   agentInstallServer,
   agentDeleteServer,
   agentGetServer,
-  agentUpdateAllocation,
+  agentUpdateResources,
   AgentError,
 } from './agent/client';
 
@@ -48,13 +48,13 @@ export async function findPrimaryAllocation(serverId: string) {
 }
 
 /**
- * Pushes the server's full allocation to the agent's cache — primary
+ * Pushes the server's full resources to the agent's cache — primary
  * port/ip plus the current memory/cpu limits, one complete record (the
  * power start/restart flow uses it as the limits sync). The new values
  * apply at the NEXT start. A 404 (agent out of sync) is ignored,
  * the DB stays the source of truth.
  */
-export async function pushPrimaryAllocation(server: {
+export async function pushServerResources(server: {
   id: string;
   nodeId: string;
   // MikroORM Opt column type — Number() at the push, like every
@@ -70,7 +70,7 @@ export async function pushPrimaryAllocation(server: {
   );
   if (!primary) return;
   try {
-    await agentUpdateAllocation(node, server.id, {
+    await agentUpdateResources(node, server.id, {
       port: primary.port,
       ip: primary.ip,
       memoryMb: Number(server.memoryMb),
@@ -160,7 +160,7 @@ export async function installServer(
       runtimes: await resolveRuntimeRecipes(orm.em, recipe.json),
       variables: input.variables,
       installDir: `servers/${serverId}`,
-      allocation: {
+      resources: {
         port: allocation.port,
         memoryMb: input.memoryMb,
         cpuCores: input.cpuCores,

@@ -6,7 +6,7 @@ import type { INode, IServer, IAllocation } from '~/db/types';
 import { orm } from './orm';
 import { HttpError } from './session';
 import { encryptSecret } from './crypto';
-import { agentHealth, agentUpdateAllocation, AgentError } from './agent/client';
+import { agentHealth, agentUpdateResources, AgentError } from './agent/client';
 import { DEFAULT_SFTP_PORT } from '~/contract';
 
 /**
@@ -16,20 +16,25 @@ import { DEFAULT_SFTP_PORT } from '~/contract';
  */
 
 /**
- * Tolerant push of an allocation change to the agent's cache — a 404
+ * Tolerant push of a resources change to the agent's cache — a 404
  * (agent out of sync) is ignored, the DB stays the source of truth.
  * Anything else surfaces as a 502.
  */
-export async function pushAllocation(
+export async function pushResources(
   node: INode,
   serverId: string,
-  allocation: { port: number; ip: string; memoryMb: number | string; cpuCores: number | string },
+  resources: {
+    port: number;
+    ip: string;
+    memoryMb: number | string;
+    cpuCores: number | string;
+  },
 ): Promise<void> {
   try {
-    await agentUpdateAllocation(node, serverId, {
-      ...allocation,
-      memoryMb: Number(allocation.memoryMb),
-      cpuCores: Number(allocation.cpuCores),
+    await agentUpdateResources(node, serverId, {
+      ...resources,
+      memoryMb: Number(resources.memoryMb),
+      cpuCores: Number(resources.cpuCores),
     });
   } catch (err) {
     if (err instanceof AgentError && err.statusCode === 404) {
@@ -202,7 +207,7 @@ export async function assignAllocation(
   if (!hadPrimary) {
     const node = await em.findOne(Node, { id: server.nodeId });
     if (node) {
-      await pushAllocation(node, server.id, {
+      await pushResources(node, server.id, {
         port: allocation.port,
         ip: allocation.ip,
         memoryMb: server.memoryMb,
@@ -255,7 +260,7 @@ export async function revokeAllocation(allocation: IAllocation): Promise<void> {
   if (wasPrimary && promoted && server) {
     const node = await em.findOne(Node, { id: server.nodeId });
     if (node) {
-      await pushAllocation(node, server.id, promoted);
+      await pushResources(node, server.id, promoted);
     }
   }
 }

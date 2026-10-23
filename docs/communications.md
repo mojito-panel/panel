@@ -85,7 +85,7 @@ sequenceDiagram
 
     N->>P: POST installServerFn {name, nodeId, recipeId, allocationId, memoryMb, variables}
     P->>D: INSERT server (status: installing) + allocation
-    P->>A: POST /servers/install {serverId, recipe, variables, installDir, allocation}
+    P->>A: POST /servers/install {serverId, recipe, variables, installDir, resources}
     A->>A: Synchronous validation (Zod: request, recipe, variables)
     alt invalid request/recipe
         A-->>P: 400 / 422 (detail)
@@ -209,7 +209,7 @@ sequenceDiagram
 
 ## 5. Reinstallation (Settings → console)
 
-Same runner as installation, but **in place**: server stopped, directory and allocation kept, **up-to-date** recipe sent by the panel.
+Same runner as installation, but **in place**: server stopped, directory and resources kept, **up-to-date** recipe sent by the panel.
 
 ```mermaid
 sequenceDiagram
@@ -232,7 +232,7 @@ sequenceDiagram
     R->>A: store.save (recipe/variables updated) on success
 ```
 
-**Unknown server on the agent side** — the agent's store (`servers.json`) is written only on installation **success**. A failed installation (or a lost agent dataDir) therefore leaves the panel DB and the agent store out of sync, and `/reinstall` answers 404. The panel handles this case: on 404, `reinstallServerFn` falls back to a **full installation** (`POST /servers/install`) rebuilt from the DB (current recipe, variables, allocation, `installDir` = `servers/<uuid>`).
+**Unknown server on the agent side** — the agent's store (`servers.json`) is written only on installation **success**. A failed installation (or a lost agent dataDir) therefore leaves the panel DB and the agent store out of sync, and `/reinstall` answers 404. The panel handles this case: on 404, `reinstallServerFn` falls back to a **full installation** (`POST /servers/install`) rebuilt from the DB (current recipe, variables, resources, `installDir` = `servers/<uuid>`).
 
 ---
 
@@ -353,7 +353,7 @@ sequenceDiagram
 | `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
 | `GET /servers/:serverId/install` | Installation status + logs (end-of-install sync + polling fallback) |
 | `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
-| `POST /servers/:serverId/allocation` | Primary allocation sync (port/ip of the next start, refused if an install is in progress) — see §6 |
+| `POST /servers/:serverId/resources` | Resources sync (port/ip/memory/cpu of the next start, refused if an install is in progress) — see §6 |
 | `GET /servers` | List of the agent's servers |
 | `GET /servers/:serverId` | Runtime info (status, recent logs) |
 | `GET /servers/:serverId/logs?after=N` | Incremental logs (console fallback) |

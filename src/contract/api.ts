@@ -29,8 +29,8 @@ export type Id = z.infer<typeof idSchema>;
 
 // ─── Server lifecycle (panel → agent) ─────────────────────────────────────────
 
-/** Server allocation — source of system variables (SERVER_PORT, SERVER_MEMORY...). */
-export const serverAllocationSchema = z.object({
+/** Server resources (network + compute) — source of system variables (SERVER_PORT, SERVER_MEMORY...). */
+export const serverResourcesSchema = z.object({
   port: z.number().int().positive(),
   memoryMb: z.number().int().positive(),
   /** CPU limit in cores (0 = unlimited, halves OK: 1.5). */
@@ -38,7 +38,7 @@ export const serverAllocationSchema = z.object({
   ip: z.string().default('0.0.0.0'),
 });
 
-export type ServerAllocationPayload = z.infer<typeof serverAllocationSchema>;
+export type ServerResourcesPayload = z.infer<typeof serverResourcesSchema>;
 
 export const installServerRequestSchema = z.object({
   serverId: idSchema,
@@ -48,7 +48,7 @@ export const installServerRequestSchema = z.object({
   runtimes: z.array(z.unknown()).default([]),
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
   installDir: z.string().min(1),
-  allocation: serverAllocationSchema,
+  resources: serverResourcesSchema,
 });
 
 export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
@@ -57,7 +57,7 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
  * Reinstall — same semantics as Pelican: the agent stops the server (if
  * running), then re-runs the recipe's install script in place. The panel
  * sends the CURRENT recipe (an update may have changed the install script);
- * the agent keeps its stored installDir and allocation.
+ * the agent keeps its stored installDir and resources.
  */
 export const reinstallServerRequestSchema = z.object({
   serverId: idSchema,
@@ -86,16 +86,16 @@ export type UpdateServerVariablesRequest = z.infer<
 >;
 
 /**
- * Allocation update (Pelican "set primary allocation" / port change, and
+ * Resources update (Pelican "set primary allocation" / port change, and
  * the power start/restart limits sync). The FULL record is pushed every
  * time — port, ip, memoryMb and cpuCores together, never partial chunks:
  * the panel is the source of truth and the agent replaces its stored
- * allocation wholesale. The new values apply on the NEXT start — a
+ * resources wholesale. The new values apply on the NEXT start — a
  * running process keeps its original environment.
  */
-export const updateServerAllocationRequestSchema = z.object({
+export const updateServerResourcesRequestSchema = z.object({
   serverId: idSchema,
-  allocation: z.object({
+  resources: z.object({
     port: z.number().int().positive(),
     ip: z.string().min(1),
     memoryMb: z.number().int().positive(),
@@ -103,8 +103,8 @@ export const updateServerAllocationRequestSchema = z.object({
   }),
 });
 
-export type UpdateServerAllocationRequest = z.infer<
-  typeof updateServerAllocationRequestSchema
+export type UpdateServerResourcesRequest = z.infer<
+  typeof updateServerResourcesRequestSchema
 >;
 
 export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
@@ -680,7 +680,7 @@ export const AGENT_ROUTES = {
   /** Incremental runtime logs (live console fallback, cursor-based). */
   logs: 'GET /servers/:serverId/logs',
   variablesUpdate: 'POST /servers/:serverId/variables',
-  allocationUpdate: 'POST /servers/:serverId/allocation',
+  resourcesUpdate: 'POST /servers/:serverId/resources',
   list: 'GET /servers',
   delete: 'DELETE /servers/:serverId',
   /** File browser — every path is relative to the server's installDir. */

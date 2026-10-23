@@ -16,7 +16,7 @@ import {
   agentServerAction,
   agentReinstallServer,
   agentInstallServer,
-  agentUpdateAllocation,
+  agentUpdateResources,
   AgentError,
 } from '../agent/client';
 import { deleteServer } from '../servers';
@@ -284,7 +284,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
             runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
-            allocation: {
+            resources: {
               port: allocation.port,
               memoryMb: server.memoryMb,
               cpuCores: Number(server.cpuCores),
@@ -332,7 +332,7 @@ export const deleteAdminServerFn = createServerFn({ method: 'POST' })
  * (agent out of sync) is tolerated: the panel DB remains the source of
  * truth. Same semantics as the Network page's sync in servers.ts.
  */
-async function pushPrimaryAllocation(
+async function pushServerResources(
   em: EntityManager,
   server: { id: string; nodeId: string; memoryMb: number | string; cpuCores: number | string },
 ): Promise<void> {
@@ -343,7 +343,7 @@ async function pushPrimaryAllocation(
   );
   if (!primary) return;
   try {
-    await agentUpdateAllocation(node, server.id, {
+    await agentUpdateResources(node, server.id, {
       port: primary.port,
       ip: primary.ip,
       memoryMb: Number(server.memoryMb),
@@ -466,7 +466,7 @@ export const addAdminServerAllocationFn = createServerFn({ method: 'POST' })
     allocation.primary = !hadPrimary;
     await em.flush();
 
-    if (!hadPrimary) await pushPrimaryAllocation(em, server);
+    if (!hadPrimary) await pushServerResources(em, server);
     return { id: allocation.id };
   });
 
@@ -518,6 +518,6 @@ export const setPrimaryAdminServerAllocationFn = createServerFn({ method: 'POST'
     }
     await em.flush();
 
-    await pushPrimaryAllocation(em, server);
+    await pushServerResources(em, server);
     return { id: allocation.id };
   });

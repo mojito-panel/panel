@@ -99,18 +99,18 @@ function ServerSettingsPage() {
           <InfoRow label="Node" value={server?.node.name ?? '…'} />
           <InfoRow
             label="Port"
-            value={server?.allocation?.port?.toString() ?? '—'}
+            value={server?.resources?.port?.toString() ?? '—'}
           />
           <InfoRow
             label="Mémoire allouée"
-            value={server?.allocation ? `${server.allocation.memoryMb} Mo` : '—'}
+            value={server?.resources ? `${server.resources.memoryMb} Mo` : '—'}
           />
           <InfoRow
             label="CPU alloué"
             value={
-              server?.allocation
-                ? Number(server.allocation.cpuCores) > 0
-                  ? `${Number(server.allocation.cpuCores)} cœur(s)`
+              server?.resources
+                ? Number(server.resources.cpuCores) > 0
+                  ? `${Number(server.resources.cpuCores)} cœur(s)`
                   : 'Illimité'
                 : '—'
             }

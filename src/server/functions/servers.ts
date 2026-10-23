@@ -20,7 +20,7 @@ import {
   requireNodeOf,
   requireRecipeOf,
   findPrimaryAllocation,
-  pushPrimaryAllocation,
+  pushServerResources,
   installServer,
   deleteServer,
   syncRuntimeStatus,
@@ -230,7 +230,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
         runtimes: await resolveRuntimeRecipes(em, recipe.json),
         variables: server.variables,
         installDir: `servers/${server.id}`,
-        allocation: {
+        resources: {
           port: allocation.port,
           memoryMb: server.memoryMb,
           cpuCores: Number(server.cpuCores),
@@ -291,7 +291,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
         // Backup contents (glob include patterns) shown on the Backups page
         backup: recipeJson.backup ?? null,
       },
-      allocation: primaryAllocation
+      resources: primaryAllocation
         ? {
             port: primaryAllocation.port,
             ip: primaryAllocation.ip,
@@ -346,11 +346,11 @@ export const serverActionFn = createServerFn({ method: 'POST' })
     }
 
     // Limits sync: the agent builds the server's Job Object from its
-    // stored allocation — push the panel's current record before the
+    // stored resources — push the panel's current record before the
     // spawn (install pushes it once; start/restart are the only refresh
     // moments, nothing can change at runtime).
     if (data.action === 'start' || data.action === 'restart') {
-      await pushPrimaryAllocation(server);
+      await pushServerResources(server);
     }
 
     const node = await requireNodeOf(server);
@@ -415,7 +415,7 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
             runtimes: await resolveRuntimeRecipes(em, recipe.json),
             variables: server.variables,
             installDir: `servers/${server.id}`,
-            allocation: {
+            resources: {
               port: allocation.port,
               memoryMb: server.memoryMb,
               cpuCores: Number(server.cpuCores),
@@ -710,7 +710,7 @@ export const addServerAllocationFn = createServerFn({ method: 'POST' })
     allocation.primary = !hadPrimary;
     await em.flush();
 
-    if (!hadPrimary) await pushPrimaryAllocation(server);
+    if (!hadPrimary) await pushServerResources(server);
     return { id: allocation.id };
   });
 
@@ -770,6 +770,6 @@ export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
     }
     await em.flush();
 
-    await pushPrimaryAllocation(server);
+    await pushServerResources(server);
     return { id: allocation.id };
   });

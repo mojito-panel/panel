@@ -122,7 +122,12 @@ export async function agentInstallServer(
     runtimes: unknown[];
     variables: Record<string, string | number | boolean>;
     installDir: string;
-    allocation: { port: number; memoryMb: number; cpuCores: number; ip?: string };
+    resources: {
+      port: number;
+      memoryMb: number;
+      cpuCores: number;
+      ip?: string;
+    };
   },
 ): Promise<AgentInstallResponse> {
   return agentCall(node, '/servers/install', { method: 'POST', body });
@@ -193,20 +198,28 @@ export async function agentUpdateServerVariables(
 }
 
 /**
- * Pushes the server's FULL allocation (Pelican "Network" page + the power
+ * Pushes the server's FULL resources (Pelican "Network" page + the power
  * start/restart limits sync) to the agent's cache — the new port/ip/memory/
  * cpu apply at the NEXT start, a running process keeps its original
  * environment. The record is always complete: no partial chunks, the agent
- * replaces its stored allocation wholesale.
+ * replaces its stored resources wholesale.
  */
-export async function agentUpdateAllocation(
+export async function agentUpdateResources(
   node: INode,
   serverId: string,
-  allocation: { port: number; ip: string; memoryMb: number; cpuCores: number },
-): Promise<{ serverId: string; allocation: { port: number; memoryMb: number; cpuCores: number; ip: string } }> {
-  return agentCall(node, `/servers/${serverId}/allocation`, {
+  resources: {
+    port: number;
+    ip: string;
+    memoryMb: number;
+    cpuCores: number;
+  },
+): Promise<{
+  serverId: string;
+  resources: { port: number; memoryMb: number; cpuCores: number; ip: string };
+}> {
+  return agentCall(node, `/servers/${serverId}/resources`, {
     method: 'POST',
-    body: { allocation },
+    body: { resources },
   });
 }
 
