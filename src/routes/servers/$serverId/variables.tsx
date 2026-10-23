@@ -47,32 +47,21 @@ function resolveCommand(
   });
 }
 
+/**
+ * The page itself keeps a STABLE hook count across renders (query hooks
+ * only) — the form lives in the child below, which mounts once the data
+ * exists. The previous single-component version called `useForm` after
+ * data-dependent early returns: a render that resolved the query in
+ * between rendered more hooks than the previous one and crashed React
+ * ("Rendered more hooks than during the previous render").
+ */
 function ServerVariablesPage() {
   const { serverId } = Route.useParams();
-  const queryClient = useQueryClient();
   const getServer = useServerFn(getServerFn);
-  const updateVariables = useServerFn(updateServerVariablesFn);
 
   const query = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => getServer({ data: { serverId } }),
-  });
-
-
-  const mutation = useMutation({
-    mutationFn: async (variables: Record<string, string | number | boolean>) => {
-      const result = await updateVariables({ data: { serverId, variables } });
-      await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
-      return result;
-    },
-    onSuccess: () => {
-      toast.success('Variables enregistrées', {
-        description: 'Appliquées au prochain démarrage du serveur.',
-      });
-    },
-    onError: (error) => {
-      toast.error('Échec de l’enregistrement', { description: error.message });
-    },
   });
 
   if (query.isError) {
@@ -98,19 +87,58 @@ function ServerVariablesPage() {
     );
   }
 
-  const definitions = [...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort);
-  // Narrowed above (recipe.start is null without server.variables.read)
-  const start = server.recipe.start;
+  return (
+    <VariablesEditor
+      serverId={serverId}
+      variables={server.variables}
+      // Narrowed above (recipe.start is null without server.variables.read)
+      start={server.recipe.start}
+      definitions={[...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort)}
+      canUpdate={serverCan(server.viewer.permissions, { 'server.variables': ['update'] })}
+    />
+  );
+}
+
+/** Props of the editor (one stable snapshot of the server detail). */
+interface VariablesEditorProps {
+  serverId: string;
+  variables: Record<string, string | number | boolean>;
+  start: { command: string };
+  definitions: RecipeVariable[];
+  canUpdate: boolean;
+}
+
+/** Form + cards — mounts only with the data present, hooks unconditional. */
+function VariablesEditor({ serverId, variables, start, definitions, canUpdate }: VariablesEditorProps) {
+  const queryClient = useQueryClient();
+  const updateVariables = useServerFn(updateServerVariablesFn);
+
   const editable = definitions.filter((v) => v.user_viewable && v.user_editable);
   const readonly = definitions.filter((v) => v.user_viewable && !v.user_editable);
   const defaults = new Map(definitions.map((v) => [v.env, v.default_value]));
+
+  const mutation = useMutation({
+    mutationFn: async (submitted: Record<string, string | number | boolean>) => {
+      const result = await updateVariables({ data: { serverId, variables: submitted } });
+      await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('Variables enregistrées', {
+        description: 'Appliquées au prochain démarrage du serveur.',
+      });
+    },
+    onError: (error) => {
+      toast.error('Échec de l’enregistrement', { description: error.message });
+    },
+  });
 
   const form = useForm({
     validators: { onChange: makeUpdateServerVariablesSchema(definitions) },
     defaultValues: {
       serverId,
       variables: Object.fromEntries(
-        definitions.map((v) => [v.env, server.variables[v.env] ?? v.default_value]),
+        definitions.map((v) => [v.env, variables[v.env] ?? v.default_value]),
       ) as Record<string, string | number | boolean>,
     },
     onSubmit: ({ value }) => mutation.mutate(value.variables),
@@ -159,11 +187,7 @@ function ServerVariablesPage() {
 
             <Button
               type="submit"
-              disabled={
-                editable.length === 0 ||
-                mutation.isPending ||
-                !serverCan(server.viewer.permissions, { 'server.variables': ['update'] })
-              }
+              disabled={editable.length === 0 || mutation.isPending || !canUpdate}
             >
               <Save />
               {mutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
@@ -187,7 +211,7 @@ function ServerVariablesPage() {
               <VariableField
                 key={variable.env}
                 variable={variable}
-                value={server.variables[variable.env] ?? variable.default_value}
+                value={variables[variable.env] ?? variable.default_value}
                 onChange={() => {}}
                 disabled
               />
