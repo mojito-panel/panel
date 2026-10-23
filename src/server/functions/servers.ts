@@ -27,7 +27,7 @@ import {
   loadServerContext,
   reinstallServerFromPanel,
 } from '../servers';
-import { serverRecipeSnapshot } from '../recipe-snapshot';
+import { serverRecipeSnapshot, recipeGraphUpdatedAt } from '../recipe-snapshot';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { toConsolePermissions } from '~/lib/permissions';
@@ -293,9 +293,15 @@ export const getServerFn = createServerFn({ method: 'GET' })
         id: recipe.id,
         name: recipe.name,
         slug: recipe.slug,
-        // When the recipe row was last edited / the snapshot last taken —
-        // "updated since install" drives the reload-recipe button.
-        updatedAt: recipe.updatedAt,
+        // Latest edit of the WHOLE recipe graph (app + required runtimes)
+        // — "updated since snapshot" drives the reload-recipe button: an
+        // edit of the java runtime matters as much as one of the app
+        // recipe.
+        updatedAt: await recipeGraphUpdatedAt(
+          orm.em,
+          recipe.json as Record<string, unknown>,
+          recipe.updatedAt,
+        ),
         syncedAt: server.recipeSyncedAt,
         // Merged variable definitions for the UI (forms) — app recipe's
         // own, plus the required runtimes' (runtime envs not re-declared

@@ -18,6 +18,7 @@ import {
   AgentError,
 } from '../agent/client';
 import { deleteServer, reinstallServerFromPanel, secondaryPorts } from '../servers';
+import { recipeGraphUpdatedAt } from '../recipe-snapshot';
 import {
   adminServerIdSchema,
   adminDeleteServerSchema,
@@ -134,8 +135,13 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
         id: recipe.id,
         name: recipe.name,
         slug: recipe.slug,
-        // Reload-recipe gating: the row was edited after the snapshot
-        updatedAt: recipe.updatedAt,
+        // Reload-recipe gating: latest edit of the WHOLE recipe graph
+        // (app + required runtimes) vs the server's snapshot date
+        updatedAt: await recipeGraphUpdatedAt(
+          em,
+          recipe.json as Record<string, unknown>,
+          recipe.updatedAt,
+        ),
         syncedAt: server.recipeSyncedAt,
       },
       owner: owner

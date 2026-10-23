@@ -49,6 +49,52 @@ export async function buildRecipeSnapshot(
 }
 
 /**
+ * Slugs of the app recipe's runtime graph (transitive, deduplicated) —
+ * the same walk as resolveRuntimeRecipes, without the payloads.
+ */
+async function runtimeSlugs(
+  em: EntityManager,
+  recipeJson: Record<string, unknown> | null | undefined,
+): Promise<string[]> {
+  const seen = new Set<string>();
+  const queue: string[] = Array.isArray(recipeJson?.requires)
+    ? (recipeJson.requires as string[])
+    : [];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const row = await em.findOne(Recipe, { slug: id });
+    const json = row?.json as Record<string, unknown> | undefined;
+    if (row && Array.isArray(json?.requires)) {
+      queue.push(...(json.requires as string[]));
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * The latest edit of the recipe GRAPH — the app recipe row and every
+ * resolved runtime row. The reload-recipe button compares this against
+ * the server's snapshot date: editing the java RUNTIME matters as much
+ * as editing the app recipe itself.
+ */
+export async function recipeGraphUpdatedAt(
+  em: EntityManager,
+  recipeJson: Record<string, unknown> | null | undefined,
+  appUpdatedAt: Date,
+): Promise<Date> {
+  const slugs = await runtimeSlugs(em, recipeJson);
+  if (slugs.length === 0) return appUpdatedAt;
+  const rows = await em.find(Recipe, { slug: { $in: slugs } });
+  let latest = appUpdatedAt;
+  for (const row of rows) {
+    if (row.updatedAt > latest) latest = row.updatedAt;
+  }
+  return latest;
+}
+
+/**
  * The snapshot of a server — the stored one when it exists, a fresh build
  * from the current recipe row otherwise (legacy pre-snapshot servers are
  * backfilled on first touch, dated now: the recipe they run is the one
