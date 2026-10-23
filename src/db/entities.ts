@@ -131,15 +131,15 @@ export const Server = defineEntity({
     backupLimit: p.integer().fieldName('backup_limit').default(5),
     variables: p.json<Record<string, string | number | boolean>>(),
     /**
-     * Recipe SNAPSHOT of this server (self-contained): the app recipe as it
-     * was at install time, with the required runtimes' variable definitions
-     * merged into `variables` (app declarations win on env conflicts). Sent
-     * to the agent as-is — a recipe edited later never touches a live server
+     * Recipe SNAPSHOT of this server — ONE self-contained document, the
+     * whole resolved graph at install time: `{ recipe, runtimes }`, where
+     * `recipe` is the app recipe with the required runtimes' variable
+     * definitions merged into `variables` (app declarations win on env
+     * conflicts) and `runtimes` the resolved runtime recipes. Sent to the
+     * agent as-is — a recipe edited later never touches a live server
      * until an explicit "reload recipe" re-snapshots it.
      */
     recipeSnapshot: p.json<Record<string, unknown>>().fieldName('recipe_snapshot').nullable(),
-    /** Resolved runtime recipes of the snapshot (same self-contained rule). */
-    runtimeSnapshots: p.json<Record<string, unknown>[]>().fieldName('runtime_snapshots').nullable(),
     /** When the snapshot was taken — drives the "recipe updated" reload button. */
     recipeSyncedAt: p.datetime().fieldName('recipe_synced_at').nullable(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),

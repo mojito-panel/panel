@@ -11,7 +11,7 @@ import { mergeVariableValues } from '../src/lib/recipe-merge';
  * recipe editor shows the runtime graph empty afterwards).
  *
  * The reload sequence is reproduced verbatim (buildRecipeSnapshot →
- * assign server.recipeSnapshot/runtimeSnapshots → mergeVariableValues →
+ * assign the ONE-document server.recipeSnapshot → mergeVariableValues →
  * flush), then the recipe rows are reloaded FRESH and their `requires`
  * checked.
  */
@@ -120,7 +120,6 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
       cpuCores: 2,
       variables: {},
       recipeSnapshot: {} as Record<string, unknown>,
-      runtimeSnapshots: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -128,8 +127,7 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
 
     // ── The reload sequence, verbatim (refreshServerRecipeSnapshot) ──
     const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
-    server.recipeSnapshot = snapshot.recipe as unknown as Record<string, unknown>;
-    server.runtimeSnapshots = snapshot.runtimes;
+    server.recipeSnapshot = snapshot as unknown as Record<string, unknown>;
     server.recipeSyncedAt = new Date();
     server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);
     await em.flush();

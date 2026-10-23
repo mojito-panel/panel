@@ -144,11 +144,12 @@ export async function installServer(
   const serverId = nanoid();
   const now = new Date();
 
-  // Self-contained from birth: the server stores the SNAPSHOT of its
-  // recipe (app + resolved runtimes + merged variable definitions) and
-  // the merged variable VALUES — submitted form values over the
-  // definitions' defaults (runtime variables like JAVA_VERSION included).
-  // A recipe edited later never impacts this server.
+  // Self-contained from birth: the server stores ONE SNAPSHOT document
+  // of its whole recipe graph ({ recipe, runtimes }, app + resolved
+  // runtimes + merged variable definitions) and the merged variable
+  // VALUES — submitted form values over the definitions' defaults
+  // (runtime variables like JAVA_VERSION included). A recipe edited
+  // later never impacts this server.
   const snapshot = await buildRecipeSnapshot(
     orm.em,
     recipe.json as Record<string, unknown>,
@@ -170,8 +171,7 @@ export async function installServer(
     memoryMb: input.memoryMb,
     cpuCores: input.cpuCores,
     variables,
-    recipeSnapshot: snapshot.recipe as unknown as Record<string, unknown>,
-    runtimeSnapshots: snapshot.runtimes,
+    recipeSnapshot: snapshot as unknown as Record<string, unknown>,
     recipeSyncedAt: now,
     createdAt: now,
     updatedAt: now,
@@ -244,8 +244,7 @@ export async function refreshServerRecipeSnapshot(
 
   const recipe = await requireRecipeOf(server);
   const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
-  server.recipeSnapshot = snapshot.recipe as unknown as Record<string, unknown>;
-  server.runtimeSnapshots = snapshot.runtimes;
+  server.recipeSnapshot = snapshot as unknown as Record<string, unknown>;
   server.recipeSyncedAt = new Date();
   server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);
   await em.flush();
@@ -270,7 +269,7 @@ export async function reinstallServerFromPanel(
   const node = await requireNodeOf(server);
 
   let snapshot: ServerRecipeSnapshot;
-  if (options.refreshSnapshot || options.recipeId || !server.recipeSnapshot || !server.runtimeSnapshots) {
+  if (options.refreshSnapshot || options.recipeId || !server.recipeSnapshot) {
     // Persisted BEFORE the agent call (own flush inside) — a refused
     // reinstall must not lose the reloaded snapshot nor leave the server
     // marked as outdated.

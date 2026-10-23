@@ -154,9 +154,8 @@ describe.skipIf(!databaseUp)('recipe snapshot against Postgres', () => {
     expect(snapshot.runtimes).toHaveLength(1);
     expect((snapshot.runtimes[0] as { id?: string }).id).toBe('java-snaptest');
 
-    // The backfill persisted the snapshot on the row.
-    expect(server.recipeSnapshot).toBeDefined();
-    expect(server.runtimeSnapshots).toHaveLength(1);
+    // The backfill persisted the ONE-document snapshot on the row.
+    expect(server.recipeSnapshot).toMatchObject({ recipe: { id: 'minecraft-snaptest' }, runtimes: [{ id: 'java-snaptest' }] });
     expect(server.recipeSyncedAt).toBeDefined();
   });
 });

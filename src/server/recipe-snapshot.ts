@@ -17,7 +17,7 @@ import { resolveRuntimeRecipes } from './functions/runtimes';
  * explicit "reload recipe" action is the only propagation path.
  */
 
-/** The snapshot stored on the server row (both JSON columns, one concept). */
+/** The snapshot stored on the server row — ONE self-contained document. */
 export interface ServerRecipeSnapshot {
   /** App recipe with merged variable definitions (normalized, v4). */
   recipe: RecipeContract;
@@ -117,11 +117,9 @@ export async function serverRecipeSnapshot(
   em: EntityManager,
   server: IServer,
 ): Promise<ServerRecipeSnapshot> {
-  if (server.recipeSnapshot && server.runtimeSnapshots) {
-    return {
-      recipe: server.recipeSnapshot as unknown as RecipeContract,
-      runtimes: server.runtimeSnapshots,
-    };
+  const stored = server.recipeSnapshot as unknown as ServerRecipeSnapshot | null | undefined;
+  if (stored && stored.recipe && Array.isArray(stored.runtimes)) {
+    return stored;
   }
   const recipe = await em.findOne(Recipe, { id: server.recipeId });
   if (!recipe) {
@@ -129,8 +127,7 @@ export async function serverRecipeSnapshot(
     throw new Error('Recette introuvable');
   }
   const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
-  server.recipeSnapshot = snapshot.recipe as unknown as Record<string, unknown>;
-  server.runtimeSnapshots = snapshot.runtimes;
+  server.recipeSnapshot = snapshot as unknown as Record<string, unknown>;
   server.recipeSyncedAt = new Date();
   await em.flush();
   return snapshot;
