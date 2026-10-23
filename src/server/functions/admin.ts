@@ -465,6 +465,8 @@ export const listRecipesFn = createServerFn({ method: 'POST' })
         id: recipe.id,
         slug: recipe.slug,
         name: recipe.name,
+        /** Recipe type ('runtime' badges the list row, null = app recipe). */
+        type: typeof recipe.json.type === 'string' ? recipe.json.type : null,
         /** Number of declared variables (auto-generated form at creation). */
         variableCount: storedRecipeVariables(recipe.json).length,
         updateUrl:

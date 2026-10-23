@@ -25,7 +25,9 @@ import {
   deleteServer,
   syncRuntimeStatus,
   loadServerContext,
+  reinstallServerFromPanel,
 } from '../servers';
+import { serverRecipeSnapshot } from '../recipe-snapshot';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { toConsolePermissions } from '~/lib/permissions';
@@ -35,7 +37,6 @@ import {
   agentGetInstallStatus,
   agentServerAction,
   agentSendCommand,
-  agentReinstallServer,
   agentUpdateServerVariables,
   AgentError,
 } from '../agent/client';
@@ -218,7 +219,8 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
     );
 
     const node = await requireNodeOf(server);
-    const recipe = await requireRecipeOf(server);
+    // The STORED snapshot — a retry never picks up recipe edits either.
+    const snapshot = await serverRecipeSnapshot(em, server);
     const allocations = await orm.em.find(Allocation, { serverId: server.id });
     const allocation = allocations.find((a) => a.primary);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
@@ -227,8 +229,8 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
       await agentInstallServer(node, {
         serverId: server.id,
         name: server.name,
-        recipe: normalizeStoredRecipe(recipe.json),
-        runtimes: await resolveRuntimeRecipes(em, recipe.json),
+        recipe: snapshot.recipe,
+        runtimes: snapshot.runtimes,
         variables: server.variables,
         installDir: `servers/${server.id}`,
         resources: {
@@ -266,7 +268,11 @@ export const getServerFn = createServerFn({ method: 'GET' })
       throw new HttpError(500, 'Configuration du serveur incomplète');
     }
 
-    const recipeJson = recipe.json as RecipeContract;
+    // The SNAPSHOT definitions (app + required runtimes merged) — the
+    // recipe row is only read for its identity and its update date (the
+    // reload button shows when the row is newer than the snapshot).
+    const snapshot = await serverRecipeSnapshot(orm.em, server);
+    const snapshotRecipe = snapshot.recipe;
 
     // Sub-users only see the variables/startup command with the matching
     // grant — owners/admins always pass (their list is the full set)
@@ -287,11 +293,17 @@ export const getServerFn = createServerFn({ method: 'GET' })
         id: recipe.id,
         name: recipe.name,
         slug: recipe.slug,
-        // Variable definitions for the UI (forms)
-        variables: canReadVariables ? (recipeJson.variables ?? []) : [],
-        start: canReadVariables ? recipeJson.start : null,
+        // When the recipe row was last edited / the snapshot last taken —
+        // "updated since install" drives the reload-recipe button.
+        updatedAt: recipe.updatedAt,
+        syncedAt: server.recipeSyncedAt,
+        // Merged variable definitions for the UI (forms) — app recipe's
+        // own, plus the required runtimes' (runtime envs not re-declared
+        // by the app become user-editable server knobs).
+        variables: canReadVariables ? (snapshotRecipe.variables ?? []) : [],
+        start: canReadVariables ? snapshotRecipe.start : null,
         // Backup contents (glob include patterns) shown on the Backups page
-        backup: recipeJson.backup ?? null,
+        backup: snapshotRecipe.backup ?? null,
       },
       resources: primaryAllocation
         ? {
@@ -371,7 +383,7 @@ export const serverActionFn = createServerFn({ method: 'POST' })
     }
   });
 
-// ─── Reinstall (stop + re-run the recipe's install script) ────────────────────
+// ─── Reinstall (stop + re-run the SNAPSHOT recipe's install script) ───────────
 
 export const reinstallServerFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
@@ -384,67 +396,31 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
       { 'server.settings': ['update'] },
     );
 
-    const node = await requireNodeOf(server);
+    // The STORED snapshot is sent — a recipe updated in the panel never
+    // impacts an installed server; the explicit "reload recipe" action is
+    // the propagation path.
+    const result = await reinstallServerFromPanel(server);
+    return { id: server.id, status: 'installing', message: result.message };
+  });
 
-    // The CURRENT recipe is sent — an update of the recipe JSON is picked up
-    // on reinstall, like an egg update in Pelican.
-    const recipe = await requireRecipeOf(server);
-    const allocations = await orm.em.find(Allocation, { serverId: server.id });
-    const allocation = allocations.find((a) => a.primary);
-    if (!allocation) throw new HttpError(500, 'Allocation introuvable');
+// ─── Reload recipe (re-snapshot from the current recipe row, then reinstall) ──
 
-    try {
-      const result = await agentReinstallServer(node, server.id, {
-        recipe: normalizeStoredRecipe(recipe.json),
-        runtimes: await resolveRuntimeRecipes(em, recipe.json),
-        variables: server.variables,
-      });
-      // The reinstall now runs in the background — the console shows the
-      // live install panel (steps + logs) while it goes
-      server.status = 'installing';
-      await em.flush();
-      return { id: server.id, status: 'installing', message: result.message };
-    } catch (err) {
-      // The agent doesn't know the server (404): its store is only written on
-      // install SUCCESS, so a failed install — or a lost agent dataDir —
-      // leaves the panel DB and the agent out of sync. Fall back to a FULL
-      // install, rebuilt from the panel DB (same installDir convention).
-      if (err instanceof AgentError && err.statusCode === 404) {
-        try {
-          await agentInstallServer(node, {
-            serverId: server.id,
-            name: server.name,
-            recipe: normalizeStoredRecipe(recipe.json),
-            runtimes: await resolveRuntimeRecipes(em, recipe.json),
-            variables: server.variables,
-            installDir: `servers/${server.id}`,
-            resources: {
-              port: allocation.port,
-              memoryMb: server.memoryMb,
-              cpuCores: Number(server.cpuCores),
-              ip: allocation.ip,
-              ports: secondaryPorts(allocations),
-            },
-          });
-          server.status = 'installing';
-          await em.flush();
-          return {
-            id: server.id,
-            status: 'installing',
-            message: 'Réinstallation démarrée (installation complète)',
-          };
-        } catch (fallbackErr) {
-          if (fallbackErr instanceof AgentError) {
-            throw new HttpError(502, `Réinstallation refusée côté agent : ${fallbackErr.message}`);
-          }
-          throw fallbackErr;
-        }
-      }
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Réinstallation refusée côté agent : ${err.message}`);
-      }
-      throw err;
-    }
+export const reloadRecipeFn = createServerFn({ method: 'POST' })
+  .validator(serverLogsQuerySchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadServerWithPermission(
+      data.serverId,
+      user,
+      { 'server.settings': ['update'] },
+    );
+
+    // Fresh snapshot: the current recipe row (app + resolved runtimes),
+    // current variable values kept — defaults only fill newly declared
+    // envs. The reinstall that follows applies it to the agent.
+    const result = await reinstallServerFromPanel(server, { refreshSnapshot: true });
+    return { id: server.id, status: 'installing', message: result.message };
   });
 
 // ─── Variable update (panel DB = source of truth, agent cache synced) ────────
@@ -460,21 +436,23 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
       { 'server.variables': ['update'] },
     );
 
-    const recipe = await requireRecipeOf(server);
-    const recipeJson = recipe.json as RecipeContract;
+    // The SNAPSHOT definitions (app + required runtimes merged) — editing
+    // JAVA_VERSION on a Minecraft server works through the merged set.
+    const snapshot = await serverRecipeSnapshot(em, server);
+    const definitions = snapshot.recipe.variables ?? [];
 
     // Merge: only user_editable variables accept the submitted values, the
     // others keep their current value (Pelican semantics — non-editable
     // variables are read-only for the owner)
     const variables: Record<string, string | number | boolean> = { ...server.variables };
-    for (const variable of recipeJson.variables ?? []) {
+    for (const variable of definitions) {
       if (variable.user_editable && data.variables[variable.env] !== undefined) {
         variables[variable.env] = data.variables[variable.env];
       }
     }
 
     // Same validation rules as the install (contract reuse)
-    for (const variable of recipeJson.variables ?? []) {
+    for (const variable of definitions) {
       const value = variables[variable.env];
       if ((value === undefined || value === '') && variable.required) {
         throw new HttpError(422, `${variable.name} est requis`);

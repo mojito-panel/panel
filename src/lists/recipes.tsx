@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Download, Pencil, RefreshCw } from 'lucide-react';
+import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { defineList, field } from '~/lists/define';
 
@@ -16,6 +17,8 @@ export interface AdminRecipeRow {
   id: string;
   name: string;
   slug: string;
+  /** Recipe type — 'runtime' badges the row, null = a regular app recipe. */
+  type: string | null;
   variableCount: number;
   updateUrl: string | null;
   createdAt: Date;
@@ -42,13 +45,20 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
       sort: field('name'),
       cell: (recipe) => (
         <div>
-          <Link
-            to="/admin/recipes/$recipeId"
-            params={{ recipeId: recipe.id }}
-            className="font-medium hover:underline"
-          >
-            {recipe.name}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/admin/recipes/$recipeId"
+              params={{ recipeId: recipe.id }}
+              className="font-medium hover:underline"
+            >
+              {recipe.name}
+            </Link>
+            {recipe.type === 'runtime' && (
+              <Badge variant="secondary" title="Recette d’exécution requise par d’autres recettes">
+                Runtime
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">{recipe.slug}</p>
         </div>
       ),

@@ -6,6 +6,7 @@ import { RefreshCw, Trash2 } from 'lucide-react';
 import {
   getServerFn,
   reinstallServerFn,
+  reloadRecipeFn,
   deleteServerFn,
 } from '~/server/functions/servers';
 import { serverCan } from '~/lib/permissions';
@@ -41,10 +42,12 @@ function ServerSettingsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [askReinstall, setAskReinstall] = useState(false);
+  const [askReloadRecipe, setAskReloadRecipe] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
   const [askForceDelete, setAskForceDelete] = useState(false);
   const getServer = useServerFn(getServerFn);
   const reinstall = useServerFn(reinstallServerFn);
+  const reloadRecipe = useServerFn(reloadRecipeFn);
   const deleteServer = useServerFn(deleteServerFn);
 
   const query = useQuery({
@@ -69,7 +72,26 @@ function ServerSettingsPage() {
     },
   });
 
+  // Reload recipe = re-snapshot from the CURRENT recipe row, then reinstall.
+  const reloadMutation = useMutation({
+    mutationFn: () => reloadRecipe({ data: { serverId, after: 0 } }),
+    onSuccess: async () => {
+      setAskReloadRecipe(false);
+      await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
+      await queryClient.invalidateQueries({ queryKey: ['servers'] });
+      // The reinstall runs in the background — follow it on the console
+      await navigate({ to: '/servers/$serverId/console', params: { serverId } });
+    },
+  });
+
   const server = query.data;
+
+  // The reload button only appears when the recipe row changed after the
+  // server's snapshot — no update, nothing to propagate.
+  const recipeUpdatedSinceSnapshot =
+    !!server?.recipe.updatedAt &&
+    !!server.recipe.syncedAt &&
+    new Date(server.recipe.updatedAt) > new Date(server.recipe.syncedAt);
 
   // Per-server grants: reinstall needs server.settings.update, deletion is
   // owner/admin only (non-delegable)
@@ -140,19 +162,40 @@ function ServerSettingsPage() {
           <CardContent className="text-sm text-muted-foreground">
             Certains fichiers peuvent être supprimés ou modifiés pendant
             l’opération — pense à sauvegarder tes données avant de continuer.
+            {recipeUpdatedSinceSnapshot && (
+              <p className="mt-2 text-yellow-600 dark:text-yellow-400">
+                La recette a été modifiée depuis l’installation de ce serveur —
+                recharge-la pour appliquer la nouvelle version.
+              </p>
+            )}
           </CardContent>
           <CardFooter className="gap-2">
             <Button
               variant="destructive"
               onClick={() => setAskReinstall(true)}
-              disabled={reinstallMutation.isPending}
+              disabled={reinstallMutation.isPending || reloadMutation.isPending}
             >
               <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
               {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
             </Button>
+            {recipeUpdatedSinceSnapshot && (
+              <Button
+                variant="outline"
+                onClick={() => setAskReloadRecipe(true)}
+                disabled={reinstallMutation.isPending || reloadMutation.isPending}
+              >
+                <RefreshCw className={reloadMutation.isPending ? 'animate-spin' : undefined} />
+                {reloadMutation.isPending ? 'Rechargement…' : 'Recharger la recette'}
+              </Button>
+            )}
             {reinstallMutation.isError && (
               <span className="text-sm text-destructive">
                 {reinstallMutation.error.message}
+              </span>
+            )}
+            {reloadMutation.isError && (
+              <span className="text-sm text-destructive">
+                {reloadMutation.error.message}
               </span>
             )}
           </CardFooter>
@@ -212,6 +255,17 @@ function ServerSettingsPage() {
         cancelLabel="Annuler"
         destructive
         pending={reinstallMutation.isPending}
+      />
+      <ConfirmDialog
+        open={askReloadRecipe}
+        onOpenChange={setAskReloadRecipe}
+        onConfirm={() => reloadMutation.mutate()}
+        title="Recharger la recette ?"
+        description="La version actuelle de la recette remplacera celle utilisée à l’installation, puis le serveur sera réinstallé avec — les fichiers peuvent être modifiés, tes variables gardent leurs valeurs. Pense à sauvegarder tes données."
+        confirmLabel="Recharger et réinstaller"
+        cancelLabel="Annuler"
+        destructive
+        pending={reloadMutation.isPending}
       />
       <ConfirmDialog
         open={askDelete}

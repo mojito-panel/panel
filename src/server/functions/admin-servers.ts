@@ -6,7 +6,6 @@ import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db
 import { adminServersList } from '~/lists/servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import { resolveRuntimeRecipes } from './runtimes';
 import {
   requirePanelPermission,
   HttpError,
@@ -14,15 +13,15 @@ import {
 import {
   agentGetServer,
   agentServerAction,
-  agentReinstallServer,
   agentInstallServer,
   agentUpdateResources,
   AgentError,
 } from '../agent/client';
-import { deleteServer, secondaryPorts } from '../servers';
+import { deleteServer, reinstallServerFromPanel, secondaryPorts } from '../servers';
 import {
   adminServerIdSchema,
   adminDeleteServerSchema,
+  adminChangeServerRecipeSchema,
   updateAdminServerSchema,
   setAdminServerSuspendedSchema,
   adminServerAllocationActionSchema,
@@ -131,7 +130,14 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
       createdAt: server.createdAt,
       updatedAt: server.updatedAt,
       node: { id: node.id, name: node.name, fqdn: node.fqdn, sftpPort: node.sftpPort },
-      recipe: { id: recipe.id, name: recipe.name, slug: recipe.slug },
+      recipe: {
+        id: recipe.id,
+        name: recipe.name,
+        slug: recipe.slug,
+        // Reload-recipe gating: the row was edited after the snapshot
+        updatedAt: recipe.updatedAt,
+        syncedAt: server.recipeSyncedAt,
+      },
       owner: owner
         ? { id: owner.id, name: owner.name, email: owner.email }
         : null,
@@ -244,74 +250,56 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.servers': ['update'] });
-    const { em, server } = await loadServer(data.serverId);
+    const { server } = await loadServer(data.serverId);
 
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
+    // The STORED snapshot is re-run — a recipe updated in the panel never
+    // impacts an installed server; reload/change recipe are the explicit
+    // propagation paths.
+    const result = await reinstallServerFromPanel(server);
+    server.status = 'installing';
+    await orm.em.flush();
+    return { id: server.id, status: 'installing', message: result.message };
+  });
 
-    // The CURRENT recipe is sent — an update of the recipe JSON is picked
-    // up on reinstall, like an egg update in Pelican.
-    const recipe = await em.findOne(Recipe, { id: server.recipeId });
-    if (!recipe) throw new HttpError(500, 'Recette introuvable');
+// ─── Recipe propagation (reload / change — the admin override path) ─────────
 
-    const allocations = (await em.find(Allocation, { serverId: server.id })).sort(
-      (a, b) => a.port - b.port,
-    );
-    const allocation = allocations.find((a) => a.primary);
-    if (!allocation) throw new HttpError(500, 'Allocation introuvable');
+/**
+ * Reload recipe: re-snapshots the server from the CURRENT recipe row
+ * (app + resolved runtimes, current variable values kept) and reinstalls
+ * it. The user-facing equivalent lives on the server settings page.
+ */
+export const reloadAdminServerRecipeFn = createServerFn({ method: 'POST' })
+  .validator(adminServerIdSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { server } = await loadServer(data.serverId);
 
-    try {
-      const result = await agentReinstallServer(node, server.id, {
-        recipe: recipe.json,
-        runtimes: await resolveRuntimeRecipes(em, recipe.json),
-        variables: server.variables,
-      });
-      // The reinstall runs in the background — the admin follows it from
-      // the server's console page (live install panel)
-      server.status = 'installing';
-      await em.flush();
-      return { id: server.id, status: 'installing', message: result.message };
-    } catch (err) {
-      // The agent doesn't know the server (404): its store is only written
-      // on install SUCCESS, so a failed install — or a lost agent dataDir —
-      // leaves the panel DB and the agent out of sync. Fall back to a FULL
-      // install, rebuilt from the panel DB (same installDir convention).
-      if (err instanceof AgentError && err.statusCode === 404) {
-        try {
-          await agentInstallServer(node, {
-            serverId: server.id,
-            name: server.name,
-            recipe: recipe.json,
-            runtimes: await resolveRuntimeRecipes(em, recipe.json),
-            variables: server.variables,
-            installDir: `servers/${server.id}`,
-            resources: {
-              port: allocation.port,
-              memoryMb: server.memoryMb,
-              cpuCores: Number(server.cpuCores),
-              ip: allocation.ip,
-              ports: secondaryPorts(allocations),
-            },
-          });
-          server.status = 'installing';
-          await em.flush();
-          return {
-            id: server.id,
-            status: 'installing',
-            message: 'Réinstallation démarrée (installation complète)',
-          };
-        } catch (fallbackErr) {
-          if (fallbackErr instanceof AgentError) {
-            throw new HttpError(502, `Réinstallation refusée côté agent : ${fallbackErr.message}`);
-          }
-          throw fallbackErr;
-        }
-      }
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Réinstallation refusée côté agent : ${err.message}`);
-      }
-      throw err;
-    }
+    const result = await reinstallServerFromPanel(server, { refreshSnapshot: true });
+    server.status = 'installing';
+    await orm.em.flush();
+    return { id: server.id, status: 'installing', message: result.message };
+  });
+
+/**
+ * Change recipe: points the server at another recipe, re-snapshots from it
+ * and reinstalls — the variables keep their current values for every env
+ * the new recipe still declares, defaults fill the new ones.
+ */
+export const changeAdminServerRecipeFn = createServerFn({ method: 'POST' })
+  .validator(adminChangeServerRecipeSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { server } = await loadServer(data.serverId);
+
+    const result = await reinstallServerFromPanel(server, {
+      recipeId: data.recipeId,
+      refreshSnapshot: true,
+    });
+    server.status = 'installing';
+    await orm.em.flush();
+    return { id: server.id, status: 'installing', message: result.message };
   });
 
 // ─── Deletion (admin variant of deleteServerFn, panel-level gate) ────────────

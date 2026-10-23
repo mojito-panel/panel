@@ -1,7 +1,11 @@
 import '@tanstack/react-start/server-only';
 import { nanoid } from '~/lib/nanoid';
-import { normalizeStoredRecipe } from '~/lib/stored-recipe';
-import { resolveRuntimeRecipes } from './functions/runtimes';
+import { mergeVariableValues } from '~/lib/recipe-merge';
+import {
+  buildRecipeSnapshot,
+  serverRecipeSnapshot,
+  type ServerRecipeSnapshot,
+} from './recipe-snapshot';
 import type { Recipe as RecipeContract, ServerStatus } from '~/contract';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
 import type { IBackup, INode, IServer, IUser } from '~/db/types';
@@ -9,6 +13,7 @@ import { orm } from './orm';
 import { HttpError } from './session';
 import {
   agentInstallServer,
+  agentReinstallServer,
   agentDeleteServer,
   agentGetServer,
   agentUpdateResources,
@@ -139,6 +144,20 @@ export async function installServer(
   const serverId = nanoid();
   const now = new Date();
 
+  // Self-contained from birth: the server stores the SNAPSHOT of its
+  // recipe (app + resolved runtimes + merged variable definitions) and
+  // the merged variable VALUES — submitted form values over the
+  // definitions' defaults (runtime variables like JAVA_VERSION included).
+  // A recipe edited later never impacts this server.
+  const snapshot = await buildRecipeSnapshot(
+    orm.em,
+    recipe.json as Record<string, unknown>,
+  );
+  const variables = mergeVariableValues(
+    snapshot.recipe.variables ?? [],
+    input.variables,
+  );
+
   // 1. Persist FIRST with status 'installing' — the user is redirected to
   //    the server console right away and follows the install live.
   const server = em.create(Server, {
@@ -150,7 +169,10 @@ export async function installServer(
     status: 'installing',
     memoryMb: input.memoryMb,
     cpuCores: input.cpuCores,
-    variables: input.variables,
+    variables,
+    recipeSnapshot: snapshot.recipe as unknown as Record<string, unknown>,
+    runtimeSnapshots: snapshot.runtimes,
+    recipeSyncedAt: now,
     createdAt: now,
     updatedAt: now,
   });
@@ -168,9 +190,9 @@ export async function installServer(
     await agentInstallServer(node, {
       serverId,
       name: input.name,
-      recipe: normalizeStoredRecipe(recipe.json),
-      runtimes: await resolveRuntimeRecipes(orm.em, recipe.json),
-      variables: input.variables,
+      recipe: snapshot.recipe,
+      runtimes: snapshot.runtimes,
+      variables,
       installDir: `servers/${serverId}`,
       resources: {
         port: allocation.port,
@@ -195,6 +217,91 @@ export async function installServer(
   }
 
   return { id: serverId, name: server.name };
+}
+
+/**
+ * Reinstalls a server from its SNAPSHOT — the stored recipe is the one
+ * and only thing the agent ever sees. `refreshSnapshot` re-snapshots from
+ * the current recipe row first (the explicit "reload recipe" propagation
+ * path — current variable values win, defaults only fill newly declared
+ * envs); `recipeId` points the server at another recipe before that (the
+ * admin "change recipe" action). The agent reinstall re-runs the install
+ * steps in place; a 404 (agent store out of sync — failed first install,
+ * lost dataDir) falls back to a FULL install rebuilt from the panel DB.
+ */
+export async function reinstallServerFromPanel(
+  server: IServer,
+  options: { refreshSnapshot?: boolean; recipeId?: string } = {},
+): Promise<{ message: string }> {
+  const em = orm.em;
+  const node = await requireNodeOf(server);
+
+  if (options.recipeId && options.recipeId !== server.recipeId) {
+    const target = await em.findOne(Recipe, { id: options.recipeId });
+    if (!target) throw new HttpError(404, 'Recette introuvable');
+    server.recipeId = options.recipeId;
+  }
+
+  let snapshot: ServerRecipeSnapshot;
+  if (options.refreshSnapshot || !server.recipeSnapshot || !server.runtimeSnapshots) {
+    const recipe = await requireRecipeOf(server);
+    snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
+    server.recipeSnapshot = snapshot.recipe as unknown as Record<string, unknown>;
+    server.runtimeSnapshots = snapshot.runtimes;
+    server.recipeSyncedAt = new Date();
+    server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);
+  } else {
+    snapshot = await serverRecipeSnapshot(em, server);
+  }
+
+  const allocations = await em.find(Allocation, { serverId: server.id });
+  const allocation = allocations.find((a) => a.primary);
+  if (!allocation) throw new HttpError(500, 'Allocation introuvable');
+
+  try {
+    const result = await agentReinstallServer(node, server.id, {
+      recipe: snapshot.recipe,
+      runtimes: snapshot.runtimes,
+      variables: server.variables,
+    });
+    server.status = 'installing';
+    await em.flush();
+    return { message: result.message };
+  } catch (err) {
+    if (!(err instanceof AgentError) || err.statusCode !== 404) {
+      if (err instanceof AgentError) {
+        throw new HttpError(502, `Réinstallation refusée côté agent : ${err.message}`);
+      }
+      throw err;
+    }
+    // The agent doesn't know the server: its store is only written on
+    // install SUCCESS — fall back to a FULL install rebuilt from the DB.
+    try {
+      await agentInstallServer(node, {
+        serverId: server.id,
+        name: server.name,
+        recipe: snapshot.recipe,
+        runtimes: snapshot.runtimes,
+        variables: server.variables,
+        installDir: `servers/${server.id}`,
+        resources: {
+          port: allocation.port,
+          memoryMb: server.memoryMb,
+          cpuCores: Number(server.cpuCores),
+          ip: allocation.ip,
+          ports: secondaryPorts(allocations),
+        },
+      });
+    } catch (fallbackErr) {
+      if (fallbackErr instanceof AgentError) {
+        throw new HttpError(502, `Réinstallation refusée côté agent : ${fallbackErr.message}`);
+      }
+      throw fallbackErr;
+    }
+    server.status = 'installing';
+    await em.flush();
+    return { message: 'Réinstallation démarrée (installation complète)' };
+  }
 }
 
 /**
@@ -271,12 +378,6 @@ export async function loadServerContext(server: IServer) {
   const primaryAllocation = await findPrimaryAllocation(server.id);
   return { node, recipe, primaryAllocation };
 }
-
-/** Recipe contract payload of a stored recipe row (normalized for the agent). */
-export function recipeContractOf(recipe: { json: unknown }): RecipeContract {
-  return normalizeStoredRecipe(recipe.json as Record<string, unknown>) as RecipeContract;
-}
-
 
 /** Counts the backups of a server (admin detail page). */
 export async function countServerBackups(serverId: string): Promise<number> {

@@ -11,6 +11,8 @@ import {
   updateAdminServerFn,
   setAdminServerSuspendedFn,
   reinstallAdminServerFn,
+  reloadAdminServerRecipeFn,
+  changeAdminServerRecipeFn,
   deleteAdminServerFn,
   listAdminServerAllocationsFn,
   listAdminServerFreeAllocationsFn,
@@ -18,6 +20,7 @@ import {
   removeAdminServerAllocationFn,
   setPrimaryAdminServerAllocationFn,
 } from '~/server/functions/admin-servers';
+import { listRecipeOptionsFn } from '~/server/functions/admin';
 import { listUsersFn } from '~/server/functions/users';
 import {
   updateAdminServerFormSchema,
@@ -71,7 +74,13 @@ interface AdminServerDto {
   createdAt: Date | string;
   updatedAt: Date | string;
   node: { id: string; name: string; fqdn: string; sftpPort: number };
-  recipe: { id: string; name: string; slug: string };
+  recipe: {
+    id: string;
+    name: string;
+    slug: string;
+    updatedAt: Date | string;
+    syncedAt?: Date | string | null;
+  };
   owner: { id: string; name: string | null; email: string } | null;
   allocations: Array<{ id: string; ip: string; port: number; alias: string | null; primary: boolean }>;
   subuserCount: number;
@@ -460,6 +469,10 @@ function ServerRecordTabs({
         <ServerActionsPanel
           serverId={server.id}
           name={server.name}
+          recipeId={server.recipe.id}
+          recipeName={server.recipe.name}
+          recipeUpdatedAt={server.recipe.updatedAt}
+          recipeSyncedAt={server.recipe.syncedAt}
           suspended={server.suspended}
           canUpdate={canUpdate}
           canDelete={canDelete}
@@ -662,16 +675,24 @@ function AdminServerAllocationsPanel({
   );
 }
 
-/** Management actions (Pelican "actions" tab): suspend, reinstall, delete. */
+/** Management actions (Pelican "actions" tab): suspend, reinstall, reload/change recipe, delete. */
 function ServerActionsPanel({
   serverId,
   name,
+  recipeId,
+  recipeName,
+  recipeUpdatedAt,
+  recipeSyncedAt,
   suspended,
   canUpdate,
   canDelete,
 }: {
   serverId: string;
   name: string;
+  recipeId: string;
+  recipeName: string;
+  recipeUpdatedAt: Date | string;
+  recipeSyncedAt: Date | string | null | undefined;
   suspended: boolean;
   canUpdate: boolean;
   canDelete: boolean;
@@ -681,7 +702,17 @@ function ServerActionsPanel({
 
   const setSuspended = useServerFn(setAdminServerSuspendedFn);
   const reinstall = useServerFn(reinstallAdminServerFn);
+  const reloadRecipe = useServerFn(reloadAdminServerRecipeFn);
+  const changeRecipe = useServerFn(changeAdminServerRecipeFn);
   const deleteServer = useServerFn(deleteAdminServerFn);
+  const listRecipeOptions = useServerFn(listRecipeOptionsFn);
+
+  // Recipe picker options — only loaded when the change dropdown is usable
+  const recipesQuery = useQuery({
+    queryKey: ['recipe-options'],
+    queryFn: () => listRecipeOptions(),
+    enabled: canUpdate,
+  });
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin-server', serverId] });
@@ -714,6 +745,30 @@ function ServerActionsPanel({
     onError: (error) => toast.error(error.message),
   });
 
+  const reloadMutation = useMutation({
+    mutationFn: async () => {
+      const result = await reloadRecipe({ data: { serverId } });
+      await invalidate();
+      return result;
+    },
+    onSuccess: (result) =>
+      toast.success('Recette rechargée', {
+        description: result.message,
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+
+  const changeMutation = useMutation({
+    mutationFn: async (targetRecipeId: string) => {
+      const result = await changeRecipe({ data: { serverId, recipeId: targetRecipeId } });
+      await invalidate();
+      return result;
+    },
+    onSuccess: (result) =>
+      toast.success('Changement de recette démarré', { description: result.message }),
+    onError: (error) => toast.error(error.message),
+  });
+
   const remove = useMutation({
     mutationFn: async (force: boolean) => {
       const result = await deleteServer({ data: { serverId, force } });
@@ -731,8 +786,19 @@ function ServerActionsPanel({
   // suspended — reactivation is immediate.
   const [confirmSuspendOpen, setConfirmSuspendOpen] = useState(false);
   const [confirmReinstallOpen, setConfirmReinstallOpen] = useState(false);
+  const [confirmReloadOpen, setConfirmReloadOpen] = useState(false);
+  const [confirmChangeOpen, setConfirmChangeOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmForceDeleteOpen, setConfirmForceDeleteOpen] = useState(false);
+
+  // Change-recipe dropdown selection (empty = nothing picked yet)
+  const [targetRecipeId, setTargetRecipeId] = useState('');
+  const targetRecipe = recipesQuery.data?.find((r) => r.id === targetRecipeId);
+
+  // The reload button only appears when the recipe row changed after the
+  // server's snapshot — no update, nothing to propagate.
+  const recipeUpdatedSinceSnapshot =
+    !!recipeSyncedAt && new Date(recipeUpdatedAt) > new Date(recipeSyncedAt);
 
   if (!canUpdate && !canDelete) {
     return (
@@ -790,6 +856,69 @@ function ServerActionsPanel({
               <RefreshCw className={reinstallMutation.isPending ? 'animate-spin' : undefined} />
               {reinstallMutation.isPending ? 'Démarrage…' : 'Réinstaller'}
             </Button>
+          </CardSection>
+
+          <Separator />
+
+          {/* ─── Reload recipe (recipe updated since the server's snapshot) ─── */}
+          <CardSection
+            title="Recharger la recette"
+            description={
+              recipeUpdatedSinceSnapshot
+                ? `La recette « ${recipeName} » a été modifiée depuis l’installation de ce serveur — la recharger applique la nouvelle version puis réinstalle le serveur avec.`
+                : `La recette « ${recipeName} » n’a pas changé depuis l’application sur ce serveur — rien à recharger.`
+            }
+          >
+            {recipeUpdatedSinceSnapshot ? (
+              <Button
+                variant="outline"
+                disabled={reloadMutation.isPending}
+                onClick={() => setConfirmReloadOpen(true)}
+              >
+                <RefreshCw className={reloadMutation.isPending ? 'animate-spin' : undefined} />
+                {reloadMutation.isPending ? 'Rechargement…' : 'Recharger la recette'}
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {recipeSyncedAt
+                  ? `Dernière version appliquée le ${new Date(recipeSyncedAt).toLocaleString('fr-FR')}.`
+                  : 'Version appliquée inconnue (serveur antérieur aux instantanés).'}
+              </p>
+            )}
+          </CardSection>
+
+          <Separator />
+
+          {/* ─── Change recipe (re-snapshot from another recipe + reinstall) ─── */}
+          <CardSection
+            title="Changer de recette"
+            description="Le serveur passera à la recette choisie et sera réinstallé avec — les variables gardent leurs valeurs pour les noms d’environnement que la nouvelle recette déclare encore."
+          >
+            <div className="flex w-full max-w-md gap-2">
+              <Select value={targetRecipeId} onValueChange={(value) => setTargetRecipeId(value ?? '')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choisir une recette" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(recipesQuery.data ?? []).map((recipe) => (
+                    <SelectItem
+                      key={recipe.id}
+                      value={recipe.id}
+                      disabled={recipe.id === recipeId}
+                    >
+                      {recipe.name}
+                      {recipe.id === recipeId ? ' (actuelle)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                disabled={!targetRecipeId || targetRecipeId === recipeId || changeMutation.isPending}
+                onClick={() => setConfirmChangeOpen(true)}
+              >
+                {changeMutation.isPending ? 'Application…' : 'Appliquer'}
+              </Button>
+            </div>
           </CardSection>
         </>
       )}
@@ -850,6 +979,40 @@ function ServerActionsPanel({
         cancelLabel="Annuler"
         destructive
         pending={reinstallMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmReloadOpen}
+        onOpenChange={setConfirmReloadOpen}
+        onConfirm={() => {
+          reloadMutation.mutate();
+          setConfirmReloadOpen(false);
+        }}
+        title={`Recharger la recette « ${recipeName} » ?`}
+        description="La version actuelle de la recette remplacera celle utilisée à l’installation, puis le serveur sera réinstallé avec — les fichiers peuvent être modifiés, les variables gardent leurs valeurs. Pense à sauvegarder les données."
+        confirmLabel="Recharger et réinstaller"
+        cancelLabel="Annuler"
+        destructive
+        pending={reloadMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmChangeOpen}
+        onOpenChange={setConfirmChangeOpen}
+        onConfirm={() => {
+          if (targetRecipeId) changeMutation.mutate(targetRecipeId);
+          setConfirmChangeOpen(false);
+        }}
+        title={
+          targetRecipe
+            ? `Passer « ${name} » de « ${recipeName} » à « ${targetRecipe.name} » ?`
+            : ''
+        }
+        description="Le serveur sera réinstallé avec la nouvelle recette — les fichiers peuvent être modifiés ou supprimés, et les étapes d’installation de la nouvelle recette s’appliqueront. Pense à sauvegarder les données."
+        confirmLabel="Changer et réinstaller"
+        cancelLabel="Annuler"
+        destructive
+        pending={changeMutation.isPending}
       />
 
       <ConfirmDialog

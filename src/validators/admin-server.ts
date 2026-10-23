@@ -25,6 +25,17 @@ export const adminDeleteServerSchema = z.object({
 export type AdminDeleteServerDto = z.infer<typeof adminDeleteServerSchema>;
 
 /**
+ * Change recipe — the server is re-snapshotted from the target recipe and
+ * reinstalled with it (the admin propagation path between recipes).
+ */
+export const adminChangeServerRecipeSchema = z.object({
+  serverId: z.string().min(1),
+  recipeId: z.string().min(1),
+});
+
+export type AdminChangeServerRecipeDto = z.infer<typeof adminChangeServerRecipeSchema>;
+
+/**
  * Update form (Pelican "information" + "environment configuration" tabs,
  * adapted): identity + owner transfer + resource limits. The wire schema —
  * the form reuses it and adds the serverId at submit time.
