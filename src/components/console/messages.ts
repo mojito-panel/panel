@@ -56,9 +56,12 @@ const CATALOG: Record<string, (params: Params) => string> = {
 
   // ─── Port watchdog (agent audits listening sockets vs the allocation) ────
   'watchdog.violation': (p) =>
-    `Watchdog: this server is listening on non-allocated ${p.protocol} port ${p.port} (PID ${p.pid})`,
+    `Watchdog: this server is listening on non-allocated ${p.protocol} port ${p.port} (PID ${p.pid}) — ` +
+    'warning: the server will be killed as soon as this port is requested by another server',
   'watchdog.squat': (p) =>
-    `Watchdog: allocated ${p.protocol} port ${p.port} is already in use by PID ${p.pid} (user ${p.user})`,
+    `Watchdog: allocated ${p.protocol} port ${p.port} is already in use by PID ${p.pid} (user ${p.user}) — killing the squatter`,
+  'watchdog.killed': (p) =>
+    `Watchdog: this server was killed — it was holding ${p.protocol} port ${p.port} reserved for another server (${p.server})`,
 };
 
 /** Emoji prefix per message code (empty string = no emoji). */
@@ -74,6 +77,7 @@ const EMOJI: Record<string, string> = {
   'server.online': '🚀',
   'watchdog.violation': '🐕‍🦺',
   'watchdog.squat': '🐕‍🦺',
+  'watchdog.killed': '🐕‍🦺',
 };
 
 /** Renders a coded message — null when the code is unknown (old agent). */

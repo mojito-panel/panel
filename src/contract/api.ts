@@ -355,12 +355,16 @@ export const consoleServerMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     /**
-     * Runtime console event (power action, server online…) — a coded message
-     * the panel renders via its catalog (e.g. 'power.start', 'server.online').
+     * Runtime console event (power action, watchdog finding, server online)
+     * — a coded message the panel renders via its catalog. Buffered by the
+     * agent and replayed on every fresh connection: `at` (unix ms) carries
+     * the original emission time so a replayed event renders with the time
+     * it happened, not the time of the reconnect.
      */
     type: z.literal('event'),
     code: z.string().min(1),
     params: consoleMessageParamsSchema.optional(),
+    at: z.number().int().nonnegative().optional(),
   }),
   z.object({
     /** Install log lines (leveled: step=yellow, info=gray, error=red). */

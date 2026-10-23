@@ -101,8 +101,23 @@ describe('watchdog events', () => {
     });
     // Structure only — the text itself is content, the params must flow.
     expect(violation).toContain('27015');
+    // The violation warns the server will be killed once the port is
+    // requested by another server — that sentence is the whole point.
+    expect(violation).toContain('killed');
     expect(squat).toContain('mojito-abc');
     expect(consoleMessageEmoji('watchdog.violation')).not.toBe('');
     expect(consoleMessageEmoji('watchdog.squat')).not.toBe('');
+  });
+
+  it('renders the killed event the squatter receives on its own console', () => {
+    const killed = renderConsoleMessage('watchdog.killed', {
+      protocol: 'tcp',
+      port: '25565',
+      pid: '20',
+      server: 'Survival Server',
+    });
+    expect(killed).toContain('25565');
+    expect(killed).toContain('Survival Server');
+    expect(consoleMessageEmoji('watchdog.killed')).not.toBe('');
   });
 });

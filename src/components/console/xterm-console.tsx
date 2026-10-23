@@ -233,12 +233,20 @@ export function XtermConsole({
           return;
         }
         if (message.type === 'event') {
-          // Coded runtime event (power action, server online…) — rendered by
-          // the catalog with its emoji; power actions in cyan, the rest green.
+          // Coded runtime event (power action, watchdog finding, server
+          // online) — rendered by the catalog with its emoji; power actions
+          // in cyan, the rest green — except the watchdog, whose finding
+          // ends with the server being killed: red.
           const text = renderConsoleMessage(message.code, message.params);
           if (text && term) {
-            const time = new Date().toLocaleTimeString('fr-FR');
-            const color = message.code.startsWith('power.') ? '\x1b[36m' : '\x1b[32m';
+            // Replayed (buffered) events carry their original emission
+            // time — live ones fall back to the arrival time.
+            const time = (message.at ? new Date(message.at) : new Date()).toLocaleTimeString('fr-FR');
+            const color = message.code.startsWith('watchdog.')
+              ? '\x1b[31m'
+              : message.code.startsWith('power.')
+                ? '\x1b[36m'
+                : '\x1b[32m';
             const emoji = consoleMessageEmoji(message.code);
             term.writeln(`\x1b[90m[${time}]\x1b[0m ${color}${emoji} ${text}\x1b[0m`);
           }
