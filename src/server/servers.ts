@@ -220,6 +220,39 @@ export async function installServer(
 }
 
 /**
+ * Re-snapshots a server from the CURRENT recipe row (app + resolved
+ * runtimes), keeping the current variable values — defaults only fill
+ * newly declared envs. Pure panel DB: no agent call, nothing installed —
+ * the next reinstall applies the new snapshot.
+ *
+ * Persisted IMMEDIATELY (own flush): a reload survives a later agent
+ * failure, so the "recipe updated since snapshot" banner clears and the
+ * merged variable definitions are visible on the Variables page right
+ * away.
+ */
+export async function refreshServerRecipeSnapshot(
+  server: IServer,
+  options: { recipeId?: string } = {},
+): Promise<ServerRecipeSnapshot> {
+  const em = orm.em;
+
+  if (options.recipeId && options.recipeId !== server.recipeId) {
+    const target = await em.findOne(Recipe, { id: options.recipeId });
+    if (!target) throw new HttpError(404, 'Recette introuvable');
+    server.recipeId = options.recipeId;
+  }
+
+  const recipe = await requireRecipeOf(server);
+  const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
+  server.recipeSnapshot = snapshot.recipe as unknown as Record<string, unknown>;
+  server.runtimeSnapshots = snapshot.runtimes;
+  server.recipeSyncedAt = new Date();
+  server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);
+  await em.flush();
+  return snapshot;
+}
+
+/**
  * Reinstalls a server from its SNAPSHOT — the stored recipe is the one
  * and only thing the agent ever sees. `refreshSnapshot` re-snapshots from
  * the current recipe row first (the explicit "reload recipe" propagation
@@ -236,20 +269,12 @@ export async function reinstallServerFromPanel(
   const em = orm.em;
   const node = await requireNodeOf(server);
 
-  if (options.recipeId && options.recipeId !== server.recipeId) {
-    const target = await em.findOne(Recipe, { id: options.recipeId });
-    if (!target) throw new HttpError(404, 'Recette introuvable');
-    server.recipeId = options.recipeId;
-  }
-
   let snapshot: ServerRecipeSnapshot;
-  if (options.refreshSnapshot || !server.recipeSnapshot || !server.runtimeSnapshots) {
-    const recipe = await requireRecipeOf(server);
-    snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
-    server.recipeSnapshot = snapshot.recipe as unknown as Record<string, unknown>;
-    server.runtimeSnapshots = snapshot.runtimes;
-    server.recipeSyncedAt = new Date();
-    server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);
+  if (options.refreshSnapshot || options.recipeId || !server.recipeSnapshot || !server.runtimeSnapshots) {
+    // Persisted BEFORE the agent call (own flush inside) — a refused
+    // reinstall must not lose the reloaded snapshot nor leave the server
+    // marked as outdated.
+    snapshot = await refreshServerRecipeSnapshot(server, { recipeId: options.recipeId });
   } else {
     snapshot = await serverRecipeSnapshot(em, server);
   }

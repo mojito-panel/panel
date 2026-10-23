@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
 import { RefreshCw, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   getServerFn,
   reinstallServerFn,
@@ -72,15 +73,24 @@ function ServerSettingsPage() {
     },
   });
 
-  // Reload recipe = re-snapshot from the CURRENT recipe row, then reinstall.
+  // Reload recipe = re-snapshot from the CURRENT recipe row, WITHOUT
+  // reinstalling — the new definitions (and their values) land on the
+  // Variables page; the user reinstalls from this page when ready.
   const reloadMutation = useMutation({
     mutationFn: () => reloadRecipe({ data: { serverId, after: 0 } }),
     onSuccess: async () => {
       setAskReloadRecipe(false);
       await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
-      // The reinstall runs in the background — follow it on the console
-      await navigate({ to: '/servers/$serverId/console', params: { serverId } });
+      toast.success('Recette rechargée', {
+        description:
+          'Ajuste les variables puis réinstalle le serveur pour appliquer la nouvelle version.',
+      });
+      if (
+        serverCan(query.data?.viewer.permissions ?? [], { 'server.variables': ['read'] })
+      ) {
+        await navigate({ to: '/servers/$serverId/variables', params: { serverId } });
+      }
     },
   });
 
@@ -165,7 +175,8 @@ function ServerSettingsPage() {
             {recipeUpdatedSinceSnapshot && (
               <p className="mt-2 text-yellow-600 dark:text-yellow-400">
                 La recette a été modifiée depuis l’installation de ce serveur —
-                recharge-la pour appliquer la nouvelle version.
+                recharge-la pour mettre à jour ses variables, puis réinstalle
+                le serveur pour l’appliquer.
               </p>
             )}
           </CardContent>
@@ -261,8 +272,8 @@ function ServerSettingsPage() {
         onOpenChange={setAskReloadRecipe}
         onConfirm={() => reloadMutation.mutate()}
         title="Recharger la recette ?"
-        description="La version actuelle de la recette remplacera celle utilisée à l’installation, puis le serveur sera réinstallé avec — les fichiers peuvent être modifiés, tes variables gardent leurs valeurs. Pense à sauvegarder tes données."
-        confirmLabel="Recharger et réinstaller"
+        description="La version actuelle de la recette remplacera celle utilisée à l’installation. Rien n’est réinstallé à cette étape — ajuste tes variables, puis réinstalle le serveur pour appliquer la nouvelle version."
+        confirmLabel="Recharger"
         cancelLabel="Annuler"
         destructive
         pending={reloadMutation.isPending}

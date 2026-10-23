@@ -32,6 +32,11 @@ function EditRecipePage() {
   const query = useQuery({
     queryKey: ['recipe', recipeId],
     queryFn: () => getRecipe({ data: { recipeId } }),
+    // The editor hydrates from this query — never serve a stale entry
+    // (the global staleTime is 60s): rehydrating the form from an
+    // outdated cache and re-saving would silently overwrite the row
+    // with the pre-edit content.
+    staleTime: 0,
   });
 
   const update = useMutation({
@@ -43,7 +48,10 @@ function EditRecipePage() {
       return updateRecipe({ data: { recipeId, json: JSON.stringify(recipe, null, 2) } });
     },
     onSuccess: async () => {
-      // List only — ['recipe'] is NOT invalidated so the form keeps its state
+      // Invalidate the detail too: the refetch bumps `dataUpdatedAt`, the
+      // `key` below remounts the editor and the form RESETS with the data
+      // the server actually stored (defaults applied, slug renamed…).
+      await queryClient.invalidateQueries({ queryKey: ['recipe', recipeId] });
       await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
       await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
     },

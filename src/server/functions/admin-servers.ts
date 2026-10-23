@@ -17,7 +17,7 @@ import {
   agentUpdateResources,
   AgentError,
 } from '../agent/client';
-import { deleteServer, reinstallServerFromPanel, secondaryPorts } from '../servers';
+import { deleteServer, reinstallServerFromPanel, refreshServerRecipeSnapshot, secondaryPorts } from '../servers';
 import { recipeGraphUpdatedAt } from '../recipe-snapshot';
 import {
   adminServerIdSchema,
@@ -271,8 +271,10 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
 
 /**
  * Reload recipe: re-snapshots the server from the CURRENT recipe row
- * (app + resolved runtimes, current variable values kept) and reinstalls
- * it. The user-facing equivalent lives on the server settings page.
+ * (app + resolved runtimes, current variable values kept) WITHOUT
+ * reinstalling — the reinstall stays a separate, explicit action so the
+ * variables can be reviewed first. The user-facing equivalent lives on
+ * the server settings page.
  */
 export const reloadAdminServerRecipeFn = createServerFn({ method: 'POST' })
   .validator(adminServerIdSchema)
@@ -281,10 +283,13 @@ export const reloadAdminServerRecipeFn = createServerFn({ method: 'POST' })
     await requirePanelPermission({ 'panel.servers': ['update'] });
     const { server } = await loadServer(data.serverId);
 
-    const result = await reinstallServerFromPanel(server, { refreshSnapshot: true });
-    server.status = 'installing';
-    await orm.em.flush();
-    return { id: server.id, status: 'installing', message: result.message };
+    await refreshServerRecipeSnapshot(server);
+    return {
+      id: server.id,
+      status: server.status,
+      // The variables to review before the (separate) reinstall
+      variables: server.variables,
+    };
   });
 
 /**

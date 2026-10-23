@@ -751,9 +751,10 @@ function ServerActionsPanel({
       await invalidate();
       return result;
     },
-    onSuccess: (result) =>
+    onSuccess: () =>
       toast.success('Recette rechargée', {
-        description: result.message,
+        description:
+          'Les variables du serveur sont à jour — réinstalle le serveur pour appliquer la nouvelle version.',
       }),
     onError: (error) => toast.error(error.message),
   });
@@ -865,7 +866,7 @@ function ServerActionsPanel({
             title="Recharger la recette"
             description={
               recipeUpdatedSinceSnapshot
-                ? `La recette « ${recipeName} » a été modifiée depuis l’installation de ce serveur — la recharger applique la nouvelle version puis réinstalle le serveur avec.`
+                ? `La recette « ${recipeName} » a été modifiée depuis l’installation de ce serveur — la recharger met à jour ses variables ; réinstalle ensuite le serveur pour l’appliquer.`
                 : `La recette « ${recipeName} » n’a pas changé depuis l’application sur ce serveur — rien à recharger.`
             }
           >
@@ -989,8 +990,8 @@ function ServerActionsPanel({
           setConfirmReloadOpen(false);
         }}
         title={`Recharger la recette « ${recipeName} » ?`}
-        description="La version actuelle de la recette remplacera celle utilisée à l’installation, puis le serveur sera réinstallé avec — les fichiers peuvent être modifiés, les variables gardent leurs valeurs. Pense à sauvegarder les données."
-        confirmLabel="Recharger et réinstaller"
+        description="La version actuelle de la recette remplacera celle utilisée à l’installation. Rien n’est réinstallé à cette étape — ajuste les variables du serveur, puis réinstalle-le pour appliquer la nouvelle version."
+        confirmLabel="Recharger"
         cancelLabel="Annuler"
         destructive
         pending={reloadMutation.isPending}

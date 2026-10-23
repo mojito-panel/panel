@@ -123,9 +123,19 @@ function VariablesEditor({ serverId, variables, start, definitions, canUpdate }:
       await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast.success('Variables enregistrées', {
         description: 'Appliquées au prochain démarrage du serveur.',
+      });
+      // The mutationFn awaited the ['server'] invalidation — RESET the
+      // form with the values the server actually stored (the merge fills
+      // defaults and drops envs no longer defined) instead of keeping
+      // the pre-save state around.
+      form.reset({
+        serverId,
+        variables: Object.fromEntries(
+          definitions.map((v) => [v.env, result.variables[v.env] ?? v.default_value]),
+        ) as Record<string, string | number | boolean>,
       });
     },
     onError: (error) => {

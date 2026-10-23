@@ -26,6 +26,7 @@ import {
   syncRuntimeStatus,
   loadServerContext,
   reinstallServerFromPanel,
+  refreshServerRecipeSnapshot,
 } from '../servers';
 import { serverRecipeSnapshot, recipeGraphUpdatedAt } from '../recipe-snapshot';
 import { signConsoleToken } from '../jwt';
@@ -409,14 +410,14 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     return { id: server.id, status: 'installing', message: result.message };
   });
 
-// ─── Reload recipe (re-snapshot from the current recipe row, then reinstall) ──
+// ─── Reload recipe (re-snapshot from the current recipe row — NO reinstall) ──
 
 export const reloadRecipeFn = createServerFn({ method: 'POST' })
   .validator(serverLogsQuerySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
+    const { server } = await loadServerWithPermission(
       data.serverId,
       user,
       { 'server.settings': ['update'] },
@@ -424,9 +425,16 @@ export const reloadRecipeFn = createServerFn({ method: 'POST' })
 
     // Fresh snapshot: the current recipe row (app + resolved runtimes),
     // current variable values kept — defaults only fill newly declared
-    // envs. The reinstall that follows applies it to the agent.
-    const result = await reinstallServerFromPanel(server, { refreshSnapshot: true });
-    return { id: server.id, status: 'installing', message: result.message };
+    // envs. Nothing is reinstalled: the user reviews/adjusts the
+    // variables first, then reinstalls from the settings page — the
+    // agent is not touched here at all.
+    const snapshot = await refreshServerRecipeSnapshot(server);
+    return {
+      id: server.id,
+      status: server.status as ServerStatusDb,
+      variables: server.variables,
+      variableCount: snapshot.recipe.variables?.length ?? 0,
+    };
   });
 
 // ─── Variable update (panel DB = source of truth, agent cache synced) ────────
