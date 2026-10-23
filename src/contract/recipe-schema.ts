@@ -360,8 +360,25 @@ export type Recipe = z.infer<typeof recipeSchema>;
  * variables — `{{RUNTIME_DIR}}` points at the runtime's install dir.
  */
 export const runtimeExportSchema = z.object({
-  /** Prepend the runtime's dir to PATH (default true — java/steamcmd binaries). */
-  path: z.boolean().default(true),
+  /**
+   * Directory (RELATIVE to the runtime's install dir) whose executables are
+   * prepended to the dependents' PATH — the runtime's layout is the recipe's
+   * declaration, never the agent's guesswork: a JRE home exports "bin"
+   * (java.exe lives in <home>\bin), steamcmd-style tools export ".".
+   * Absent/empty = no PATH entry.
+   */
+  path: z
+    .string()
+    .refine(
+      (p) =>
+        p === '' ||
+        (!/^[a-zA-Z]:/.test(p) &&
+          !p.startsWith('/') &&
+          !p.startsWith('\\') &&
+          !p.split(/[/\\]/).includes('..')),
+      'Dossier relatif au dossier du runtime (pas de lecteur, pas de "..")',
+    )
+    .optional(),
   /** Fixed env exported to the dependents (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
   env: z.record(z.string(), z.string()).optional(),
 });

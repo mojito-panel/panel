@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { Checkbox } from '~/components/ui/checkbox';
 import { FieldShell, KvRows, TagsInput } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
@@ -206,15 +205,16 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
                 {(field) => (
                   <FieldShell
                     id="recipe-export-path"
-                    label="Ajouter au PATH"
-                    hint="Préfixe le dossier du runtime au PATH des étapes et du spawn (binaires à la racine : java.exe, steamcmd.exe…)."
+                    label="Dossier ajouté au PATH"
+                    hint="Dossier (relatif au dossier du runtime) dont les exécutables sont préfixés au PATH des étapes et du spawn — « bin » pour un home JRE (java.exe dans <home>\\bin), « . » pour des binaires à la racine (steamcmd). Vide = aucun ajout."
                     errors={field.state.meta.errors}
                   >
-                    <Checkbox
+                    <Input
                       id="recipe-export-path"
-                      checked={field.state.value}
-                      onCheckedChange={(checked) => field.handleChange(checked === true)}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
+                      placeholder="bin"
                     />
                   </FieldShell>
                 )}

@@ -22,7 +22,7 @@ function fullEditorValue(): RecipeEditorValue {
     tags: ['minecraft'],
     updateUrl: 'https://example.com/recipe.json',
     requires: ['java'],
-    exportPath: true,
+    exportPath: '',
     exportEnv: [],
     requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],

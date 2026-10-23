@@ -365,8 +365,18 @@ export const recipeEditorSchema = z
     requirements: requirementsValueSchema,
     /** Runtime recipe ids this recipe requires (app AND runtime both). */
     requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')),
-    /** Runtime export: prepend the runtime dir to PATH (default true). */
-    exportPath: z.boolean(),
+    /**
+     * Runtime export: directory (relative to the runtime's own dir) whose
+     * executables are prepended to PATH — "bin" for a JRE home (java.exe
+     * lives in <home>\bin), "." for root-installing tools. Empty = no
+     * PATH entry.
+     */
+    exportPath: z.string().refine(
+      (p) =>
+        p === '' ||
+        (!/^[a-zA-Z]:/.test(p) && !p.startsWith('/') && !p.startsWith('\\') && !p.split(/[/\\]/).includes('..')),
+      'Dossier relatif au dossier du runtime (pas de lecteur, pas de "..")',
+    ),
     /** Runtime export: fixed env pairs (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
     exportEnv: z.array(kvPairSchema),
     env: z.array(kvPairSchema),
@@ -447,7 +457,7 @@ export function runtimeToEditorValue(recipe: RuntimeRecipe): RecipeEditorValue {
     tags: recipe.tags ?? [],
     updateUrl: recipe.update_url ?? '',
     requires: recipe.requires ?? [],
-    exportPath: recipe.export?.path ?? true,
+    exportPath: recipe.export?.path ?? '',
     exportEnv: toPairs(recipe.export?.env),
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [],
@@ -476,7 +486,7 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     tags: [],
     updateUrl: '',
     requires: [],
-    exportPath: true,
+    exportPath: '.',
     exportEnv: [],
     requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [],
@@ -609,7 +619,7 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     tags: recipe.tags ?? [],
     updateUrl: recipe.update_url ?? '',
     requires: recipe.requires ?? [],
-    exportPath: true,
+    exportPath: '',
     exportEnv: [],
     requirements: contractRequirementsToEditor(recipe.requirements),
     env: toPairs(recipe.env),
@@ -780,7 +790,7 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
           return {
             ...common,
             export: {
-              path: value.exportPath,
+              path: value.exportPath || undefined,
               env: Object.keys(env).length > 0 ? env : undefined,
             },
           };
