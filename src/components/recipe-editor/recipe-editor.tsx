@@ -14,7 +14,10 @@ import { VariablesTab } from './tab-variables';
 import { InstallTab } from './tab-install';
 
 /**
- * Pelican-style recipe (egg) editor — one TanStack Form, 4 tabs:
+ * Pelican-style recipe (egg) editor — one TanStack Form:
+ * Configuration / Démarrage / Variables / Installation for an app,
+ * Configuration / Variables / Installation for a runtime (no start,
+ * stop, ready or logs — a runtime has none).
  * Configuration / Démarrage / Variables / Installation.
  * The page container (max-width) is owned by AppShell; routes only
  * provide the initial value and the submit handler.
@@ -133,15 +136,24 @@ export function RecipeEditor({
         }}
       </form.Subscribe>
 
-      <TabsCard
-        defaultValue="configuration"
-        tabs={[
-          { value: 'configuration', label: 'Configuration', content: <ConfigurationTab form={form} /> },
-          { value: 'process', label: 'Démarrage', content: <ProcessTab form={form} /> },
-          { value: 'variables', label: 'Variables', content: <VariablesTab form={form} /> },
-          { value: 'install', label: 'Installation', content: <InstallTab form={form} /> },
-        ]}
-      />
+      {/* App-only tabs: a runtime recipe has no start/stop/ready/logs —
+          its install steps run under the requiring server's job caps.
+          A runtime editor shows Configuration / Variables / Installation. */}
+      <form.Subscribe selector={(s) => s.values.recipeType}>
+        {(recipeType) => (
+          <TabsCard
+            defaultValue="configuration"
+            tabs={[
+              { value: 'configuration', label: 'Configuration', content: <ConfigurationTab form={form} /> },
+              ...(recipeType === 'app'
+                ? [{ value: 'process', label: 'Démarrage', content: <ProcessTab form={form} /> }]
+                : []),
+              { value: 'variables', label: 'Variables', content: <VariablesTab form={form} /> },
+              { value: 'install', label: 'Installation', content: <InstallTab form={form} /> },
+            ]}
+          />
+        )}
+      </form.Subscribe>
     </div>
   );
 }

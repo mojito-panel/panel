@@ -252,10 +252,18 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
         }
       </form.Subscribe>
 
-      <CardSection
-        title="Environnement fixe"
-        description="Variables injectées au spawn du serveur — utilisables dans les templates {{VAR}}."
-      >
+      {/* App-only sections — a runtime recipe has no fixed env (its
+          exports are the export block), no host requirements (its steps
+          run under the requiring server's own caps) and no backups (its
+          .bin dir lives inside the app's and is always excluded). */}
+      <form.Subscribe selector={(s) => s.values.recipeType}>
+        {(recipeType) =>
+          recipeType === 'app' && (
+            <>
+              <CardSection
+                title="Environnement fixe"
+                description="Variables injectées au spawn du serveur — utilisables dans les templates {{VAR}}."
+              >
         <form.Field name="env">
           {(field) => (
             <FieldShell
@@ -376,7 +384,10 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </FieldShell>
             )}
           </form.Field>
-      </CardSection>
+              </CardSection>
+            </>
+          )}
+      </form.Subscribe>
     </div>
   );
 }
