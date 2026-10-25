@@ -147,7 +147,12 @@ function ServerConsolePage() {
   const [askKill, setAskKill] = useState(false);
 
   const runAction = (a: 'start' | 'stop' | 'restart' | 'kill') => {
-    if (wsSendRef.current) {
+    // start/restart MUST go through the panel server fn: it pushes the
+    // current resources to the agent BEFORE the spawn (the agent builds
+    // the Job Object from its stored cache — a WS start would run with a
+    // stale cache, e.g. limits changed in the admin but never pushed).
+    // stop/kill don't depend on the limits: the WS is fine (and faster).
+    if (wsSendRef.current && a !== 'start' && a !== 'restart') {
       wsSendRef.current({ type: 'power', action: a });
       return;
     }

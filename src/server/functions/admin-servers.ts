@@ -206,6 +206,17 @@ export const updateAdminServerFn = createServerFn({ method: 'POST' })
     server.backupLimit = data.backupLimit;
     await em.flush();
 
+    // Push the new limits to the agent's cache right away: the crash
+    // auto-restart (agent-side) and any start path that bypasses the
+    // panel spawn from the stored cache — a save without push would leave
+    // them running under the OLD limits. Best-effort: the DB is the
+    // source of truth and the power start/restart flow re-pushes anyway.
+    try {
+      await pushServerResources(em, server);
+    } catch {
+      // Agent unreachable — tolerated, the next start re-syncs.
+    }
+
     // NOTE: memory/CPU are enforced by the agent through its stored
     // allocation — the power start/restart flow pushes the current
     // record before every spawn, so a limit change applies on the next
