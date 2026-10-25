@@ -18,7 +18,7 @@ interface XtermConsoleProps {
   serverId: string;
   /**
    * Called when the direct agent WS authenticates/disconnects.
-   * Non-null = live WS sender usable for console commands/power (bypasses the
+   * Non-null = live WS sender usable for console commands (bypasses the
    * panel); null = fall back to the panel server functions.
    */
   onConnection?: (send: ((message: ConsoleClientMessage) => void) | null) => void;

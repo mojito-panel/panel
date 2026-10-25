@@ -424,18 +424,6 @@ describe('consoleClientMessageSchema', () => {
       consoleClientMessageSchema.safeParse({ type: 'command', command: '' }).success,
     ).toBe(false);
   });
-
-  it('validates a power action', () => {
-    expect(
-      consoleClientMessageSchema.safeParse({ type: 'power', action: 'restart' }).success,
-    ).toBe(true);
-  });
-
-  it('rejects an unknown power action', () => {
-    expect(
-      consoleClientMessageSchema.safeParse({ type: 'power', action: 'pause' }).success,
-    ).toBe(false);
-  });
 });
 
 describe('consoleServerMessageSchema', () => {

@@ -66,8 +66,8 @@ function ServerConsolePage() {
   const [consoleMode, setConsoleMode] = useState<ConsoleMode>('connecting');
   // Install status pushed by the agent over the WS (banner + DB sync trigger)
   const [installStatus, setInstallStatus] = useState<ConsoleInstallStatus | null>(null);
-  // Live agent WS (set by XtermConsole): when connected, commands and power
-  // actions go DIRECTLY to the agent (JWT-gated); otherwise via the panel.
+  // Live agent WS (set by XtermConsole): when connected, console commands
+  // go DIRECTLY to the agent (JWT-gated); otherwise via the panel.
   const wsSendRef = useRef<((message: ConsoleClientMessage) => void) | null>(null);
 
   const handleConsoleConnection = (
@@ -147,15 +147,6 @@ function ServerConsolePage() {
   const [askKill, setAskKill] = useState(false);
 
   const runAction = (a: 'start' | 'stop' | 'restart' | 'kill') => {
-    // start/restart MUST go through the panel server fn: it pushes the
-    // current resources to the agent BEFORE the spawn (the agent builds
-    // the Job Object from its stored cache — a WS start would run with a
-    // stale cache, e.g. limits changed in the admin but never pushed).
-    // stop/kill don't depend on the limits: the WS is fine (and faster).
-    if (wsSendRef.current && a !== 'start' && a !== 'restart') {
-      wsSendRef.current({ type: 'power', action: a });
-      return;
-    }
     action.mutate(a);
   };
 

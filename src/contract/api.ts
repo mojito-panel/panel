@@ -318,10 +318,6 @@ export const consoleClientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('command'),
     command: z.string().min(1).max(1000),
   }),
-  z.object({
-    type: z.literal('power'),
-    action: serverActionSchema,
-  }),
 ]);
 
 export type ConsoleClientMessage = z.infer<typeof consoleClientMessageSchema>;
