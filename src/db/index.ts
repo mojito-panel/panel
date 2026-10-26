@@ -14,6 +14,7 @@ import {
   PanelRole,
   Backup,
   Setting,
+  ActivityLog,
 } from './entities';
 
 const databaseUrl =
@@ -53,6 +54,7 @@ export const ormConfig = {
     PanelRole,
     Backup,
     Setting,
+    ActivityLog,
   ],
   extensions: [Migrator],
   debug: process.env.NODE_ENV !== 'production',

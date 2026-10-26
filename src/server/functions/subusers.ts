@@ -6,6 +6,7 @@ import { nanoid } from '~/lib/nanoid';
 import { serverSubusersList } from '~/lists/subusers';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
+import { logActivity } from '../activity';
 import {
   flattenPermissions,
   sanitizeStatements,
@@ -144,6 +145,14 @@ export const addServerUserFn = createServerFn({ method: 'POST' })
     );
     await em.flush();
 
+    await logActivity({
+      event: 'subuser:add',
+      description: `${target.email} invité comme sous-utilisateur de « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { targetUserId: target.id, permissions: grant },
+    });
+
     return { userId: target.id, permissions: grant };
   });
 
@@ -176,6 +185,14 @@ export const updateServerUserFn = createServerFn({ method: 'POST' })
     row.permissions = statements;
     await em.flush();
 
+    await logActivity({
+      event: 'subuser:update',
+      description: `Permissions de l'utilisateur ${data.userId} mises à jour sur « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { targetUserId: data.userId, permissions: grant },
+    });
+
     return { userId: data.userId, permissions: grant };
   });
 
@@ -200,5 +217,13 @@ export const removeServerUserFn = createServerFn({ method: 'POST' })
 
     em.remove(row);
     await em.flush();
+
+    await logActivity({
+      event: 'subuser:remove',
+      description: `Accès de l'utilisateur ${data.userId} retiré sur « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
+
     return { removed: true };
   });

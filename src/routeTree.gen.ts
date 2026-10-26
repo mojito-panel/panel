@@ -16,6 +16,7 @@ import { Route as AuthLoginRouteImport } from './routes/_auth/login'
 import { Route as AuthRegisterRouteImport } from './routes/_auth/register'
 import { Route as AuthSetupRouteImport } from './routes/_auth/setup'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminActivityRouteImport } from './routes/admin/activity'
 import { Route as AdminApiRouteImport } from './routes/admin/api'
 import { Route as AdminHealthRouteImport } from './routes/admin/health'
 import { Route as AdminRolesRouteImport } from './routes/admin/roles'
@@ -77,6 +78,11 @@ const AuthSetupRoute = AuthSetupRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminActivityRoute = AdminActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminApiRoute = AdminApiRouteImport.update({
@@ -230,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
   '/setup': typeof AuthSetupRoute
+  '/admin/activity': typeof AdminActivityRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/roles': typeof AdminRolesRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/login': typeof AuthLoginRoute
   '/register': typeof AuthRegisterRoute
   '/setup': typeof AuthSetupRoute
+  '/admin/activity': typeof AdminActivityRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/roles': typeof AdminRolesRoute
@@ -302,6 +310,7 @@ export interface FileRoutesById {
   '/_auth/login': typeof AuthLoginRoute
   '/_auth/register': typeof AuthRegisterRoute
   '/_auth/setup': typeof AuthSetupRoute
+  '/admin/activity': typeof AdminActivityRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/roles': typeof AdminRolesRoute
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/setup'
+    | '/admin/activity'
     | '/admin/api'
     | '/admin/health'
     | '/admin/roles'
@@ -374,6 +384,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/setup'
+    | '/admin/activity'
     | '/admin/api'
     | '/admin/health'
     | '/admin/roles'
@@ -411,6 +422,7 @@ export interface FileRouteTypes {
     | '/_auth/login'
     | '/_auth/register'
     | '/_auth/setup'
+    | '/admin/activity'
     | '/admin/api'
     | '/admin/health'
     | '/admin/roles'
@@ -503,6 +515,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/activity': {
+      id: '/admin/activity'
+      path: '/activity'
+      fullPath: '/admin/activity'
+      preLoaderRoute: typeof AdminActivityRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/api': {
@@ -705,6 +724,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteRouteChildren {
+  AdminActivityRoute: typeof AdminActivityRoute
   AdminApiRoute: typeof AdminApiRoute
   AdminHealthRoute: typeof AdminHealthRoute
   AdminRolesRoute: typeof AdminRolesRoute
@@ -721,6 +741,7 @@ interface AdminRouteRouteChildren {
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminActivityRoute: AdminActivityRoute,
   AdminApiRoute: AdminApiRoute,
   AdminHealthRoute: AdminHealthRoute,
   AdminRolesRoute: AdminRolesRoute,

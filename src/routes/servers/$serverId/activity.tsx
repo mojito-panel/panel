@@ -1,17 +1,56 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { NotImplemented } from '~/components/not-implemented';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useServerFn } from '@tanstack/react-start';
+import { DataTable } from '~/components/data-table/data-table';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { activityList } from '~/lists/activity';
+import { listServerActivityFn } from '~/server/functions/activity';
 
-/** /servers/$serverId/activity — journal d'activité. */
 export const Route = createFileRoute('/servers/$serverId/activity')({
+  // Same schema as the server function: the route validates the URL, the
+  // function validates the payload — one definition, no drift.
+  validateSearch: (search: Record<string, unknown>): ListQuery =>
+    activityList.querySchema.parse(search),
+  search: { middlewares: [stripSearchParams(activityList.defaultSearch)] },
   component: ServerActivityPage,
 });
 
 function ServerActivityPage() {
+  const { serverId } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const listActivity = useServerFn(listServerActivityFn);
+
+  const query = useQuery({
+    queryKey: ['server-activity', serverId, search],
+    queryFn: () => listActivity({ data: { ...search, serverId } }),
+    placeholderData: keepPreviousData,
+  });
+
+  // Search updates write the WHOLE validated query back to the URL.
+  const onSearchChange = (patch: Partial<ListQuery>) =>
+    navigate({ search: mergeQuery(search, patch), replace: true });
+
   return (
-    <NotImplemented
-      title="Activité"
-      description="Journal d'activité du serveur : démarrages/arrêts, installations, actions des sous-utilisateurs, commandes envoyées."
-      pelican="Activity"
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-lg font-semibold">Activité</h1>
+        <p className="text-sm text-muted-foreground">
+          Journal d'audit du serveur : actions des utilisateurs, démarrages/arrêts,
+          sauvegardes.
+        </p>
+      </div>
+      <DataTable
+        list={activityList}
+        rows={query.data?.rows ?? []}
+        rowCount={query.data?.rowCount ?? 0}
+        search={search}
+        onSearchChange={onSearchChange}
+        isPending={query.isPending}
+        isFetching={query.isFetching}
+        error={query.error}
+        emptyMessage="Aucune activité enregistrée."
+      />
+    </div>
   );
 }

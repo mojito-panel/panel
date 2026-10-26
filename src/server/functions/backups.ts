@@ -11,6 +11,7 @@ import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
 import { signBackupDownloadToken } from '../jwt';
 import { decryptSecret } from '../crypto';
+import { logActivity } from '../activity';
 import {
   agentCreateBackup,
   agentGetBackupStatus,
@@ -221,6 +222,13 @@ export const createBackupFn = createServerFn({ method: 'POST' })
       throw err;
     }
 
+    await logActivity({
+      event: 'backup:create',
+      description: `Sauvegarde « ${backup.name} » créée sur « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
+
     return toDto(backup);
   });
 
@@ -245,13 +253,22 @@ export const restoreBackupFn = createServerFn({ method: 'POST' })
       await agentRestoreBackup(node, server.id, backup.id, { truncate: data.truncate });
       backup.status = 'restoring';
       await em.flush();
-      return { id: backup.id, status: 'restoring' as const };
     } catch (err) {
       if (err instanceof AgentError) {
         throw agentHttpError('Restauration', err);
       }
       throw err;
     }
+
+    await logActivity({
+      event: 'backup:restore',
+      description: `Restauration de « ${backup.name} » lancée sur « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { backupId: backup.id, truncate: data.truncate },
+    });
+
+    return { id: backup.id, status: 'restoring' as const };
   });
 
 // ─── Deletion (agent archive + panel row) ────────────────────────────────────
@@ -286,6 +303,14 @@ export const deleteBackupFn = createServerFn({ method: 'POST' })
 
     em.remove(backup);
     await em.flush();
+
+    await logActivity({
+      event: 'backup:delete',
+      description: `Sauvegarde « ${backup.name} » supprimée de « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
+
     return { id: backup.id, deleted: true };
   });
 

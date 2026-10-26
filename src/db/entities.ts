@@ -243,3 +243,31 @@ export const Setting = defineEntity({
     value: p.text(),
   },
 });
+
+export const ActivityLog = defineEntity({
+  name: 'activity_log',
+  properties: {
+    id: p.string().primary(),
+    /** Namespaced event — "server:power", "backup:create", "subuser:add"… */
+    event: p.string().length(128),
+    /** Human-readable summary of the action (what happened, to what). */
+    description: p.text().nullable(),
+    ip: p.string().length(64).nullable(),
+    userAgent: p.text().nullable(),
+    /** Actor snapshot — denormalized so rows survive the actor's deletion. */
+    actorId: p.string().nullable(),
+    actorName: p.string().nullable(),
+    actorEmail: p.string().nullable(),
+    /** Subject server of the event, if any (denormalized id + name). */
+    serverId: p.string().fieldName('server_id').nullable(),
+    serverName: p.string().nullable(),
+    /** Structured context of the event (target ids, changed fields…). */
+    properties: p.json<Record<string, unknown>>().default('{}'),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+  },
+  indexes: [
+    { properties: ['event'], name: 'activity_log_event_index' },
+    { properties: ['createdAt'], name: 'activity_log_created_at_index' },
+    { properties: ['serverId'], name: 'activity_log_server_id_index' },
+  ],
+});

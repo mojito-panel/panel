@@ -15,6 +15,7 @@ import {
   requireServerOwner,
 } from '../session';
 import { withOrmContext } from '../middleware';
+import { logActivity } from '../activity';
 import { orm } from '../orm';
 import {
   requireNodeOf,
@@ -381,6 +382,13 @@ export const serverActionFn = createServerFn({ method: 'POST' })
       // Sync the status
       server.status = result.status as ServerStatusDb;
       await em.flush();
+      await logActivity({
+        event: 'server:power',
+        description: `Action « ${data.action} » sur « ${server.name} »`,
+        actor: { id: user.id, name: user.name, email: user.email },
+        server: { id: server.id, name: server.name },
+        properties: { action: data.action },
+      });
       return { id: server.id, action: data.action, status: result.status };
     } catch (err) {
       if (err instanceof AgentError) {
@@ -594,6 +602,12 @@ export const deleteServerFn = createServerFn({ method: 'POST' })
     const user = await requireUser();
     const { server } = await requireServerOwner(data.serverId, user);
     await deleteServer(server, { force: data.force });
+    await logActivity({
+      event: 'server:delete',
+      description: `Serveur « ${server.name} » supprimé`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
     return { deleted: true };
   });
 
