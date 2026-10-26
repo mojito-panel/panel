@@ -24,6 +24,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Label } from '~/components/ui/label';
+import { Separator } from '~/components/ui/separator';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Dialog,
@@ -193,25 +194,33 @@ function ServerUsersPage() {
               addForm.handleSubmit();
             }}
           >
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <addForm.Field name="email">
                 {(field) => (
                   <div className="max-w-sm space-y-2">
+                    <Label htmlFor="add-subuser-email">Adresse e-mail</Label>
                     <Input
+                      id="add-subuser-email"
                       type="email"
-                      placeholder="Adresse e-mail du compte à inviter"
+                      placeholder="compte@exemple.com"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Le compte doit déjà exister — son e-mail suffit. Chaque case
+                      ci-dessous déverrouille une action précise sur CE serveur.
+                    </p>
                   </div>
                 )}
               </addForm.Field>
 
+              <Separator />
+
               {/* Permission checkboxes (grouped by resource) */}
               <div className="grid gap-4 sm:grid-cols-2">
                 {SERVER_PERMISSION_GROUPS.map((group) => (
-                  <div key={group.resource} className="space-y-2 rounded-md border p-3">
+                  <div key={group.resource} className="space-y-2.5 rounded-md border p-4">
                     <p className="text-sm font-medium">{group.label}</p>
                     {group.actions.map((entry) => (
                       <addForm.Field
@@ -219,7 +228,7 @@ function ServerUsersPage() {
                         name={`permissions.${entry.permission}`}
                       >
                         {(field) => (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5 py-0.5">
                             <Checkbox
                               id={`add-${entry.permission}`}
                               checked={Boolean(field.state.value)}
@@ -256,23 +265,34 @@ function ServerUsersPage() {
       )}
 
       {/* ─── Current sub-users ─── */}
-      <DataTable
-        list={serverSubusersList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        emptyMessage="Aucun sous-utilisateur pour l’instant."
-        rowContext={{
-          canManage: canUpdate || canRemove,
-          removing: update.isPending || remove.isPending,
-          onEdit: setEditing,
-          onRemove: setToRemove,
-        }}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Sous-utilisateurs</CardTitle>
+          <CardDescription>
+            Comptes ayant accès à ce serveur — le propriétaire garde toujours
+            tous les droits.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={serverSubusersList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            emptyMessage="Aucun sous-utilisateur pour l’instant."
+            rowContext={{
+              canManage: canUpdate || canRemove,
+              removing: update.isPending || remove.isPending,
+              onEdit: setEditing,
+              onRemove: setToRemove,
+            }}
+          />
+        </CardContent>
+      </Card>
 
       {/* Edit a sub-user's permissions — remounts per row so the checkboxes
           reflect the grant being edited (TanStack Form + the existing
