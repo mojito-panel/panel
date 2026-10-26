@@ -24,7 +24,6 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Label } from '~/components/ui/label';
-import { Separator } from '~/components/ui/separator';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Dialog,
@@ -182,9 +181,8 @@ function ServerUsersPage() {
           <CardHeader>
             <CardTitle>Donner accès à un utilisateur</CardTitle>
             <CardDescription>
-              Le compte doit déjà exister — son e-mail suffit. Les permissions
-              sont granulaires (Pelican « sub-user ») : chaque case ci-dessous
-              déverrouille une action précise sur CE serveur.
+              Permissions granulaires : chaque case déverrouille une action
+              précise sur CE serveur.
             </CardDescription>
           </CardHeader>
           <form
@@ -194,41 +192,37 @@ function ServerUsersPage() {
               addForm.handleSubmit();
             }}
           >
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-6 py-6">
               <addForm.Field name="email">
                 {(field) => (
-                  <div className="max-w-sm space-y-2">
+                  <div className="space-y-2">
                     <Label htmlFor="add-subuser-email">Adresse e-mail</Label>
                     <Input
                       id="add-subuser-email"
                       type="email"
-                      placeholder="compte@exemple.com"
+                      placeholder="compte@exemple.com — le compte doit déjà exister"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Le compte doit déjà exister — son e-mail suffit. Chaque case
-                      ci-dessous déverrouille une action précise sur CE serveur.
-                    </p>
                   </div>
                 )}
               </addForm.Field>
 
-              <Separator />
-
               {/* Permission checkboxes (grouped by resource) */}
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 {SERVER_PERMISSION_GROUPS.map((group) => (
-                  <div key={group.resource} className="space-y-2.5 rounded-md border p-4">
-                    <p className="text-sm font-medium">{group.label}</p>
+                  <div key={group.resource} className="space-y-1.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </p>
                     {group.actions.map((entry) => (
                       <addForm.Field
                         key={entry.permission}
                         name={`permissions.${entry.permission}`}
                       >
                         {(field) => (
-                          <div className="flex items-center gap-2.5 py-0.5">
+                          <div className="flex items-center gap-2">
                             <Checkbox
                               id={`add-${entry.permission}`}
                               checked={Boolean(field.state.value)}
@@ -250,7 +244,7 @@ function ServerUsersPage() {
                 ))}
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="pt-6">
               <addForm.Subscribe selector={(s) => [s.isSubmitting, add.isPending]}>
                 {([isSubmitting, pending]) => (
                   <Button type="submit" disabled={isSubmitting || pending}>
@@ -370,10 +364,12 @@ function SubuserPermissionsDialog({
           }}
           className="space-y-4"
         >
-          <div className="grid max-h-[60vh] gap-4 overflow-y-auto sm:grid-cols-2">
+          <div className="grid max-h-[60vh] gap-x-8 gap-y-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
             {SERVER_PERMISSION_GROUPS.map((group) => (
-              <div key={group.resource} className="space-y-2 rounded-md border p-3">
-                <p className="text-sm font-medium">{group.label}</p>
+              <div key={group.resource} className="space-y-1.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {group.label}
+                </p>
                 {group.actions.map((entry) => (
                   <form.Field
                     key={entry.permission}
