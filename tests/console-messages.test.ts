@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   consoleMessageEmoji,
   formatBytes,
+  renderConsoleEvent,
   renderConsoleMessage,
-  renderInstallLine,
 } from '../src/components/console/messages';
 
 // The catalog text and the emoji map are CONTENT (edited freely) — these
@@ -35,46 +35,25 @@ describe('consoleMessageEmoji', () => {
   });
 });
 
-describe('renderInstallLine', () => {
-  const ts = new Date().toISOString();
-
-  it('wraps step lines in the "Step X/Y" envelope after the emoji', () => {
-    const out = renderInstallLine({
-      timestamp: ts,
-      level: 'step',
-      message: '',
-      code: 'install.action.download',
-      params: { step: '3', total: '5', dest: 'server.jar' },
+describe('renderConsoleEvent', () => {
+  it('wraps install step events in the "Step X/Y" envelope', () => {
+    const out = renderConsoleEvent('install.action.download', {
+      step: '3',
+      total: '5',
+      dest: 'server.jar',
     });
-    // <emoji> Step X/Y — <action> — the emoji itself is content, not structure
-    expect(out).toMatch(/^.+ Step 3\/5 — .+$/);
+    // Step X/Y — <action> — the emoji itself is content, not structure
+    expect(out).toMatch(/^Step 3\/5 — .+$/);
   });
 
-  it('prefixes coded info lines with their emoji and a space', () => {
+  it('renders non-step events without an envelope', () => {
     const code = 'install.reinstall';
     const params = { name: 'S', steps: '2' };
-    const text = renderConsoleMessage(code, params);
-    const emoji = consoleMessageEmoji(code);
-    expect(renderInstallLine({ timestamp: ts, level: 'info', message: '', code, params })).toBe(
-      emoji ? `${emoji} ${text}` : text,
-    );
+    expect(renderConsoleEvent(code, params)).toBe(renderConsoleMessage(code, params));
   });
 
-  it('passes raw command output through', () => {
-    expect(renderInstallLine({ timestamp: ts, level: 'info', message: '[Server] Done!' })).toBe(
-      '[Server] Done!',
-    );
-  });
-
-  it('falls back to the raw message for an unknown code', () => {
-    expect(
-      renderInstallLine({
-        timestamp: ts,
-        level: 'info',
-        message: 'legacy text',
-        code: 'install.unknown',
-      }),
-    ).toBe('legacy text');
+  it('returns null for an unknown code (old agent)', () => {
+    expect(renderConsoleEvent('install.unknown')).toBeNull();
   });
 });
 

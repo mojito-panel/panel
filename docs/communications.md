@@ -100,7 +100,7 @@ sequenceDiagram
         Note over N,A: Installation streams on the WS console<br/>(same socket/JWT as runtime logs)
         loop direct WS (console)
             A-->>N: { type: "install-status", step, percent, error } (banner)
-            A-->>N: { type: "install-log", lines[] } (steps=yellow, output=gray, errors=red)
+            A-->>N: { type: "event", code, params } (steps) + { type: "log", lines[] } (output)
         end
         R->>A: store.save(servers.json) on success
         R-->>A: Registry: status "installed" (+ "failed", error at step X otherwise)
@@ -113,18 +113,20 @@ sequenceDiagram
 - The panel persists **before** calling the agent: the user is immediately redirected to the server console.
 - Fast validation (unknown/invalid variables) is rejected **before** the 202 → the form displays the error and the DB rows are removed.
 - A runner failure (404 download, failing script…) is NOT an HTTP error: it shows up in the installation status (`failed` + `error`), the store is not modified, the DB switches to `install_failed`.
-- **No polling** on the happy path: steps and command output are pushed by the agent on the console socket (`install-status` + `install-log`). `getInstallStatusFn` is called only **once** at the end (terminal status) to synchronize the DB (`installing → stopped / install_failed`).
-- **Fallback**: if WS is not usable (proxy without WS, refused origin…), the page falls back to polling `GET /servers/:serverId/install` (dedicated installation panel).
-- Installation logs (registry, in memory on the agent side): levels `step` (yellow), `info` (gray), `error` (red); command output is streamed **as it comes** — `\r` rewrites (progress bars like steamcmd's) replace the previous line instead of stacking up, consecutive identical lines are merged; 2000-line cap (latest kept).
+- **WS-only console**: install lines and runtime lines share ONE chronological stream (see §3) — install steps arrive as coded `event` messages, command output as `log` lines. There is no polling fallback.
 - **Tools silent on a pipe**: some console programs (steamcmd) print their progress only on a real terminal — on a pipe they stay silent. A `command` action can declare `tail` (`file` + regex `filter` + `intervalMs`): the agent tails the log file written during execution (e.g. steamcmd's `logs/content_log.txt`) and streams the new lines live.
 - A `command` action can declare `successCodes` (exit codes treated as success) — steamcmd exits with code 7 after its self-update (`Update complete, launching...`) even though the job succeeded.
-- Installation logs live in the agent's memory (registry): lost if the agent restarts, the DB status stays `install_failed` with the *Réessayer* button. On WS (re)connection, an **in-progress or failed** installation is replayed (`install-log` + `reset`), a finished installation is not.
+- The install STATUS (step/percent/error — the banner) lives in the agent's registry, in memory: lost if the agent restarts, the DB status stays `install_failed` with the *Réessayer* button.
 
 ---
 
 ## 3. Real-time console (browser ↔ agent direct)
 
-Two modes: direct WS (happy path) or polling via the panel (fallback if WS impossible).
+WS-only, ONE chronological stream: the agent keeps ONE console ring per server —
+runtime log lines, coded events (power actions, server online/stopped, watchdog)
+AND install lines (steps, command output) all go into it as they happen. On every
+fresh connection the ring is replayed as-is: a page reload shows the whole story
+in the order it happened (install trail included, no separate merge).
 
 ```mermaid
 sequenceDiagram
@@ -139,43 +141,25 @@ sequenceDiagram
     N->>A: { type: "auth", token }
     A->>A: checks signature, aud, scope, exp, serverId, permissions
     A-->>N: { type: "auth-ok" }
-    A-->>N: { type: "log", lines[] } (live streaming)
+    A-->>N: { type: "log", lines[] } (ring replay, batched — runtime AND install output)
+    A-->>N: { type: "event", code, params, at } (ring replay — power/watchdog/install coded lines)
     A-->>N: { type: "status", status } (running/stopped/crashed)
-    opt installation in progress or failed (last known)
-        A-->>N: { type: "install-status", ... } + { type: "install-log", lines[], reset: true } (trail replay)
-    end
+    A-->>N: { type: "install-status", ... } (current install state, once)
 
     Note over N,A: Commands and power actions in real time
     N->>A: { type: "command", command: "stop" } (process stdin)
     N->>A: { type: "power", action: "restart" }
 
-    Note over N,A: Installation = same socket: steps and output pushed live
+    Note over N,A: Installation = same socket, same stream
     A-->>N: { type: "install-status", status, step, percent, error } (banner)
-    A-->>N: { type: "install-log", lines[], replace } (logs, in-place \r progress)
+    A-->>N: { type: "event", code: "install.action.download", params: { step, total, … } } (steps)
+    A-->>N: { type: "log", lines[] } (command output)
 
     Note over N,A: Token refresh BEFORE expiry (re-auth without reconnecting)
     N->>P: POST createConsoleTokenFn (new JWT)
     N->>A: { type: "auth", token }
     A-->>N: { type: "auth-ok" }
 ```
-
-**Polling fallback** (WS unavailable: proxy without WS, old agent, refused origin — 3 attempts max):
-
-```mermaid
-sequenceDiagram
-    participant N as Browser
-    participant P as Panel (getServerLogsFn)
-    participant A as Agent
-
-    loop incremental polling
-        N->>P: GET getServerLogsFn(serverId, after=N)
-        P->>A: GET /servers/:serverId/logs?after=N (Bearer)
-        A-->>P: { lines[], next, status }
-        P-->>N: lines appended to the terminal (cursor next)
-    end
-```
-
-In degraded mode, an in-progress installation also switches to polling: the dedicated installation panel (`getInstallStatusFn` → `GET /servers/:serverId/install`) replaces the console.
 
 **Console security**
 - Short-lived JWT (300 s), refreshed via re-`auth` — never a token in the URL/query string.
@@ -228,7 +212,7 @@ sequenceDiagram
     P->>D: UPDATE server.status = installing
     P-->>N: redirect → console (installation panel)
     A->>R: background: STOP the process if running, then runner
-    Note over N,R: Tracking is identical to the installation flow<br/>(WS console: install-status + install-log, see §2)
+    Note over N,R: Tracking is identical to the installation flow<br/>(WS console: same stream + install-status, see §2)
     R->>A: store.save (recipe/variables updated) on success
 ```
 
@@ -351,12 +335,11 @@ sequenceDiagram
 |---|---|
 | `GET /health` | Public — healthcheck (version, uptime) || `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
 | `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
-| `GET /servers/:serverId/install` | Installation status + logs (end-of-install sync + polling fallback) |
+| `GET /servers/:serverId/install` | Installation status (end-of-install DB sync) |
 | `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
 | `POST /servers/:serverId/resources` | Resources sync (port/ip/ports/memory/cpu of the next start, refused if an install is in progress) — see §6 |
 | `GET /servers` | List of the agent's servers |
-| `GET /servers/:serverId` | Runtime info (status, recent logs) |
-| `GET /servers/:serverId/logs?after=N` | Incremental logs (console fallback) |
+| `GET /servers/:serverId` | Runtime info (status, recent log lines) |
 | `POST /servers/:serverId/action` | start / stop / restart / kill |
 | `POST /servers/:serverId/command` | stdin command |
 | `DELETE /servers/:serverId` | Deletion (refused if an install or a process is active) |
@@ -373,10 +356,10 @@ sequenceDiagram
 | Message (→ agent) | Message (← agent) |
 |---|---|
 | `{ type: "auth", token }` | `{ type: "auth-ok" }` |
-| `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime) |
+| `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime AND install output — one chronological stream) |
 | `{ type: "power", action }` | `{ type: "status", status }` |
 | | `{ type: "install-status", status, step, totalSteps, percent, message, error }` |
-| | `{ type: "install-log", lines[], reset, replace }` — `reset` = full replay (clear the console), `replace` = `\r` rewrite (progress), levels `step`/`info`/`error` |
+| | `{ type: "event", code, params, at }` — coded lines: power/watchdog AND install (start, steps, done/failed); `at` = original emission time (replay) |
 | | `{ type: "error", code }` |
 
 ### Server functions exposed to the browser (`src/server/functions/`)
@@ -384,12 +367,11 @@ sequenceDiagram
 | Function | Method | Role |
 |---|---|---|
 | `installServerFn` | POST | Create + start the installation |
-| `getInstallStatusFn` | GET | Installation status/logs (end-of-install sync + polling fallback) |
+| `getInstallStatusFn` | GET | Installation status (end-of-install DB sync) |
 | `retryInstallFn` | POST | Relaunch a failed installation |
 | `listServersFn` | POST | List (admin: everything, otherwise own + shared servers) |
 | `listServerOptionsFn` | GET | Picker options (full `{ id, name }` set, optional `nodeId`) |
-| `getServerFn` | GET | Detail + runtime sync + logs |
-| `getServerLogsFn` | GET | Incremental logs (console fallback) |
+| `getServerFn` | GET | Detail + runtime sync |
 | `createConsoleTokenFn` | POST | Console JWT + wsUrl |
 | `serverActionFn` | POST | start/stop/restart/kill |
 | `sendCommandFn` | POST | stdin command via panel |
