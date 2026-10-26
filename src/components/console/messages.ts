@@ -53,7 +53,7 @@ const CATALOG: Record<string, (params: Params) => string> = {
   'power.restart': () => 'Restarting the server…',
   'power.kill': () => 'Killing the server process…',
   'server.online': () => 'Server is online',
-  'server.stopped': () => 'Server stopped',
+  'power.stopped': () => 'Server stopped',
 
   // ─── Port watchdog (agent audits listening sockets vs the allocation) ────
   'watchdog.violation': (p) =>
@@ -76,7 +76,7 @@ const EMOJI: Record<string, string> = {
   'power.restart': '🚦',
   'power.kill': '🚦',
   'server.online': '🚀',
-  'server.stopped': '🛑',
+  'power.stopped': '🚦',
   'watchdog.violation': '🐕‍🦺',
   'watchdog.squat': '🐕‍🦺',
   'watchdog.killed': '🐕‍🦺',
