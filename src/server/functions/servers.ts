@@ -35,7 +35,6 @@ import { decryptSecret } from '../crypto';
 import { toConsolePermissions } from '~/lib/permissions';
 import {
   agentInstallServer,
-  agentGetServerLogs,
   agentGetInstallStatus,
   agentServerAction,
   agentSendCommand,
@@ -197,10 +196,9 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
           status === 'installing'
             ? 'Agent unreachable — status unknown'
             : status === 'failed'
-              ? 'Installation failed (logs unavailable)'
+              ? 'Installation failed (agent unreachable)'
               : 'Installed',
         error: null,
-        logs: [],
         startedAt: null,
         finishedAt: null,
       };
@@ -532,31 +530,6 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
     } catch (err) {
       if (err instanceof AgentError) {
         throw new HttpError(502, `Commande refusée par l'agent : ${err.message}`);
-      }
-      throw err;
-    }
-  });
-
-// ─── Incremental logs (live console) ─────────────────────────────────────────
-
-export const getServerLogsFn = createServerFn({ method: 'GET' })
-  .validator(serverLogsQuerySchema)
-  .middleware([withOrmContext])
-  .handler(async ({ data }) => {
-    const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.console': ['read'] },
-    );
-    const node = await requireNodeOf(server);
-
-    try {
-      const chunk = await agentGetServerLogs(node, server.id, data.after);
-      return { lines: chunk.lines, next: chunk.next, status: chunk.status };
-    } catch (err) {
-      if (err instanceof AgentError && err.statusCode === 404) {
-        return { lines: [], next: 0, status: server.status as ServerStatusDb };
       }
       throw err;
     }

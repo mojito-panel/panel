@@ -1,4 +1,4 @@
-import type { ConsoleMessageParams, InstallLogLine } from '~/contract';
+import type { ConsoleMessageParams } from '~/contract';
 
 /**
  * Console message catalog — the single source of user-facing text for the
@@ -53,6 +53,7 @@ const CATALOG: Record<string, (params: Params) => string> = {
   'power.restart': () => 'Restarting the server…',
   'power.kill': () => 'Killing the server process…',
   'server.online': () => 'Server is online',
+  'server.stopped': () => 'Server stopped',
 
   // ─── Port watchdog (agent audits listening sockets vs the allocation) ────
   'watchdog.violation': (p) =>
@@ -75,6 +76,7 @@ const EMOJI: Record<string, string> = {
   'power.restart': '🚦',
   'power.kill': '🚦',
   'server.online': '🚀',
+  'server.stopped': '🛑',
   'watchdog.violation': '🐕‍🦺',
   'watchdog.squat': '🐕‍🦺',
   'watchdog.killed': '🐕‍🦺',
@@ -93,21 +95,16 @@ export function consoleMessageEmoji(code: string): string {
 }
 
 /**
- * Plain-text rendering of an install log line (emoji included). Step lines
- * get the "Step X/Y — …" envelope; raw lines (command output) pass through.
+ * Plain-text rendering of a console EVENT (code + params) — runtime and
+ * install events share one catalog, so the console has one rendering path.
+ * Install STEP events (params.step set) get the "Step X/Y — …" envelope.
+ * Returns null for unknown codes (old agent) — the caller shows nothing.
  */
-export function renderInstallLine(line: InstallLogLine): string {
-  if (line.code) {
-    if (line.level === 'step') {
-      const emoji = consoleMessageEmoji(line.code) || '🔧';
-      const action = renderConsoleMessage(line.code, line.params) ?? line.code;
-      const step = line.params?.step ?? '?';
-      const total = line.params?.total ?? '?';
-      return `${emoji} Step ${step}/${total} — ${action}`;
-    }
-    const text = renderConsoleMessage(line.code, line.params) ?? line.message;
-    const emoji = consoleMessageEmoji(line.code);
-    return emoji ? `${emoji} ${text}` : text;
+export function renderConsoleEvent(code: string, params?: Params): string | null {
+  const text = renderConsoleMessage(code, params);
+  if (text === null) return null;
+  if (params?.step) {
+    return `Step ${params.step}/${params.total ?? '?'} — ${text}`;
   }
-  return line.message;
+  return text;
 }

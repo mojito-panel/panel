@@ -23,7 +23,7 @@ import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
-import { InstallLogs, InstallNotice } from '~/components/console/install-panel';
+import { InstallNotice } from '~/components/console/install-panel';
 import { ErrorState } from '~/components/error/error-state';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { serverCan } from '~/lib/permissions';
@@ -35,16 +35,10 @@ export const Route = createFileRoute('/servers/$serverId/console')({
 /** Caption of the console card (transport mode + install/runtime state). */
 function consoleCaption(mode: ConsoleMode, installActive: boolean, isRunning: boolean): string {
   if (!installActive && !isRunning) return 'Console — le serveur est arrêté';
-  if (installActive) {
-    return mode === 'polling'
-      ? 'Installation — rafraîchie toutes les 2 s (WS indisponible)'
-      : 'Installation en cours — console en direct';
-  }
+  if (installActive) return 'Installation en cours — console en direct';
   switch (mode) {
     case 'ws':
       return 'Console live (WebSocket direct agent)';
-    case 'polling':
-      return 'Console live (WS indisponible — rafraîchie toutes les 2 s)';
     default:
       return 'Connexion à la console…';
   }
@@ -61,8 +55,7 @@ function ServerConsolePage() {
   const retryInstall = useServerFn(retryInstallFn);
 
   const [command, setCommand] = useState('');
-  // Transport of the console: 'ws' = live agent WS (installs stream over it),
-  // 'polling' = degraded → fall back to the install status polling.
+  // Transport of the console: 'ws' = live agent WS, 'connecting' = not up yet.
   const [consoleMode, setConsoleMode] = useState<ConsoleMode>('connecting');
   // Install status pushed by the agent over the WS (banner + DB sync trigger)
   const [installStatus, setInstallStatus] = useState<ConsoleInstallStatus | null>(null);
@@ -96,17 +89,9 @@ function ServerConsolePage() {
     refetchInterval: 5000,
   });
 
-  // Install polling — FALLBACK ONLY (the direct WS streams installs live).
-  // Used when the WS cannot be established, and once at the end to sync the
-  // DB status (installing → stopped / install_failed).
-  const installQuery = useQuery({
-    queryKey: ['install-status', serverId],
-    queryFn: () => getInstallStatus({ data: { serverId, after: 0 } }),
-    enabled: consoleMode === 'polling',
-    refetchInterval: (q) => (q.state.data?.status === 'installing' ? 800 : false),
-  });
-
   // One-shot fetch on the terminal install states → syncs the DB status
+  // (installing → stopped / install_failed). The LIVE state comes over the
+  // WS; this only repairs the panel DB when the WS announces an outcome.
   const syncInstallDb = useMutation({
     mutationFn: () => getInstallStatus({ data: { serverId, after: 0 } }),
   });
@@ -188,23 +173,6 @@ function ServerConsolePage() {
     }
     setCommand('');
   };
-
-  // Degraded (polling) transport + install in progress → the console polls the
-  // server's runtime logs (empty during an install), so the step logs render
-  // here under the notice.
-  if (consoleMode === 'polling' && installQuery.data && installQuery.data.status !== 'installed') {
-    return (
-      <div className="space-y-4">
-        <InstallNotice
-          status={installQuery.data}
-          onRetry={canRetryInstall ? () => retry.mutate() : undefined}
-          retryPending={retry.isPending}
-          retryError={retry.isError ? retry.error.message : null}
-        />
-        <InstallLogs logs={installQuery.data.logs} />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

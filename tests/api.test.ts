@@ -462,50 +462,6 @@ describe('consoleServerMessageSchema', () => {
     ).toBe(true);
   });
 
-  it('validates an install-log (replay reset + rewrite replace)', () => {
-    const line = { timestamp: new Date().toISOString(), level: 'step', message: 'Step 1/2' };
-    expect(
-      consoleServerMessageSchema.safeParse({
-        type: 'install-log',
-        lines: [line],
-        reset: true,
-        replace: false,
-      }).success,
-    ).toBe(true);
-    expect(
-      consoleServerMessageSchema.safeParse({
-        type: 'install-log',
-        lines: [{ ...line, level: 'info', message: 'progress 42%' }],
-        replace: true,
-      }).success,
-    ).toBe(true);
-  });
-
-  it('validates an install-log with coded lines (code + params)', () => {
-    const coded = {
-      timestamp: new Date().toISOString(),
-      level: 'step',
-      message: '',
-      code: 'install.action.download',
-      params: { step: '1', total: '2', dest: 'server.jar' },
-    };
-    expect(
-      consoleServerMessageSchema.safeParse({
-        type: 'install-log',
-        lines: [coded],
-      }).success,
-    ).toBe(true);
-  });
-
-  it('rejects an install-log with an unknown level', () => {
-    expect(
-      consoleServerMessageSchema.safeParse({
-        type: 'install-log',
-        lines: [{ timestamp: new Date().toISOString(), level: 'verbose', message: 'x' }],
-      }).success,
-    ).toBe(false);
-  });
-
   it('validates a coded install-status (current step message)', () => {
     expect(
       consoleServerMessageSchema.safeParse({
@@ -568,11 +524,6 @@ describe('installStatusSchema', () => {
     percent: 33,
     message: 'Step 2/6 — Downloading server.jar',
     error: null,
-    logs: [
-      { timestamp: new Date().toISOString(), level: 'info', message: 'Installation started' },
-      { timestamp: new Date().toISOString(), level: 'step', message: 'Step 1/6 — Downloading server.jar' },
-      { timestamp: new Date().toISOString(), level: 'error', message: 'stderr: warning' },
-    ],
     startedAt: new Date().toISOString(),
     finishedAt: null,
   };
@@ -605,15 +556,6 @@ describe('installStatusSchema', () => {
 
   it('rejects an unknown status', () => {
     expect(installStatusSchema.safeParse({ ...valid, status: 'kaboom' }).success).toBe(false);
-  });
-
-  it('rejects an unknown log level', () => {
-    expect(
-      installStatusSchema.safeParse({
-        ...valid,
-        logs: [{ timestamp: new Date().toISOString(), level: 'verbose', message: 'x' }],
-      }).success,
-    ).toBe(false);
   });
 });
 

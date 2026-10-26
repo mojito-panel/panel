@@ -81,14 +81,6 @@ export interface AgentServerInfo {
   logs?: string[];
 }
 
-export interface AgentLogsChunk {
-  serverId: string;
-  lines: string[];
-  next: number;
-  status: 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
-  runtimeState?: string;
-}
-
 export interface AgentActionResponse {
   serverId: string;
   action: ServerAction;
@@ -171,14 +163,6 @@ export async function agentReinstallServer(
     method: 'POST',
     body: { recipe: body.recipe, runtimes: body.runtimes, variables: body.variables },
   });
-}
-
-export async function agentGetServerLogs(
-  node: INode,
-  serverId: string,
-  after: number,
-): Promise<AgentLogsChunk> {
-  return agentCall(node, `/servers/${serverId}/logs?after=${after}`);
 }
 
 /**

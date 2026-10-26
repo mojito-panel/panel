@@ -189,20 +189,6 @@ export const consoleMessageParamsSchema = z.record(z.string(), z.string());
 
 export type ConsoleMessageParams = z.infer<typeof consoleMessageParamsSchema>;
 
-export const installLogLineSchema = z.object({
-  timestamp: z.string().datetime(),
-  /** step = step start (one color in the panel), info = command output (gray), error = stderr/failure. */
-  level: z.enum(['info', 'step', 'error']),
-  /** Raw text (command output) — empty when `code` carries a structured message. */
-  message: z.string(),
-  /** Message code — rendered by the panel's catalog (e.g. 'install.action.download'). */
-  code: z.string().optional(),
-  /** Parameters of `code`. Step lines also carry `step`/`total`. */
-  params: consoleMessageParamsSchema.optional(),
-});
-
-export type InstallLogLine = z.infer<typeof installLogLineSchema>;
-
 export const installStatusSchema = z.object({
   serverId: idSchema,
   status: z.enum(['installing', 'installed', 'failed']),
@@ -216,7 +202,6 @@ export const installStatusSchema = z.object({
   /** Parameters of `code`. */
   params: consoleMessageParamsSchema.optional(),
   error: z.string().nullable(),
-  logs: z.array(installLogLineSchema),
   startedAt: z.string().datetime().nullable(),
   finishedAt: z.string().datetime().nullable(),
 });
@@ -363,15 +348,6 @@ export const consoleServerMessageSchema = z.discriminatedUnion('type', [
     code: z.string().min(1),
     params: consoleMessageParamsSchema.optional(),
     at: z.number().int().nonnegative().optional(),
-  }),
-  z.object({
-    /** Install log lines (leveled: step=yellow, info=gray, error=red). */
-    type: z.literal('install-log'),
-    lines: z.array(installLogLineSchema),
-    /** true = replay of the full trail → the client clears the console first. */
-    reset: z.boolean().default(false),
-    /** true = progress rewrite (bare \r): replaces the previous line. */
-    replace: z.boolean().default(false),
   }),
 ]);
 

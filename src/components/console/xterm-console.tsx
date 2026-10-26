@@ -6,13 +6,12 @@ import {
   type ConsoleClientMessage,
   type ConsoleInstallStatus,
   type ConsoleServerMessage,
-  type InstallLogLine,
 } from '~/contract';
-import { getServerLogsFn, createConsoleTokenFn } from '~/server/functions/servers';
-import { consoleMessageEmoji, renderConsoleMessage, renderInstallLine } from './messages';
+import { createConsoleTokenFn } from '~/server/functions/servers';
+import { consoleMessageEmoji, renderConsoleEvent } from './messages';
 import { Skeleton } from '~/components/ui/skeleton';
 
-export type ConsoleMode = 'connecting' | 'ws' | 'polling';
+export type ConsoleMode = 'connecting' | 'ws';
 
 interface XtermConsoleProps {
   serverId: string;
@@ -24,13 +23,13 @@ interface XtermConsoleProps {
   onConnection?: (send: ((message: ConsoleClientMessage) => void) | null) => void;
   /** Runtime status pushed by the agent over the WS. */
   onStatus?: (status: ConsoleServerMessage & { type: 'status' }) => void;
-  /** Transport mode change — 'polling' lets the caller fall back to polling. */
+  /** WS connection state change — the page shows a degraded notice when null. */
   onMode?: (mode: ConsoleMode) => void;
   /** Install status pushed by the agent over the WS (steps, %, error). */
   onInstallStatus?: (status: ConsoleInstallStatus) => void;
 }
 
-/** WS attempts before giving up and degrading to polling. */
+/** WS attempts before showing the terminal-level connection error. */
 const WS_MAX_ATTEMPTS = 3;
 /** Reconnect backoff cap (ms). */
 const WS_BACKOFF_CAP_MS = 5000;
@@ -43,8 +42,8 @@ const TOKEN_REFRESH_MARGIN_SECONDS = 60;
  * opens `ws://agent/servers/:id/ws` UNauthenticated and sends the JWT as the
  * first `auth` message (never in the URL). The token is refreshed in-place by
  * re-sending `auth` before it expires.
- * Fallback: if the WS cannot be established (proxy without WS, old agent,
- * origin refused), degrade to the polling of incremental logs.
+ * WS-only — no polling fallback: a failed connection retries with backoff
+ * and the terminal itself shows the error.
  * The terminal is created dynamically in a useEffect (SSR-safe).
  */
 export function XtermConsole({
@@ -55,10 +54,8 @@ export function XtermConsole({
   onInstallStatus,
 }: XtermConsoleProps) {
   const [ready, setReady] = useState(false);
-  const getLogs = useServerFn(getServerLogsFn);
   const createToken = useServerFn(createConsoleTokenFn);
   const containerRef = useRef<HTMLDivElement>(null);
-  const cursorRef = useRef(0);
   // Callbacks via refs: the WS connection must not be torn down on re-renders
   const onConnectionRef = useRef(onConnection);
   const onStatusRef = useRef(onStatus);
@@ -81,7 +78,6 @@ export function XtermConsole({
 
     let disposed = false;
     let term: import('@xterm/xterm').Terminal | null = null;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let resizeObserver: ResizeObserver | null = null;
@@ -89,65 +85,34 @@ export function XtermConsole({
     let socket: WebSocket | null = null;
     let currentToken: string | null = null;
 
-    // ─── Polling fallback (agent incremental logs) ────────────────────────
-    const startPolling = () => {
-      if (disposed || pollTimer) return;
-      switchMode('polling');
-      term?.reset(); // avoid duplicating lines already streamed via WS
-      cursorRef.current = 0;
-
-      const poll = async () => {
-        try {
-          const chunk = await getLogs({ data: { serverId, after: cursorRef.current } });
-          if (disposed || !term) return;
-          if (chunk.lines.length > 0) {
-            for (const line of chunk.lines) {
-              term.writeln(line);
-            }
-          }
-          cursorRef.current = chunk.next;
-        } catch {
-          // Agent unreachable — the next tick will retry
-        }
-      };
-
-      void poll();
-      pollTimer = setInterval(poll, 2000);
-    };
-
     // ─── Direct WS to the agent (console JWT issued by the panel) ────────
     const notifyConnection = (send: ((message: ConsoleClientMessage) => void) | null) => {
       onConnectionRef.current?.(send);
     };
 
-    // ─── Install stream rendering (same terminal, ANSI colors) ─────────
-    // Coded lines are rendered by the catalog (emoji included); raw lines
-    // (command output) pass through. One color for every step (yellow), the
-    // logs that follow in gray, errors in red, success in green. A blank
-    // line separates each step; progress rewrites (\r) erase the previous line.
-    let installRewriteActive = false;
-    let installStepsSeen = 0;
-    const lineColor = (line: InstallLogLine): string => {
-      if (line.level === 'error') return '\x1b[31m';
-      if (line.level === 'step') return '\x1b[33m';
-      if (line.code === 'install.done') return '\x1b[32m';
-      return '\x1b[90m';
+    /**
+     * Coded event rendering — ONE catalog for runtime AND install events:
+     * power actions in cyan, watchdog findings (they end in a kill) in red,
+     * install steps in yellow, install.done in green, install.failed in
+     * red; the rest (server online/stopped) in green.
+     */
+    const eventColor = (code: string, params?: Record<string, string>): string => {
+      if (code.startsWith('watchdog.') || code === 'install.failed') return '\x1b[31m';
+      if (code.startsWith('power.')) return '\x1b[36m';
+      if (code === 'install.done') return '\x1b[32m';
+      if (params?.step) return '\x1b[33m';
+      return '\x1b[32m';
     };
-    const writeInstallLine = (line: InstallLogLine, replace: boolean) => {
+    const writeEvent = (code: string, params: Record<string, string> | undefined, at?: number) => {
       if (!term) return;
-      const time = new Date(line.timestamp).toLocaleTimeString('fr-FR');
-      // Blank line at the end of each step (before the next step starts).
-      if (line.level === 'step' && !replace) {
-        if (installStepsSeen > 0) term.writeln('');
-        installStepsSeen++;
-      }
-      const text = `\x1b[90m[${time}]\x1b[0m ${lineColor(line)}${renderInstallLine(line)}\x1b[0m`;
-      if (replace && installRewriteActive) {
-        term.write(`\x1b[1A\x1b[2K\r${text}\r\n`);
-      } else {
-        term.writeln(text);
-      }
-      installRewriteActive = replace;
+      // One catalog for runtime AND install events (step envelope included).
+      const text = renderConsoleEvent(code, params);
+      if (text === null) return; // unknown code (old agent) — nothing to show
+      const time = (at ? new Date(at) : new Date()).toLocaleTimeString('fr-FR');
+      const emoji = consoleMessageEmoji(code) || (params?.step ? '🔧' : '');
+      term.writeln(
+        `\x1b[90m[${time}]\x1b[0m ${eventColor(code, params)}${emoji} ${text}\x1b[0m`,
+      );
     };
 
     const scheduleRefresh = () => {
@@ -182,8 +147,11 @@ export function XtermConsole({
         wsUrl = response.wsUrl;
         currentToken = response.token;
       } catch {
-        // Panel unreachable / ownership refused → degrade to polling
-        if (attempt >= WS_MAX_ATTEMPTS - 1) return startPolling();
+        // Panel unreachable / ownership refused — retry
+        if (attempt >= WS_MAX_ATTEMPTS - 1) {
+          if (term) term.writeln('\x1b[31m[error] Console connection failed — retrying later\x1b[0m');
+          return;
+        }
         reconnectTimer = setTimeout(() => void connect(attempt + 1), 1000 * (attempt + 1));
         return;
       }
@@ -220,36 +188,11 @@ export function XtermConsole({
           }
           return;
         }
-        if (message.type === 'install-log') {
-          if (message.reset) {
-            // Full trail replay (fresh connection or restarted install)
-            term?.reset();
-            installRewriteActive = false;
-            installStepsSeen = 0;
-          }
-          for (const line of message.lines) {
-            writeInstallLine(line, message.replace && !message.reset && message.lines.length === 1);
-          }
-          return;
-        }
         if (message.type === 'event') {
-          // Coded runtime event (power action, watchdog finding, server
-          // online) — rendered by the catalog with its emoji; power actions
-          // in cyan, the rest green — except the watchdog, whose finding
-          // ends with the server being killed: red.
-          const text = renderConsoleMessage(message.code, message.params);
-          if (text && term) {
-            // Replayed (buffered) events carry their original emission
-            // time — live ones fall back to the arrival time.
-            const time = (message.at ? new Date(message.at) : new Date()).toLocaleTimeString('fr-FR');
-            const color = message.code.startsWith('watchdog.')
-              ? '\x1b[31m'
-              : message.code.startsWith('power.')
-                ? '\x1b[36m'
-                : '\x1b[32m';
-            const emoji = consoleMessageEmoji(message.code);
-            term.writeln(`\x1b[90m[${time}]\x1b[0m ${color}${emoji} ${text}\x1b[0m`);
-          }
+          // Coded event — runtime (power action, server online/stopped,
+          // watchdog) AND install (start, steps, done/failed): one catalog,
+          // one rendering path, one chronological stream.
+          writeEvent(message.code, message.params, message.at);
           return;
         }
         if (message.type === 'install-status') {
@@ -290,8 +233,11 @@ export function XtermConsole({
         if (disposed) return;
 
         if (!authenticated && attempt >= WS_MAX_ATTEMPTS - 1) {
-          // WS not usable at all (origin refused, proxy without WS…) — degrade
-          startPolling();
+          // WS not usable at all (origin refused, proxy without WS…) — the
+          // terminal says so; the socket stays closed. No polling fallback.
+          if (term) {
+            term.writeln('\x1b[31m[error] Console connection failed — check the agent status\x1b[0m');
+          }
           return;
         }
         // Reconnect with a fresh token (short TTL), capped backoff
@@ -351,7 +297,6 @@ export function XtermConsole({
 
     return () => {
       disposed = true;
-      if (pollTimer) clearInterval(pollTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
       if (resizeObserver) resizeObserver.disconnect();
@@ -359,7 +304,7 @@ export function XtermConsole({
       socket?.close();
       term?.dispose();
     };
-  }, [serverId, getLogs, createToken]);
+  }, [serverId, createToken]);
 
   // The caption lives in the page (card header) — this component renders
   // only the terminal container. Until the terminal has booted (dynamic
