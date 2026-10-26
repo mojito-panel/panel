@@ -1,7 +1,8 @@
 import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { DataTable } from '~/components/data-table/data-table';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { activityList } from '~/lists/activity';
 import { listAllActivityFn } from '~/server/functions/activity';
@@ -32,24 +33,28 @@ function AdminActivityPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold">Activité</h1>
-        <p className="text-sm text-muted-foreground">
-          Journal d'audit du panel : toutes les actions enregistrées, tous serveurs
-          confondus.
-        </p>
-      </div>
-      <DataTable
-        list={activityList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        emptyMessage="Aucune activité enregistrée."
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Activité</CardTitle>
+          <CardDescription>
+            Journal d'audit du panel : toutes les actions enregistrées, tous serveurs
+            confondus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={activityList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            emptyMessage="Aucune activité enregistrée."
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

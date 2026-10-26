@@ -70,7 +70,7 @@ const serverItems: Array<{
   { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false, permission: { 'server.network': ['read'] } },
   { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, soon: false, permission: { 'server.variables': ['read'] } },
   { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, soon: false, permission: { 'server.settings': ['read'] } },
-  { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: true },
+  { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: false },
 ];
 
 /**
