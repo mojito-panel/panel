@@ -116,7 +116,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
                             label={stop.type === 'command' ? 'Commande d\u2019arrêt' : 'Signal'}
                             hint={
                               stop.type === 'signal'
-                                ? 'SIGINT : Ctrl+C gracieux — SIGTERM : arrêt du process — SIGKILL : kill immédiat de l\u2019arbre.'
+                                ? 'SIGINT : Ctrl+C gracieux (+ WM_CLOSE) — WM_CLOSE : fenêtre du serveur (UE5 sans console) — SIGTERM : arrêt du process — SIGKILL : kill immédiat de l\u2019arbre.'
                                 : undefined
                             }
                             errors={valueField.state.meta.errors}

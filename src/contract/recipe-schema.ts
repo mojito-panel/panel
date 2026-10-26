@@ -193,8 +193,10 @@ export type RunnerAction = z.infer<typeof runnerActionSchema>;
 /**
  * Signals a signal-type stop can deliver. POSIX names — the agent maps them
  * to the closest platform equivalent (CTRL_C_EVENT for SIGINT on Windows).
+ * WM_CLOSE is Windows-only: a WM_CLOSE posted to the server's top-level
+ * windows (GUI-subsystem servers with no console handler — Icarus).
  */
-export const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGKILL'] as const;
+export const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGKILL', 'WM_CLOSE'] as const;
 export type StopSignal = (typeof STOP_SIGNALS)[number];
 
 const stopCommandConfigSchema = z.object({

@@ -187,7 +187,7 @@ describe('recipeSchema', () => {
   });
 
   it('accepts a signal stop with a known signal', () => {
-    for (const value of ['SIGINT', 'SIGTERM', 'SIGKILL']) {
+    for (const value of ['SIGINT', 'SIGTERM', 'SIGKILL', 'WM_CLOSE']) {
       const result = recipeSchema.safeParse({
         ...validPaperRecipe,
         start: { ...validPaperRecipe.start, stop: { type: 'signal', value } },

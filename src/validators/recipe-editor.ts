@@ -255,7 +255,7 @@ export const stopValueSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['value'],
-        message: 'Signal invalide (SIGINT, SIGTERM ou SIGKILL)',
+        message: 'Signal invalide (SIGINT, SIGTERM, SIGKILL ou WM_CLOSE)',
       });
     }
   });
