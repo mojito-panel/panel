@@ -1,7 +1,7 @@
 # Mojito Panel
 
 Game server hosting panel, native Windows, no Docker.
-Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **external Agent** (deployed per machine) + **JSON recipes** (eggs).
+Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **shard** (external Go agent, one per machine) + **JSON recipes** (eggs).
 
 ## Stack
 
@@ -11,13 +11,13 @@ Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **external 
 | Auth | better-auth (email/password, admin/user roles) |
 | DB | Postgres 17 (docker compose) — MikroORM v7 manages all tables (including better-auth) |
 | Panel ↔ agent contract | Shared Zod schemas (`src/contract`) |
-| Agent | External daemon (Fastify + Bearer token), one per machine — not part of this repo |
+| Agent | **shard** — external Go daemon (Bearer token, one per machine): servers run as native Windows processes under Job Objects + dedicated local users — separate repository |
 | Tests | Vitest |
 
 ## Prerequisites
 
 - **Node.js 24** (pinned via `.nvmrc` and `mise.toml`)
-- **npm 11** (bundled with Node 24)
+- **npm 12** (pinned to 12.2.0 via `mise.toml`)
 - **Docker** (for Postgres in dev, optional)
 - **mise** (recommended to manage versions)
 
@@ -74,7 +74,7 @@ src/
 ├── validators/    # Zod schemas for forms
 └── ...
 tests/             # Vitest tests (panel + contract)
-recipes/           # Recipe JSONs (eggs)
+recipes/           # → separate repository (mojito-panel/recipes), imported via /admin/recipes
 scripts/           # Dev utility scripts
 docs/              # Architecture documentation
 ```
@@ -103,7 +103,7 @@ the agent validates that JWT and gates each action on the payload's permissions:
 
 ```
 Browser ──POST createConsoleToken──▶ Panel (requireUser + ownership)
-Browser ◀──{ token, wsUrl }───────── Panel (HS256 JWT, 5 min TTL, V1 permissions = all)
+Browser ◀──{ token, wsUrl }───────── Panel (HS256 JWT, 5 min TTL, permissions = the user's granted agent permissions via `toConsolePermissions`)
 Browser ──WS wsUrl (no token)────▶ Agent (origin check, then auth message = first WS message)
 Browser ◀──auth-ok + log stream─── Agent (permissions re-validated on EVERY message)
 ```
@@ -120,7 +120,7 @@ Browser ◀──auth-ok + log stream─── Agent (permissions re-validated o
 Wings parity: the AGENT hosts the SFTP server (default port 2022, opt-in via
 `sftp.enabled` in the generated shard.yml), the PANEL validates the
 credentials. shard's password callback calls `POST /api/sftp/auth` with the
-node Bearer token; the username is `{email}.{serverId}` and the password is
+node Bearer token; the username is `{username}.{serverId}` and the password is
 the user's panel account password. The panel answers with the user's
 `server.files.*` grants mapped to the agent's `file.*` permission list
 (`*` for owners/admins) — the agent gates every SFTP operation on them and

@@ -7,7 +7,7 @@ import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
 import { NodeHealthCard } from '~/components/health/node-health-card';
 
-/** /admin/health — santé des nodes (graphs temps réel via WS direct). */
+/** /admin/health — node health (real-time graphs via direct WS). */
 export const Route = createFileRoute('/admin/health')({ component: AdminHealthPage });
 
 function AdminHealthPage() {

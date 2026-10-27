@@ -1,7 +1,7 @@
 # AGENTS.md — Mojito Panel Project Conventions
 
 Game server hosting panel, native Windows, no Docker.
-Single project (TanStack Start). The agent (Fastify daemon, one per machine) is a SEPARATE, external codebase — not part of this repo; the panel talks to it over HTTP/WS.
+Single project (TanStack Start). The agent (**shard**, Go daemon, one per machine) is a SEPARATE, external codebase — not part of this repo; the panel talks to it over HTTP/WS.
 
 ## Commands
 
@@ -106,18 +106,18 @@ src/
 
 ## Contract conventions (src/contract)
 
-- **Recipe format v1** — feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first (no Docker, no mandatory bash script).
-- **Variables**: `env` UPPERCASE (`MINECRAFT_VERSION`) + `{{ENV_VAR}}` templating everywhere. Fields: `name`, `type` (string/number/boolean), `defaultValue`, `userViewable`, `userEditable`, `sort`, `required`, `min`/`max`, `pattern` (regex validation, equivalent of Pelican's Laravel `rules`), `options`.
-- **Reserved system variables** (provided by the agent, not declarable): `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`.
-- **Runner actions**: `download`, `extract`, `write`, `replace`, `configFile` (`properties`/`ini`/`yaml`/`json` parsers — equivalent of Pelican's `config.files`), `command`, `script` (open fallback: `bash`/`powershell`/`cmd` shell).
+- **Recipe format v4** — feature parity with Pelican eggs (PTDL_v2), but declarative and Windows-first (no Docker, no mandatory bash script).
+- **Variables**: `env` UPPERCASE (`MINECRAFT_VERSION`) + `{{ENV_VAR}}` templating everywhere. Fields: `name`, `type` (string/number/boolean), `default_value`, `user_viewable`, `user_editable`, `sort`, `required`, `min`/`max`, `pattern` (regex validation, equivalent of Pelican's Laravel `rules`), `options`.
+- **Reserved system variables** (provided by the agent, not declarable): `SERVER_UUID`, `SERVER_NAME`, `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`, `SERVER_INSTALL_DIR`, `RUNTIME_DIR` (runtime installs only).
+- **Runner actions**: `download`, `extract`, `write`, `replace`, `configFile` (`properties`/`ini`/`yaml`/`json` parsers — equivalent of Pelican's `config.files`), `command`, `script` (open fallback: `powershell`/`cmd` shell only — no bash).
 - **Exit codes**: a `command` action can declare `successCodes` (exit codes accepted as success, default `[0]`). E.g.: steamcmd exits with 7 after its self-update even though the job succeeded.
-- **Live progress**: a `command` action can declare `tail` (`file`, optional regex `filter`, `intervalMs`) — the agent follows the file and streams new lines during execution. Required for console tools (steamcmd) that only print their progress to a real terminal, never to a pipe.
+- **Live progress**: a `command` action can declare `tail` (`file`, optional regex `filter`, `intervalMs`) — the agent follows the file and streams new lines during execution. On Windows the agent renders steamcmd's bare-`\r` progress live from stdout; `tail` remains available for tools that only log their progress to a file.
 - **start**: `command`, `stop` (command/signal + `timeoutMs` → kill), `ready` (`pattern` + `strip` — equivalent of Pelican's `config.startup`), `workingDirectory`.
 - **Others**: `logs` (stdout/file mode + stripAnsi), `updateUrl`, `backup` (`include`: glob patterns of the archive contents — relative POSIX, no `..`/absolute/drive/negation, `validateBackupIncludePattern`; absent = whole install dir, `.bin/` always excluded).
 - Templating resolution: system variables > server variables > recipe defaults > fixed env.
 - Unknown variable in a template = install-time error (`findUnknownVariables`).
 - Zod schemas for: panel ↔ agent API requests/responses, WS messages.
-- `schemaVersion` mandatory in every recipe JSON (v1 only).
+- `schemaVersion` mandatory in every recipe JSON (v4 only).
 
 ## Tests
 
@@ -127,6 +127,4 @@ src/
 
 ## Deferred to V2 (do NOT do in V1)
 
-- Windows Job Objects (RAM/CPU throttling)
-- Local Windows users + NTFS ACLs (FS isolation)
 - Agent SEA packaging

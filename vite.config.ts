@@ -21,6 +21,6 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    strictPort: true, // échoue si le port est occupé (évite les surprises)
+    strictPort: true, // fails if the port is already in use (avoids surprises)
   },
 });

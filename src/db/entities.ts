@@ -208,7 +208,7 @@ export const PanelRole = defineEntity({
 export const Backup = defineEntity({
   name: 'backup',
   properties: {
-    /** UUID — also the archive file name on the agent. */
+    /** nanoid() — also the archive file name on the agent. */
     id: p.string().primary(),
     serverId: p.text().fieldName('server_id'),
     name: p.string().length(128),

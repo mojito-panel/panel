@@ -29,7 +29,7 @@ export type FilePathQueryDto = z.infer<typeof filePathQuerySchema>;
 export const saveFileSchema = z.object({
   serverId: z.string().min(1),
   path: z.string().min(1).max(1024),
-  content: z.string().max(2 * 1024 * 1024), // 1 Mo de texte UTF-8 (marge base64/multi-octets)
+  content: z.string().max(2 * 1024 * 1024), // 1 MB of UTF-8 text (base64/multi-byte headroom)
 });
 
 export type SaveFileDto = z.infer<typeof saveFileSchema>;
@@ -66,7 +66,7 @@ export const uploadFileSchema = z.object({
   serverId: z.string().min(1),
   directory: z.string().max(1024).default(''),
   filename: z.string().min(1).max(255),
-  contentBase64: z.string().min(1).max(16 * 1024 * 1024), // ~10 Mo décodés
+  contentBase64: z.string().min(1).max(16 * 1024 * 1024), // ~10 MB decoded
 });
 
 export type UploadFileDto = z.output<typeof uploadFileSchema>;

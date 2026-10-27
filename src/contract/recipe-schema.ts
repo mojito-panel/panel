@@ -27,16 +27,6 @@ export const RESERVED_ENV_NAMES = [
 
 export type ReservedEnvName = (typeof RESERVED_ENV_NAMES)[number];
 
-export const SYSTEM_VARIABLES_SCHEMA = {
-  SERVER_UUID: 'string — UUID du serveur',
-  SERVER_NAME: 'string — nom du serveur',
-  SERVER_MEMORY: 'number — RAM allouee en Mo',
-  SERVER_PORT: 'number — port principal alloue',
-  SERVER_IP: 'string — IP d ecoute (0.0.0.0 par defaut)',
-  SERVER_INSTALL_DIR: 'string — dossier d installation du serveur',
-  RUNTIME_DIR: 'string — repere du runtime en cours d installation (runtime uniquement)',
-} as const;
-
 // ─── Recipe variables (Pelican EggVariable equivalent) ─────────────────────
 
 export const variableTypeSchema = z.enum(['string', 'number', 'boolean']);
@@ -126,8 +116,9 @@ const configFileActionSchema = z.object({
 
 /**
  * Live progress from a log file the command writes while it runs.
- * Some console tools (steamcmd) stay SILENT on a pipe and only log their
- * progress to a file — the agent tails it and streams matching lines.
+ * On Windows the agent renders steamcmd's bare-`\r` progress live from
+ * stdout; `tail` remains available for tools that only log their progress
+ * to a file — the agent tails it and streams matching lines.
  */
 const commandTailSchema = z.object({
   /** Log file (relative to the install dir, templated). */
@@ -165,9 +156,9 @@ const commandActionSchema = z.object({
 });
 
 /**
- * Open fallback: runs a script via a shell INSIDE the game container
- * (powershell or cmd — the agent has no host-side shell of its own).
- * For everything the declarative actions do not cover.
+ * Open fallback: runs a script via a shell HOST-SIDE on the node —
+ * powershell or cmd, under the server's dedicated user, inside a one-shot
+ * Job Object. For everything the declarative actions do not cover.
  */
 const scriptActionSchema = z.object({
   action: z.literal('script'),
@@ -317,7 +308,7 @@ export type StartConfig = z.infer<typeof startConfigSchema>;
 // ─── Full recipe ────────────────────────────────────────────────────────────
 
 export const recipeSchema = z.object({
-  /** Recipe format version — v3 is the only supported one. */
+  /** Recipe format version — v4 is the only supported one. */
   schema_version: z.literal(4),
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
   /**

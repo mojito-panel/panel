@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 
-/** /admin — vue d'ensemble de l'administration (Pelican admin overview). */
+/** /admin — admin overview page (Pelican admin overview). */
 export const Route = createFileRoute('/admin/')({
   component: AdminOverviewPage,
 });

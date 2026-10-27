@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { NotImplemented } from '~/components/not-implemented';
 
-/** /servers/$serverId/schedules — tâches planifiées (cron). */
+/** /servers/$serverId/schedules — scheduled tasks (cron) placeholder page. */
 export const Route = createFileRoute('/servers/$serverId/schedules')({
   component: ServerSchedulesPage,
 });

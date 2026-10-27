@@ -179,7 +179,7 @@ const EGG_PARSERS: Record<string, 'properties' | 'ini' | 'yaml' | 'json'> = {
 // ─── Public import ───────────────────────────────────────────────────────────
 
 /**
- * Maps a PTDL_v2 egg JSON to a recipe v3. Throws a ZodError when the egg
+ * Maps a PTDL_v2 egg JSON to a recipe v4. Throws a ZodError when the egg
  * itself is unreadable; returns `{ recipe, warnings }` where `warnings`
  * lists everything that could NOT be mapped (user-facing, French).
  */

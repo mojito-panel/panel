@@ -30,8 +30,8 @@ import { serverCan } from '~/lib/permissions';
 import { createBackupFormSchema } from '~/validators/server';
 
 /**
- * /servers/$serverId/backups — sauvegardes (création, restauration,
- * téléchargement, suppression). The list definition (`~/lists/backups`) holds
+ * /servers/$serverId/backups — backups (create, restore, download,
+ * delete). The list definition (`~/lists/backups`) holds
  * the columns AND the query it accepts; filtering, sorting and pagination run
  * in the database, the state lives in the URL search params.
  */

@@ -42,7 +42,7 @@ export type UpdateMailSettingsDto = z.infer<typeof updateMailSettingsSchema>;
 
 // ─── Read payloads (getSettingsFn → settings components) ─────────────────────
 
-/** Général tab state, as returned by the settings server function. */
+/** General tab state, as returned by the settings server function. */
 export interface GeneralSettingsDto {
   appName: string;
   favicon: string;

@@ -14,7 +14,7 @@ import { Input } from '~/components/ui/input';
 import { SettingFieldShell, SettingSwitchRow } from './fields';
 
 /**
- * Général tab content — App Name, favicon, Gravatar avatars, public
+ * General tab content — App Name, favicon, Gravatar avatars, public
  * registration. Rendered inside the TabsCard of /admin/settings.
  * Mounted only once the settings are loaded: useForm freezes its
  * defaultValues at mount (same pattern as the node edit page).
