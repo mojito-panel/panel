@@ -67,7 +67,7 @@ export const listJobsFn = createServerFn({ method: 'POST' })
     const offset = ((data.page ?? 1) - 1) * pageSize;
 
     const rows = await orm.em.execute(
-      `SELECT id, name, state, retry_count, retry_limit, start_after, started_on, completed_on, output::text AS output
+      `SELECT id, name, state, retry_count, retry_limit, start_after, created_on, started_on, completed_on, output::text AS output
        FROM pgboss.job ${where} ORDER BY ${sortColumn} ${dir}, id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, offset],
     );
@@ -86,6 +86,7 @@ export const listJobsFn = createServerFn({ method: 'POST' })
         retryCount: job.retry_count,
         retryLimit: job.retry_limit,
         startAfter: job.start_after?.toISOString() ?? null,
+        createdOn: job.created_on?.toISOString() ?? null,
         startedOn: job.started_on?.toISOString() ?? null,
         completedOn: job.completed_on?.toISOString() ?? null,
         output: job.output ? JSON.stringify(job.output) : null,

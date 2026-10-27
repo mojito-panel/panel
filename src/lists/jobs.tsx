@@ -34,6 +34,7 @@ export interface AdminJobRow {
   startAfter: string;
   startedOn: string | null;
   completedOn: string | null;
+  createdOn: string;
   output: string | null;
   data: string | null;
 }
@@ -72,6 +73,15 @@ export const adminJobsList = defineList<AdminJobRow>({
         options: JOB_STATES.map((state) => ({ value: state, label: JOB_STATE_LABELS[state] })),
         multiple: true,
       },
+    },
+    createdOn: {
+      header: 'Créé le',
+      sort: field('created_on'),
+      cell: (job) => (
+        <span className="text-muted-foreground">
+          {job.createdOn ? new Date(job.createdOn).toLocaleString('fr-FR') : '—'}
+        </span>
+      ),
     },
     retryCount: {
       header: 'Tentatives',
