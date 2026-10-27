@@ -21,18 +21,11 @@ export default defineConfig({
   },
   build: {
     rolldownOptions: {
-      onwarn(warning, warn) {
-        // TEMP DEBUG
-        if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
-          console.log('DEBUG onwarn fired:', warning.id ?? warning.message.slice(0, 80));
-        }
+      checks: {
         // Third-party UI packages (@base-ui/react, TanStack, sonner, next-themes)
         // ship RSC-only "use client" directives that are meaningless in this
         // non-RSC TanStack Start app — dropping them is expected, so silence them.
-        if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes('"use client"')) {
-          return;
-        }
-        warn(warning);
+        moduleLevelDirective: false,
       },
     },
   },
