@@ -15,6 +15,8 @@ import {
   Backup,
   Setting,
   ActivityLog,
+  Schedule,
+  ScheduleTask,
 } from './entities';
 
 const databaseUrl =
@@ -55,6 +57,8 @@ export const ormConfig = {
     Backup,
     Setting,
     ActivityLog,
+    Schedule,
+    ScheduleTask,
   ],
   extensions: [Migrator],
   debug: process.env.NODE_ENV !== 'production',

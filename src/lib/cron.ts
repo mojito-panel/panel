@@ -5,7 +5,50 @@
  * month day-of-week`. `cronToHuman` renders the patterns the schedules
  * UI actually produces as a short French summary; anything else falls
  * back to the raw expression (never wrong, just less friendly).
+ *
+ * `isValidCron` / `nextCronRun` do the real evaluation through croner
+ * (zero dependency, client + server safe): the panel stores the next
+ * occurrence of a schedule at write/claim time and only compares dates
+ * afterwards — exactly Pelican's `Utilities::getScheduleNextRunDate`.
  */
+
+import { Cron } from 'croner';
+
+/** A cron expression is valid when it has exactly 5 fields AND croner parses it. */
+export function isValidCron(cron: string): boolean {
+  if (cron.trim().split(/\s+/).length !== 5) return false;
+  try {
+    // paused: no internal timer is armed — the instance only evaluates dates.
+    new Cron(cron, { paused: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** An IANA timezone name is valid when Intl accepts it. */
+export function isValidTimezone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('fr-FR', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Next occurrence of a cron expression STRICTLY AFTER `from` (default:
+ * now), evaluated in the given timezone (DST-aware) and returned as a
+ * plain UTC-comparable Date. Null when the pattern or the timezone is
+ * invalid — callers turn that into a 422.
+ */
+export function nextCronRun(cron: string, timezone: string, from: Date = new Date()): Date | null {
+  try {
+    return new Cron(cron, { paused: true, timezone }).nextRun(from) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const WEEKDAYS = [
   'dimanche',

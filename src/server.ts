@@ -1,12 +1,14 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry';
 import { initOrm } from '~/db';
 import { isSecretInsecure } from '~/server/crypto';
+import { startQueue } from '~/server/queue';
+import { startScheduleRunner } from '~/server/schedules';
 
 /**
  * Custom server entrypoint — TanStack Start detects src/server.ts automatically.
  * At startup: secret sanity check, then Postgres connection + MikroORM
  * migrations (ALL tables, including the better-auth ones — the better-auth
- * CLI never runs here).
+ * CLI never runs here), then the pg-boss queue and the schedule runner.
  */
 
 // Fail fast on an insecure BETTER_AUTH_SECRET: it is BOTH the better-auth
@@ -29,6 +31,12 @@ if (isSecretInsecure(process.env.BETTER_AUTH_SECRET)) {
 const orm = await initOrm();
 await orm.migrator.up();
 console.log('[bootstrap] MikroORM migrations OK');
+
+// pg-boss installs/updates its OWN schema (never managed by MikroORM) and
+// starts its maintenance passes; the schedule runner then registers the
+// task worker + its tick interval (boot sweep included).
+await startQueue();
+startScheduleRunner();
 
 export default createServerEntry({
   fetch(request) {

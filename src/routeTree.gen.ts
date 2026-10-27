@@ -39,12 +39,13 @@ import { Route as ServersServerIdBackupsRouteImport } from './routes/servers/$se
 import { Route as ServersServerIdConsoleRouteImport } from './routes/servers/$serverId/console'
 import { Route as ServersServerIdFilesRouteImport } from './routes/servers/$serverId/files'
 import { Route as ServersServerIdNetworkRouteImport } from './routes/servers/$serverId/network'
-import { Route as ServersServerIdSchedulesRouteImport } from './routes/servers/$serverId/schedules'
 import { Route as ServersServerIdSettingsRouteImport } from './routes/servers/$serverId/settings'
 import { Route as ServersServerIdUsersRouteImport } from './routes/servers/$serverId/users'
 import { Route as ServersServerIdVariablesRouteImport } from './routes/servers/$serverId/variables'
 import { Route as AdminRecipesRecipeIdIndexRouteImport } from './routes/admin/recipes/$recipeId/index'
 import { Route as AdminRecipesNewIndexRouteImport } from './routes/admin/recipes/new/index'
+import { Route as ServersServerIdSchedulesIndexRouteImport } from './routes/servers/$serverId/schedules/index'
+import { Route as ServersServerIdSchedulesScheduleIdIndexRouteImport } from './routes/servers/$serverId/schedules/$scheduleId/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -195,12 +196,6 @@ const ServersServerIdNetworkRoute = ServersServerIdNetworkRouteImport.update({
   path: '/network',
   getParentRoute: () => ServersServerIdRouteRoute,
 } as any)
-const ServersServerIdSchedulesRoute =
-  ServersServerIdSchedulesRouteImport.update({
-    id: '/schedules',
-    path: '/schedules',
-    getParentRoute: () => ServersServerIdRouteRoute,
-  } as any)
 const ServersServerIdSettingsRoute = ServersServerIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -228,6 +223,18 @@ const AdminRecipesNewIndexRoute = AdminRecipesNewIndexRouteImport.update({
   path: '/recipes/new/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const ServersServerIdSchedulesIndexRoute =
+  ServersServerIdSchedulesIndexRouteImport.update({
+    id: '/schedules/',
+    path: '/schedules/',
+    getParentRoute: () => ServersServerIdRouteRoute,
+  } as any)
+const ServersServerIdSchedulesScheduleIdIndexRoute =
+  ServersServerIdSchedulesScheduleIdIndexRouteImport.update({
+    id: '/schedules/$scheduleId/',
+    path: '/schedules/$scheduleId/',
+    getParentRoute: () => ServersServerIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -254,7 +261,6 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/console': typeof ServersServerIdConsoleRoute
   '/servers/$serverId/files': typeof ServersServerIdFilesRoute
   '/servers/$serverId/network': typeof ServersServerIdNetworkRoute
-  '/servers/$serverId/schedules': typeof ServersServerIdSchedulesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
@@ -265,6 +271,8 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
   '/admin/recipes/$recipeId/': typeof AdminRecipesRecipeIdIndexRoute
   '/admin/recipes/new/': typeof AdminRecipesNewIndexRoute
+  '/servers/$serverId/schedules/': typeof ServersServerIdSchedulesIndexRoute
+  '/servers/$serverId/schedules/$scheduleId/': typeof ServersServerIdSchedulesScheduleIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -289,7 +297,6 @@ export interface FileRoutesByTo {
   '/servers/$serverId/console': typeof ServersServerIdConsoleRoute
   '/servers/$serverId/files': typeof ServersServerIdFilesRoute
   '/servers/$serverId/network': typeof ServersServerIdNetworkRoute
-  '/servers/$serverId/schedules': typeof ServersServerIdSchedulesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
@@ -300,6 +307,8 @@ export interface FileRoutesByTo {
   '/servers/$serverId': typeof ServersServerIdIndexRoute
   '/admin/recipes/$recipeId': typeof AdminRecipesRecipeIdIndexRoute
   '/admin/recipes/new': typeof AdminRecipesNewIndexRoute
+  '/servers/$serverId/schedules': typeof ServersServerIdSchedulesIndexRoute
+  '/servers/$serverId/schedules/$scheduleId': typeof ServersServerIdSchedulesScheduleIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -328,7 +337,6 @@ export interface FileRoutesById {
   '/servers/$serverId/console': typeof ServersServerIdConsoleRoute
   '/servers/$serverId/files': typeof ServersServerIdFilesRoute
   '/servers/$serverId/network': typeof ServersServerIdNetworkRoute
-  '/servers/$serverId/schedules': typeof ServersServerIdSchedulesRoute
   '/servers/$serverId/settings': typeof ServersServerIdSettingsRoute
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
@@ -339,6 +347,8 @@ export interface FileRoutesById {
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
   '/admin/recipes/$recipeId/': typeof AdminRecipesRecipeIdIndexRoute
   '/admin/recipes/new/': typeof AdminRecipesNewIndexRoute
+  '/servers/$serverId/schedules/': typeof ServersServerIdSchedulesIndexRoute
+  '/servers/$serverId/schedules/$scheduleId/': typeof ServersServerIdSchedulesScheduleIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -367,7 +377,6 @@ export interface FileRouteTypes {
     | '/servers/$serverId/console'
     | '/servers/$serverId/files'
     | '/servers/$serverId/network'
-    | '/servers/$serverId/schedules'
     | '/servers/$serverId/settings'
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
@@ -378,6 +387,8 @@ export interface FileRouteTypes {
     | '/servers/$serverId/'
     | '/admin/recipes/$recipeId/'
     | '/admin/recipes/new/'
+    | '/servers/$serverId/schedules/'
+    | '/servers/$serverId/schedules/$scheduleId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -402,7 +413,6 @@ export interface FileRouteTypes {
     | '/servers/$serverId/console'
     | '/servers/$serverId/files'
     | '/servers/$serverId/network'
-    | '/servers/$serverId/schedules'
     | '/servers/$serverId/settings'
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
@@ -413,6 +423,8 @@ export interface FileRouteTypes {
     | '/servers/$serverId'
     | '/admin/recipes/$recipeId'
     | '/admin/recipes/new'
+    | '/servers/$serverId/schedules'
+    | '/servers/$serverId/schedules/$scheduleId'
   id:
     | '__root__'
     | '/'
@@ -440,7 +452,6 @@ export interface FileRouteTypes {
     | '/servers/$serverId/console'
     | '/servers/$serverId/files'
     | '/servers/$serverId/network'
-    | '/servers/$serverId/schedules'
     | '/servers/$serverId/settings'
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
@@ -451,6 +462,8 @@ export interface FileRouteTypes {
     | '/servers/$serverId/'
     | '/admin/recipes/$recipeId/'
     | '/admin/recipes/new/'
+    | '/servers/$serverId/schedules/'
+    | '/servers/$serverId/schedules/$scheduleId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -678,13 +691,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdNetworkRouteImport
       parentRoute: typeof ServersServerIdRouteRoute
     }
-    '/servers/$serverId/schedules': {
-      id: '/servers/$serverId/schedules'
-      path: '/schedules'
-      fullPath: '/servers/$serverId/schedules'
-      preLoaderRoute: typeof ServersServerIdSchedulesRouteImport
-      parentRoute: typeof ServersServerIdRouteRoute
-    }
     '/servers/$serverId/settings': {
       id: '/servers/$serverId/settings'
       path: '/settings'
@@ -719,6 +725,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/recipes/new/'
       preLoaderRoute: typeof AdminRecipesNewIndexRouteImport
       parentRoute: typeof AdminRouteRoute
+    }
+    '/servers/$serverId/schedules/': {
+      id: '/servers/$serverId/schedules/'
+      path: '/schedules'
+      fullPath: '/servers/$serverId/schedules/'
+      preLoaderRoute: typeof ServersServerIdSchedulesIndexRouteImport
+      parentRoute: typeof ServersServerIdRouteRoute
+    }
+    '/servers/$serverId/schedules/$scheduleId/': {
+      id: '/servers/$serverId/schedules/$scheduleId/'
+      path: '/schedules/$scheduleId'
+      fullPath: '/servers/$serverId/schedules/$scheduleId/'
+      preLoaderRoute: typeof ServersServerIdSchedulesScheduleIdIndexRouteImport
+      parentRoute: typeof ServersServerIdRouteRoute
     }
   }
 }
@@ -779,11 +799,12 @@ interface ServersServerIdRouteRouteChildren {
   ServersServerIdConsoleRoute: typeof ServersServerIdConsoleRoute
   ServersServerIdFilesRoute: typeof ServersServerIdFilesRoute
   ServersServerIdNetworkRoute: typeof ServersServerIdNetworkRoute
-  ServersServerIdSchedulesRoute: typeof ServersServerIdSchedulesRoute
   ServersServerIdSettingsRoute: typeof ServersServerIdSettingsRoute
   ServersServerIdUsersRoute: typeof ServersServerIdUsersRoute
   ServersServerIdVariablesRoute: typeof ServersServerIdVariablesRoute
   ServersServerIdIndexRoute: typeof ServersServerIdIndexRoute
+  ServersServerIdSchedulesIndexRoute: typeof ServersServerIdSchedulesIndexRoute
+  ServersServerIdSchedulesScheduleIdIndexRoute: typeof ServersServerIdSchedulesScheduleIdIndexRoute
 }
 
 const ServersServerIdRouteRouteChildren: ServersServerIdRouteRouteChildren = {
@@ -792,11 +813,13 @@ const ServersServerIdRouteRouteChildren: ServersServerIdRouteRouteChildren = {
   ServersServerIdConsoleRoute: ServersServerIdConsoleRoute,
   ServersServerIdFilesRoute: ServersServerIdFilesRoute,
   ServersServerIdNetworkRoute: ServersServerIdNetworkRoute,
-  ServersServerIdSchedulesRoute: ServersServerIdSchedulesRoute,
   ServersServerIdSettingsRoute: ServersServerIdSettingsRoute,
   ServersServerIdUsersRoute: ServersServerIdUsersRoute,
   ServersServerIdVariablesRoute: ServersServerIdVariablesRoute,
   ServersServerIdIndexRoute: ServersServerIdIndexRoute,
+  ServersServerIdSchedulesIndexRoute: ServersServerIdSchedulesIndexRoute,
+  ServersServerIdSchedulesScheduleIdIndexRoute:
+    ServersServerIdSchedulesScheduleIdIndexRoute,
 }
 
 const ServersServerIdRouteRouteWithChildren =

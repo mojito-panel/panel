@@ -6,17 +6,23 @@ import {
   serverRecipeSnapshot,
   type ServerRecipeSnapshot,
 } from './recipe-snapshot';
-import type { Recipe as RecipeContract, ServerStatus } from '~/contract';
+import type {
+  Recipe as RecipeContract,
+  ServerAction as ServerActionContract,
+  ServerStatus,
+} from '~/contract';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
-import type { IBackup, INode, IServer, IUser } from '~/db/types';
+import type { IBackup, INode, IServer, IUser, ServerStatusDb } from '~/db/types';
 import { orm } from './orm';
 import { HttpError } from './session';
+import { logActivity } from './activity';
 import {
   agentInstallServer,
   agentReinstallServer,
   agentDeleteServer,
   agentGetServer,
   agentUpdateResources,
+  agentServerAction,
   AgentError,
 } from './agent/client';
 
@@ -325,6 +331,57 @@ export async function reinstallServerFromPanel(
     server.status = 'installing';
     await em.flush();
     return { message: 'Réinstallation démarrée (installation complète)' };
+  }
+}
+
+/**
+ * Executes a power action against the agent and writes the status back —
+ * the shared core of BOTH the console power button (`serverActionFn`) and
+ * the schedule runner (a scheduled task fires the same action without a
+ * user behind it).
+ *
+ * Suspended servers only accept stop/kill (Pelican semantics) —
+ * start/restart are refused until an admin reactivates the server.
+ */
+export async function executeServerAction(
+  server: IServer,
+  action: ServerActionContract,
+  options: { actor?: { id: string; name: string | null; email: string } | null } = {},
+): Promise<{ status: string }> {
+  const em = orm.em;
+
+  if (server.suspended && (action === 'start' || action === 'restart')) {
+    throw new HttpError(409, 'Ce serveur est suspendu — réactivation requise avant tout démarrage');
+  }
+
+  // Limits sync: the agent builds the server's Job Object from its
+  // stored resources — push the panel's current record before the
+  // spawn (install pushes it once; start/restart are the only refresh
+  // moments, nothing can change at runtime).
+  if (action === 'start' || action === 'restart') {
+    await pushServerResources(server);
+  }
+
+  const node = await requireNodeOf(server);
+
+  try {
+    const result = await agentServerAction(node, server.id, action);
+    // Sync the status
+    server.status = result.status as ServerStatusDb;
+    await em.flush();
+    await logActivity({
+      event: 'server:power',
+      description: `Action « ${action} » sur « ${server.name} »`,
+      actor: options.actor ?? null,
+      server: { id: server.id, name: server.name },
+      properties: { action },
+    });
+    return { status: result.status };
+  } catch (err) {
+    if (err instanceof AgentError) {
+      throw new HttpError(502, `Action échouée côté agent : ${err.message}`);
+    }
+    throw err;
   }
 }
 

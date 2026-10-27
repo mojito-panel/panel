@@ -222,6 +222,76 @@ export const Backup = defineEntity({
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },
+  // Declared to match the DB (the hand-written backup migration created it):
+  // every backups query is scoped by server_id.
+  indexes: [{ properties: ['serverId'], name: 'backup_server_id_index' }],
+});
+
+/**
+ * Scheduled task chain of a server (Pelican "Schedules" tab): a cron
+ * expression evaluated in the schedule's own timezone, plus an ordered
+ * list of `schedule_task` rows (power actions / console commands with a
+ * delay after the previous task).
+ *
+ * Trigger semantics mirror Pelican: `next_run_at` is COMPUTED AND
+ * PERSISTED at write/claim time (never evaluated on the fly), the
+ * background runner (`src/server/schedules.ts`) only compares dates —
+ * `is_processing` claims a run so overlapping ticks cannot double-fire.
+ * Task execution itself is delegated to pg-boss (durable delayed jobs:
+ * a chain survives a panel restart).
+ */
+export const Schedule = defineEntity({
+  name: 'schedule',
+  properties: {
+    id: p.string().primary(),
+    serverId: p.string().fieldName('server_id'),
+    name: p.string().length(128),
+    /** 5-field unix cron expression — "30 4 * * *". */
+    cron: p.string().length(64),
+    /** IANA timezone the cron is evaluated in — "Europe/Paris". */
+    timezone: p.string().length(64).default('UTC'),
+    /** Inactive schedules never fire (an update also kills a running chain). */
+    isActive: p.boolean().fieldName('is_active').default(true),
+    /** Claim flag — true from the moment a run is queued until its last task. */
+    isProcessing: p.boolean().fieldName('is_processing').default(false),
+    /** Skip the run entirely when the server is not online (Pelican only_when_online). */
+    onlyWhenOnline: p.boolean().fieldName('only_when_online').default(false),
+    lastRunAt: p.datetime().fieldName('last_run_at').nullable(),
+    /** Computed at write/claim time — the runner scans `next_run_at <= now`. */
+    nextRunAt: p.datetime().fieldName('next_run_at').nullable(),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+  },
+  indexes: [
+    { properties: ['serverId'], name: 'schedule_server_id_index' },
+    { properties: ['nextRunAt'], name: 'schedule_next_run_at_index' },
+  ],
+});
+
+/**
+ * One step of a schedule's task chain (Pelican "task"): an action with a
+ * payload and a delay AFTER THE PREVIOUS TASK (0 = right away, 900 =
+ * 15 minutes later). Executed sequentially by sequence_id — each job
+ * queues the next one on the pg-boss queue with `startAfter`.
+ */
+export const ScheduleTask = defineEntity({
+  name: 'schedule_task',
+  properties: {
+    id: p.string().primary(),
+    scheduleId: p.string().fieldName('schedule_id'),
+    /** Execution order within the chain — 1..n, renumbered on every edit. */
+    sequenceId: p.integer().fieldName('sequence_id'),
+    /** 'power' (payload: start/stop/restart/kill) | 'command' (payload: the console line). */
+    action: p.string().length(16),
+    payload: p.text(),
+    /** Delay in seconds after the previous task (0-900). */
+    timeOffset: p.integer().fieldName('time_offset').default(0),
+    /** An agent failure does not stop the chain — the next task still runs. */
+    continueOnFailure: p.boolean().fieldName('continue_on_failure').default(false),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+  },
+  indexes: [{ properties: ['scheduleId'], name: 'schedule_task_schedule_id_index' }],
 });
 
 /**

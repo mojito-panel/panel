@@ -64,7 +64,7 @@ const serverItems: Array<{
 }> = [
   { title: 'Console', url: '/servers/$serverId/console', icon: Terminal, soon: false, permission: { 'server.console': ['read'] } },
   { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen, soon: false, permission: { 'server.files': ['read'] } },
-  { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, soon: true },
+  { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, soon: false, permission: { 'server.schedules': ['read'] } },
   { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, soon: false, permission: { 'server.users': ['read'] } },
   { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, soon: false, permission: { 'server.backups': ['read'] } },
   { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false, permission: { 'server.network': ['read'] } },

@@ -25,6 +25,7 @@ import {
   secondaryPorts,
   installServer,
   deleteServer,
+  executeServerAction,
   syncRuntimeStatus,
   loadServerContext,
   reinstallServerFromPanel,
@@ -345,47 +346,19 @@ export const serverActionFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
+    const { server } = await loadServerWithPermission(
       data.serverId,
       user,
       { 'server.power': [data.action] },
     );
 
-    // A suspended server can only be stopped/killed (Pelican semantics) —
-    // start/restart are refused until an admin reactivates it.
-    if (server.suspended && (data.action === 'start' || data.action === 'restart')) {
-      throw new HttpError(409, 'Ce serveur est suspendu — réactivation requise avant tout démarrage');
-    }
-
-    // Limits sync: the agent builds the server's Job Object from its
-    // stored resources — push the panel's current record before the
-    // spawn (install pushes it once; start/restart are the only refresh
-    // moments, nothing can change at runtime).
-    if (data.action === 'start' || data.action === 'restart') {
-      await pushServerResources(server);
-    }
-
-    const node = await requireNodeOf(server);
-
-    try {
-      const result = await agentServerAction(node, server.id, data.action);
-      // Sync the status
-      server.status = result.status as ServerStatusDb;
-      await em.flush();
-      await logActivity({
-        event: 'server:power',
-        description: `Action « ${data.action} » sur « ${server.name} »`,
-        actor: { id: user.id, name: user.name, email: user.email },
-        server: { id: server.id, name: server.name },
-        properties: { action: data.action },
-      });
-      return { id: server.id, action: data.action, status: result.status };
-    } catch (err) {
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Action échouée côté agent : ${err.message}`);
-      }
-      throw err;
-    }
+    // Suspended guard, limits sync, agent call, status writeback and the
+    // activity log all live in the shared service — the schedule runner
+    // fires the same actions without a user behind it.
+    const result = await executeServerAction(server, data.action, {
+      actor: { id: user.id, name: user.name, email: user.email },
+    });
+    return { id: server.id, action: data.action, status: result.status };
   });
 
 // ─── Reinstall (stop + re-run the SNAPSHOT recipe's install script) ───────────

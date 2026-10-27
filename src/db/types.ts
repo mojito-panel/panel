@@ -14,6 +14,8 @@ import type {
   Backup,
   Setting,
   ActivityLog,
+  Schedule,
+  ScheduleTask,
 } from './entities';
 
 // ─── Types inferred from MikroORM entities ───────────────────────────────────────
@@ -31,6 +33,8 @@ export interface IPanelRole extends InferEntity<typeof PanelRole> {}
 export interface IBackup extends InferEntity<typeof Backup> {}
 export interface ISetting extends InferEntity<typeof Setting> {}
 export interface IActivityLog extends InferEntity<typeof ActivityLog> {}
+export interface ISchedule extends InferEntity<typeof Schedule> {}
+export interface IScheduleTask extends InferEntity<typeof ScheduleTask> {}
 
 export type NodeStatus = INode['status'];
 
