@@ -16,6 +16,7 @@ import {
   Shield,
   ShieldCheck,
   Terminal,
+  ListTodo,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -95,6 +96,7 @@ const adminItems: Array<{
   { title: 'API', url: '/admin/api', icon: KeyRound, soon: true, permission: { 'panel.overview': ['read'] } },
   { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: false, permission: { 'panel.settings': ['read'] } },
   { title: 'Santé', url: '/admin/health', icon: HeartPulse, soon: false, permission: { 'panel.overview': ['read'] } },
+  { title: 'Jobs', url: '/admin/jobs', icon: ListTodo, soon: false, permission: { 'panel.overview': ['read'] } },
   { title: 'Activité', url: '/admin/activity', icon: History, soon: false, permission: { 'panel.servers': ['read'] } },
 ];
 

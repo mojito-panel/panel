@@ -19,6 +19,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminActivityRouteImport } from './routes/admin/activity'
 import { Route as AdminApiRouteImport } from './routes/admin/api'
 import { Route as AdminHealthRouteImport } from './routes/admin/health'
+import { Route as AdminJobsRouteImport } from './routes/admin/jobs'
 import { Route as AdminRolesRouteImport } from './routes/admin/roles'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
@@ -94,6 +95,11 @@ const AdminApiRoute = AdminApiRouteImport.update({
 const AdminHealthRoute = AdminHealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminJobsRoute = AdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminRolesRoute = AdminRolesRouteImport.update({
@@ -246,6 +252,7 @@ export interface FileRoutesByFullPath {
   '/admin/activity': typeof AdminActivityRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
@@ -282,6 +289,7 @@ export interface FileRoutesByTo {
   '/admin/activity': typeof AdminActivityRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
@@ -322,6 +330,7 @@ export interface FileRoutesById {
   '/admin/activity': typeof AdminActivityRoute
   '/admin/api': typeof AdminApiRoute
   '/admin/health': typeof AdminHealthRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/roles': typeof AdminRolesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
@@ -362,6 +371,7 @@ export interface FileRouteTypes {
     | '/admin/activity'
     | '/admin/api'
     | '/admin/health'
+    | '/admin/jobs'
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/users'
@@ -398,6 +408,7 @@ export interface FileRouteTypes {
     | '/admin/activity'
     | '/admin/api'
     | '/admin/health'
+    | '/admin/jobs'
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/users'
@@ -437,6 +448,7 @@ export interface FileRouteTypes {
     | '/admin/activity'
     | '/admin/api'
     | '/admin/health'
+    | '/admin/jobs'
     | '/admin/roles'
     | '/admin/settings'
     | '/admin/users'
@@ -549,6 +561,13 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/admin/health'
       preLoaderRoute: typeof AdminHealthRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/jobs': {
+      id: '/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AdminJobsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/roles': {
@@ -747,6 +766,7 @@ interface AdminRouteRouteChildren {
   AdminActivityRoute: typeof AdminActivityRoute
   AdminApiRoute: typeof AdminApiRoute
   AdminHealthRoute: typeof AdminHealthRoute
+  AdminJobsRoute: typeof AdminJobsRoute
   AdminRolesRoute: typeof AdminRolesRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
@@ -764,6 +784,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminActivityRoute: AdminActivityRoute,
   AdminApiRoute: AdminApiRoute,
   AdminHealthRoute: AdminHealthRoute,
+  AdminJobsRoute: AdminJobsRoute,
   AdminRolesRoute: AdminRolesRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,

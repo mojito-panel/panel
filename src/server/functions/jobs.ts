@@ -1,0 +1,95 @@
+import { createServerFn } from '@tanstack/react-start';
+import { requirePanelPermission } from '../session';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
+import { JOB_STATES, adminJobsList } from '~/lists/jobs';
+
+/**
+ * Jobs dashboard (admin) — read-only views over pg-boss's own `job` table
+ * (`pgboss` schema, partitioned by queue name). No pg-boss API dependency:
+ * the queries are plain SELECTs, the panel never writes there.
+ */
+
+/** The columns the jobs table may sort on — allowlist mapped to SQL. */
+const SORT_COLUMNS: Record<string, string> = {
+  id: 'id',
+  name: 'name',
+  state: 'state',
+  startAfter: 'start_after',
+  startedOn: 'started_on',
+  completedOn: 'completed_on',
+  createdOn: 'created_on',
+};
+
+/** Counts of jobs per state (created/retry/active/completed/cancelled/failed). */
+export const getJobStatsFn = createServerFn({ method: 'GET' })
+  .middleware([withOrmContext])
+  .handler(async () => {
+    await requirePanelPermission({ 'panel.overview': ['read'] });
+    const rows = await orm.em.execute(
+      `SELECT state::text AS state, count(*)::int AS count FROM pgboss.job GROUP BY state`,
+    );
+    const stats: Record<string, number> = {};
+    for (const row of rows) {
+      stats[row.state] = Number(row.count);
+    }
+    return stats;
+  });
+
+/** Jobs of the pg-boss `job` table — filter/sort/pagination run in the database. */
+export const listJobsFn = createServerFn({ method: 'POST' })
+  .validator(adminJobsList.querySchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.overview': ['read'] });
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (data.name) {
+      params.push(`%${data.name}%`);
+      conditions.push(`name ILIKE $${params.length}`);
+    }
+    if (typeof data.state === 'string' && data.state !== '') {
+      const states = data.state.split(',').filter((state) =>
+        (JOB_STATES as readonly string[]).includes(state),
+      );
+      if (states.length) {
+        params.push(states);
+        conditions.push(`state = ANY($${params.length}::text[])`);
+      }
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const sortColumn = SORT_COLUMNS[data.sort ?? 'createdOn'] ?? 'created_on';
+    const dir = data.dir === 'asc' ? 'ASC' : 'DESC';
+    const pageSize = data.size ?? 25;
+    const offset = ((data.page ?? 1) - 1) * pageSize;
+
+    const rows = await orm.em.execute(
+      `SELECT id, name, state, retry_count, retry_limit, start_after, started_on, completed_on, output::text AS output
+       FROM pgboss.job ${where} ORDER BY ${sortColumn} ${dir}, id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, offset],
+    );
+
+    const [{ count }] = await orm.em.execute(
+      `SELECT count(*)::int AS count FROM pgboss.job ${where}`,
+      params,
+    );
+
+    return {
+      rowCount: count,
+      rows: rows.map((job) => ({
+        id: job.id,
+        name: job.name,
+        state: job.state,
+        retryCount: job.retry_count,
+        retryLimit: job.retry_limit,
+        startAfter: job.start_after?.toISOString() ?? null,
+        startedOn: job.started_on?.toISOString() ?? null,
+        completedOn: job.completed_on?.toISOString() ?? null,
+        output: job.output ? JSON.stringify(job.output) : null,
+        data: job.data ? JSON.stringify(job.data) : null,
+      })),
+    };
+  });
