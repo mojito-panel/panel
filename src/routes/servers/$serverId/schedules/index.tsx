@@ -212,7 +212,7 @@ function ServerSchedulesPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Créer une planification</DialogTitle>
             <DialogDescription>

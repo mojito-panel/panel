@@ -122,122 +122,122 @@ function TaskRow({
   return (
     <form.Subscribe selector={(s) => s.values.tasks[index]?.action}>
       {(action) => (
-        <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[auto_1fr_120px_auto_auto] sm:items-end">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-medium">
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-start gap-3">
+            <span className="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               {index + 1}
             </span>
-          </div>
-
-          <div className="space-y-2">
-            <form.Field name={`${base}.payload`}>
-              {(field) =>
-                action === 'power' ? (
-                  <div className="space-y-2">
-                    <Label>Action d’alimentation</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(next) => next !== null && field.handleChange(next)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Action">
-                          {(current: string | null) =>
-                            POWER_OPTIONS.find((option) => option.value === current)?.label ??
-                            'Action'
-                          }
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {POWER_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldError errors={field.state.meta.errors} />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label>Commande console</Label>
-                    <Input
-                      placeholder="say Redémarrage dans 5 minutes…"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                    <FieldError errors={field.state.meta.errors} />
-                  </div>
-                )
-              }
-            </form.Field>
-
             <form.Field name={`${base}.action`}>
               {(field) => (
-                <Select
-                  value={field.state.value}
-                  onValueChange={(next) => next !== null && field.handleChange(next)}
-                >
-                  <SelectTrigger size="sm">
-                    <SelectValue placeholder="Type">
-                      {(current: string | null) =>
-                        current === 'command' ? 'Commande' : 'Alimentation'
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="power">Alimentation</SelectItem>
-                    <SelectItem value="command">Commande</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="w-36 shrink-0 space-y-2">
+                  <Label>Type</Label>
+                  <Select
+                    value={field.state.value}
+                    onValueChange={(next) => next !== null && field.handleChange(next)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Type">
+                        {(current: string | null) =>
+                          current === 'command' ? 'Commande' : 'Alimentation'
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="power">Alimentation</SelectItem>
+                      <SelectItem value="command">Commande</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </form.Field>
+            <div className="flex-1 space-y-2">
+              <form.Field name={`${base}.payload`}>
+                {(field) =>
+                  action === 'power' ? (
+                    <div className="space-y-2">
+                      <Label>Action d’alimentation</Label>
+                      <Select
+                        value={field.state.value}
+                        onValueChange={(next) => next !== null && field.handleChange(next)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Action">
+                            {(current: string | null) =>
+                              POWER_OPTIONS.find((option) => option.value === current)?.label ??
+                              'Action'
+                            }
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {POWER_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldError errors={field.state.meta.errors} />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Commande console</Label>
+                      <Input
+                        placeholder="say Redémarrage dans 5 minutes…"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                      />
+                      <FieldError errors={field.state.meta.errors} />
+                    </div>
+                  )
+                }
+              </form.Field>
+            </div>
+            {canRemove && (
+              <form.Field name="tasks">
+                {(field) => (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive"
+                    onClick={() => field.removeValue(index)}
+                  >
+                    <Trash2 />
+                  </Button>
+                )}
+              </form.Field>
+            )}
+          </div>
+          <div className="flex items-center gap-6 pl-9">
+            <form.Field name={`${base}.timeOffset`}>
+              {(field) => (
+                <div className="w-36 space-y-2">
+                  <Label>Délai (s)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={900}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(Number(e.target.value) || 0)}
+                    onBlur={field.handleBlur}
+                  />
+                  <FieldError errors={field.state.meta.errors} />
+                </div>
+              )}
+            </form.Field>
+            <form.Field name={`${base}.continueOnFailure`}>
+              {(field) => (
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Switch
+                    checked={field.state.value}
+                    onCheckedChange={(checked) => field.handleChange(checked === true)}
+                  />
+                  Continuer si échec
+                </label>
               )}
             </form.Field>
           </div>
-
-          <form.Field name={`${base}.timeOffset`}>
-            {(field) => (
-              <div className="space-y-2">
-                <Label>Délai (s)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={900}
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(Number(e.target.value) || 0)}
-                  onBlur={field.handleBlur}
-                />
-                <FieldError errors={field.state.meta.errors} />
-              </div>
-            )}
-          </form.Field>
-
-          <form.Field name={`${base}.continueOnFailure`}>
-            {(field) => (
-              <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm">
-                <Switch
-                  checked={field.state.value}
-                  onCheckedChange={(checked) => field.handleChange(checked === true)}
-                />
-                Continuer si échec
-              </label>
-            )}
-          </form.Field>
-
-          {canRemove && (
-            <form.Field name="tasks">
-              {(field) => (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive"
-                  onClick={() => field.removeValue(index)}
-                >
-                  <Trash2 />
-                </Button>
-              )}
-            </form.Field>
-          )}
         </div>
       )}
     </form.Subscribe>
