@@ -43,20 +43,22 @@ export const listJobsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.overview': ['read'] });
 
+    // `name` is the only user-input value — bound as a parameter. States are
+    // allowlisted against JOB_STATES, LIMIT/OFFSET are server-computed
+    // integers: all three are safe to inline.
     const conditions: string[] = [];
     const params: unknown[] = [];
 
     if (data.name) {
       params.push(`%${data.name}%`);
-      conditions.push(`name ILIKE $${params.length}`);
+      conditions.push(`name ILIKE ?`);
     }
     if (typeof data.state === 'string' && data.state !== '') {
-      const states = data.state.split(',').filter((state) =>
-        (JOB_STATES as readonly string[]).includes(state),
-      );
+      const states = (data.state as string)
+        .split(',')
+        .filter((state) => (JOB_STATES as readonly string[]).includes(state));
       if (states.length) {
-        params.push(states);
-        conditions.push(`state = ANY($${params.length}::text[])`);
+        conditions.push(`state IN (${states.map((state) => `'${state}'`).join(', ')})`);
       }
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -68,8 +70,8 @@ export const listJobsFn = createServerFn({ method: 'POST' })
 
     const rows = await orm.em.execute(
       `SELECT id, name, state, retry_count, retry_limit, start_after, created_on, started_on, completed_on, output::text AS output
-       FROM pgboss.job ${where} ORDER BY ${sortColumn} ${dir}, id LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, pageSize, offset],
+       FROM pgboss.job ${where} ORDER BY ${sortColumn} ${dir}, id LIMIT ${pageSize} OFFSET ${offset}`,
+      params,
     );
 
     const [{ count }] = await orm.em.execute(
