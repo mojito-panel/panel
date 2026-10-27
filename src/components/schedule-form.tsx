@@ -209,7 +209,7 @@ function TaskRow({
               </form.Field>
             )}
           </div>
-          <div className="flex items-center gap-6 pl-9">
+          <div className="flex items-end gap-6 pl-9">
             <form.Field name={`${base}.timeOffset`}>
               {(field) => (
                 <div className="w-36 space-y-2">
@@ -228,13 +228,15 @@ function TaskRow({
             </form.Field>
             <form.Field name={`${base}.continueOnFailure`}>
               {(field) => (
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Switch
-                    checked={field.state.value}
-                    onCheckedChange={(checked) => field.handleChange(checked === true)}
-                  />
-                  Continuer si échec
-                </label>
+                <div className="flex h-9 items-center">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Switch
+                      checked={field.state.value}
+                      onCheckedChange={(checked) => field.handleChange(checked === true)}
+                    />
+                    Continuer si échec
+                  </label>
+                </div>
               )}
             </form.Field>
           </div>
