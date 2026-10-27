@@ -3,7 +3,7 @@
  * Promotes an existing user to the admin role.
  *
  * Usage :
- *   node scripts/promote-admin.mjs contact@ste4d.net
+ *   node scripts/promote-admin.mjs <email>
  *
  * The account must exist (sign-up via /register).
  */
