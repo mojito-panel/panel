@@ -31,10 +31,10 @@ export interface AdminJobRow {
   state: JobState;
   retryCount: number;
   retryLimit: number;
-  startAfter: string;
+  startAfter: string | null;
   startedOn: string | null;
   completedOn: string | null;
-  createdOn: string;
+  createdOn: string | null;
   output: string | null;
   data: string | null;
 }
@@ -97,7 +97,7 @@ export const adminJobsList = defineList<AdminJobRow>({
       sort: field('start_after'),
       cell: (job) => (
         <span className="text-muted-foreground">
-          {new Date(job.startAfter).toLocaleString('fr-FR')}
+          {job.startAfter ? new Date(job.startAfter).toLocaleString('fr-FR') : '—'}
         </span>
       ),
     },

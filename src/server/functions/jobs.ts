@@ -36,6 +36,13 @@ export const getJobStatsFn = createServerFn({ method: 'GET' })
     return stats;
   });
 
+/** pg renvoie les timestamptz tantôt en Date, tantôt en string selon le chemin de requête. */
+function toIsoOrNull(value: unknown): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value as string);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 /** Jobs of the pg-boss `job` table — filter/sort/pagination run in the database. */
 export const listJobsFn = createServerFn({ method: 'POST' })
   .validator(adminJobsList.querySchema)
@@ -87,10 +94,10 @@ export const listJobsFn = createServerFn({ method: 'POST' })
         state: job.state,
         retryCount: job.retry_count,
         retryLimit: job.retry_limit,
-        startAfter: job.start_after?.toISOString() ?? null,
-        createdOn: job.created_on?.toISOString() ?? null,
-        startedOn: job.started_on?.toISOString() ?? null,
-        completedOn: job.completed_on?.toISOString() ?? null,
+        startAfter: toIsoOrNull(job.start_after),
+        createdOn: toIsoOrNull(job.created_on),
+        startedOn: toIsoOrNull(job.started_on),
+        completedOn: toIsoOrNull(job.completed_on),
         output: job.output ? JSON.stringify(job.output) : null,
         data: job.data ? JSON.stringify(job.data) : null,
       })),
