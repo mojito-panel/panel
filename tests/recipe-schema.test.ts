@@ -200,7 +200,7 @@ describe('recipeSchema', () => {
   });
 
   it('accepts a signal stop with a known signal', () => {
-    for (const value of ['SIGINT', 'SIGTERM', 'SIGKILL', 'WM_CLOSE']) {
+    for (const value of ['SIGINT', 'SIGTERM', 'SIGKILL']) {
       const result = recipeSchema.safeParse({
         ...validPaperRecipe,
         start: { ...validPaperRecipe.start, stop: { type: 'signal', value } },
@@ -217,6 +217,17 @@ describe('recipeSchema', () => {
     const result = recipeSchema.safeParse({
       ...validPaperRecipe,
       start: { ...validPaperRecipe.start, stop: { type: 'signal', value: 'SIGSTOP' } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a signal stop with the removed WM_CLOSE lever', () => {
+    // WM_CLOSE was removed from the contract and the agent: a dedicated-user
+    // (batch logon) tree owns no window station, so a GUI-subsystem server
+    // never creates a window and the lever had nothing to close.
+    const result = recipeSchema.safeParse({
+      ...validPaperRecipe,
+      start: { ...validPaperRecipe.start, stop: { type: 'signal', value: 'WM_CLOSE' } },
     });
     expect(result.success).toBe(false);
   });
