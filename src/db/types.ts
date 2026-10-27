@@ -1,4 +1,5 @@
 import type { InferEntity } from '@mikro-orm/core';
+import type { ServerStatus } from '~/contract';
 import type {
   User,
   Session,
@@ -32,7 +33,13 @@ export interface ISetting extends InferEntity<typeof Setting> {}
 export interface IActivityLog extends InferEntity<typeof ActivityLog> {}
 
 export type NodeStatus = INode['status'];
-export type ServerStatus = 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
+
+/**
+ * DB-level server status — the contract union (agent statuses, source of
+ * truth `serverStatusSchema` in `src/contract/api.ts`) extended with the
+ * panel-only `install_failed` state a failed install persists on the row.
+ */
+export type ServerStatusDb = ServerStatus | 'install_failed';
 
 // ─── better-auth session (serializable DTOs) ──────────────────────────────────
 

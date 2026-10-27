@@ -18,9 +18,22 @@ import { mergeVariableValues } from '../src/lib/recipe-merge';
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
+/**
+ * `connect: false` is runtime-valid but absent from the MikroORM v7 option
+ * types (metadata-only init). Spread from a VARIABLE — spread properties
+ * skip the object literal's excess-property check, so the cast stays on
+ * that single option instead of the whole config.
+ */
+const metadataOnly = { connect: false } as const;
+
 async function databaseReachable(): Promise<boolean> {
   try {
-    const probe = await MikroORM.init({ ...ormConfig, clientUrl: DATABASE_URL, connect: false });
+    const options = {
+      ...ormConfig,
+      clientUrl: DATABASE_URL,
+      ...metadataOnly,
+    };
+    const probe = await MikroORM.init(options);
     await probe.connect();
     await probe.close(true);
     return true;
@@ -137,7 +150,7 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
     const appRow = await em2.findOneOrFail(Recipe, { slug: appSlug });
     const runtimeRow = await em2.findOneOrFail(Recipe, { slug: runtimeSlug });
     expect((appRow.json as { requires?: string[] }).requires, 'app recipe row lost its requires').toEqual([runtimeSlug]);
-    expect((runtimeRow.json as { path?: string }).export, 'runtime row lost its export').toMatchObject({ path: 'bin' });
-    expect((runtimeRow.json as { env?: string }).variables).toHaveLength(1);
+    expect((runtimeRow.json as { export?: { path?: string } }).export, 'runtime row lost its export').toMatchObject({ path: 'bin' });
+    expect((runtimeRow.json as { variables?: unknown[] }).variables).toHaveLength(1);
   });
 });

@@ -143,7 +143,7 @@ describe('importEgg (PTDL_v2)', () => {
   });
 
   it('imports an egg without any docker image (warning, not an error)', () => {
-    const { docker_images: _i, docker_image: _d, ...noImage } = paperEgg;
+    const { docker_images: _i, ...noImage } = paperEgg;
     const { recipe, warnings } = importEgg(noImage);
     expect(recipe.id).toBeTruthy();
     expect(warnings.some((w) => w.toLowerCase().includes('docker'))).toBe(true);

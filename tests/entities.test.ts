@@ -51,7 +51,7 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     const tables = await orm.em.getConnection().execute(
       "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
     );
-    const tableNames = tables.map((t: { name: string }) => t.name);
+    const tableNames = tables.map((t) => (t as { name: string }).name);
     expect(tableNames).toContain('user');
     expect(tableNames).toContain('session');
     expect(tableNames).toContain('account');

@@ -34,7 +34,11 @@ import {
 describe('panel roles', () => {
   it('grants the admin role every statement of the catalog', () => {
     for (const [resource, actions] of Object.entries(statement)) {
-      expect(adminRole.statements[resource]).toEqual([...actions]);
+      // Indexing by a plain string key — ExactRoleStatements has no index
+      // signature (type-level only, the values are the same at runtime).
+      expect((adminRole.statements as Record<string, readonly string[]>)[resource]).toEqual([
+        ...actions,
+      ]);
     }
   });
 

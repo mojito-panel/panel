@@ -14,6 +14,14 @@ import { applyListQuery, listQueryBuilder } from '~/server/list/query';
  * driver used by the entity tests.
  */
 
+/**
+ * `connect: false` is runtime-valid but absent from the MikroORM v7 option
+ * types (metadata-only init). Spread from a VARIABLE — spread properties
+ * skip the object literal's excess-property check, so the cast stays on
+ * that single option instead of the whole config.
+ */
+const metadataOnly = { connect: false } as const;
+
 const STATUSES = [
   { value: 'stopped', label: 'Arrêté' },
   { value: 'running', label: 'En marche' },
@@ -308,7 +316,7 @@ describe('mikroORM mapping', () => {
       dbName: 'mojito',
       clientUrl: 'postgres://unused:unused@127.0.0.1:1/unused',
       entities: [Server],
-      connect: false,
+      ...metadataOnly,
     });
   });
 

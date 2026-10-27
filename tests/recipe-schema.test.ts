@@ -1,13 +1,26 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import {
   recipeSchema,
+  recipeVariableSchema,
   parseRecipe,
   safeParseRecipe,
   extractTemplateVars,
   findUnknownVariables,
   validateVariableValue,
   validateBackupIncludePattern,
+  type RecipeVariable,
 } from '../src/contract/recipe-schema';
+
+/**
+ * Fixture variables omit the fields the schema defaults at parse time
+ * (`user_viewable`, `user_editable`, `sort`, `required`) — the helper's
+ * parameter is the PARSED output type, so partial fixtures cross it with a
+ * type-level cast only (the helper never reads the defaulted fields).
+ */
+type VariableFixture = z.input<typeof recipeVariableSchema>;
+const asVariable = (variable: VariableFixture): RecipeVariable =>
+  variable as RecipeVariable;
 
 /**
  * Paper-style egg — covers all recipe v3 features:
@@ -291,16 +304,16 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
   const base = { env: 'RAM_MB', name: 'RAM', type: 'number' as const, default_value: 1024 };
 
   it('validates a number within bounds', () => {
-    expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 2048)).toBeNull();
+    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 2048)).toBeNull();
   });
 
   it('rejects a number out of bounds', () => {
-    expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 100)).toContain('512');
-    expect(validateVariableValue({ ...base, min: 512, max: 4096 }, 9999)).toContain('4096');
+    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 100)).toContain('512');
+    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 9999)).toContain('4096');
   });
 
   it('rejects a non-numeric value for a number type', () => {
-    expect(validateVariableValue(base, 'abc')).toContain('nombre');
+    expect(validateVariableValue(asVariable(base), 'abc')).toContain('nombre');
   });
 
   it('validates a regex pattern', () => {
@@ -311,8 +324,8 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
       default_value: 'server.jar',
       pattern: /^([\w\d._-]+)(\.jar)$/.source,
     };
-    expect(validateVariableValue(varDef, 'server.jar')).toBeNull();
-    expect(validateVariableValue(varDef, 'server.txt')).toContain('format');
+    expect(validateVariableValue(asVariable(varDef), 'server.jar')).toBeNull();
+    expect(validateVariableValue(asVariable(varDef), 'server.txt')).toContain('format');
   });
 
   it('validates an options list', () => {
@@ -323,8 +336,8 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
       default_value: 'normal',
       options: ['easy', 'normal', 'hard'],
     };
-    expect(validateVariableValue(varDef, 'normal')).toBeNull();
-    expect(validateVariableValue(varDef, 'impossible')).toContain('easy');
+    expect(validateVariableValue(asVariable(varDef), 'normal')).toBeNull();
+    expect(validateVariableValue(asVariable(varDef), 'impossible')).toContain('easy');
   });
 });
 

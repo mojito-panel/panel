@@ -18,9 +18,22 @@ import { serverRecipeSnapshot } from '../src/server/recipe-snapshot';
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
+/**
+ * `connect: false` is runtime-valid but absent from the MikroORM v7 option
+ * types (metadata-only init). Spread from a VARIABLE — spread properties
+ * skip the object literal's excess-property check, so the cast stays on
+ * that single option instead of the whole config.
+ */
+const metadataOnly = { connect: false } as const;
+
 async function databaseReachable(): Promise<boolean> {
   try {
-    const orm = await MikroORM.init({ ...ormConfig, clientUrl: DATABASE_URL, connect: false });
+    const options = {
+      ...ormConfig,
+      clientUrl: DATABASE_URL,
+      ...metadataOnly,
+    };
+    const orm = await MikroORM.init(options);
     await orm.connect();
     await orm.close(true);
     return true;

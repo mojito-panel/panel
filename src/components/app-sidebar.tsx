@@ -66,11 +66,11 @@ const serverItems: Array<{
   { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen, soon: false, permission: { 'server.files': ['read'] } },
   { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, soon: true },
   { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, soon: false, permission: { 'server.users': ['read'] } },
-  { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, soon: false },
+  { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, soon: false, permission: { 'server.backups': ['read'] } },
   { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false, permission: { 'server.network': ['read'] } },
   { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, soon: false, permission: { 'server.variables': ['read'] } },
   { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, soon: false, permission: { 'server.settings': ['read'] } },
-  { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: false },
+  { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: false, permission: { 'server.activity': ['read'] } },
 ];
 
 /**

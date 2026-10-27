@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseRecipe, safeParseRecipe } from '~/contract';
+import { parseRecipe, safeParseRecipe, type Recipe } from '~/contract';
 import {
   emptyRecipeEditorValue,
   newActionValue,
@@ -10,6 +10,16 @@ import {
   recipeEditorSchema,
   type RecipeEditorValue,
 } from '~/validators/recipe-editor';
+
+/**
+ * Narrows `recipeEditorValueToRecipe`'s contract union to the app recipe —
+ * every fixture of this file has `recipeType: 'app'`, and the assertions
+ * below read the app-only fields (env/start/backup). Type-level only.
+ */
+function appRecipeOf(value: RecipeEditorValue): { recipe?: Recipe; issues?: string[] } {
+  const result = recipeEditorValueToRecipe(value);
+  return { ...result, recipe: result.recipe as Recipe | undefined };
+}
 
 /** A complete, valid editor value (Java Minecraft-like recipe). */
 function fullEditorValue(): RecipeEditorValue {
@@ -130,7 +140,7 @@ describe('recipe editor schema', () => {
 
 describe('recipeEditorValueToRecipe', () => {
   it('converts a valid editor value into a contract-valid recipe', () => {
-    const { recipe, issues } = recipeEditorValueToRecipe(fullEditorValue());
+    const { recipe, issues } = appRecipeOf(fullEditorValue());
     expect(issues).toBeUndefined();
     expect(recipe).toBeDefined();
     // The produced recipe passes the CONTRACT schema (server-side check)
@@ -160,7 +170,7 @@ describe('recipeEditorValueToRecipe', () => {
     value.updateUrl = '';
     value.start.stop = null;
     value.start.ready = null;
-    const { recipe } = recipeEditorValueToRecipe(value);
+    const { recipe } = appRecipeOf(value);
     expect(recipe?.description).toBeUndefined();
     expect(recipe?.update_url).toBeUndefined();
     expect(recipe?.start.stop).toBeUndefined();
@@ -176,14 +186,14 @@ describe('recipeEditorValueToRecipe', () => {
   });
 
   it('carries the backup include patterns to the recipe JSON', () => {
-    const { recipe } = recipeEditorValueToRecipe(fullEditorValue());
+    const { recipe } = appRecipeOf(fullEditorValue());
     expect(recipe?.backup?.include).toEqual(['world', 'plugins/*', 'server.properties']);
   });
 
   it('drops the backup section when the include list is empty', () => {
     const value = fullEditorValue();
     value.backup = { include: [] };
-    const { recipe } = recipeEditorValueToRecipe(value);
+    const { recipe } = appRecipeOf(value);
     expect(recipe?.backup).toBeUndefined();
   });
 

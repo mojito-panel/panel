@@ -36,10 +36,23 @@ const ENTITIES = [
   Allocation, ServerUser, PanelRole, Backup, Setting,
 ];
 
-/** One short attempt against the dev database — never throws. */
+/**
+ * `connect: false` is runtime-valid but absent from the MikroORM v7 option
+ * types (metadata-only init). Spread from a VARIABLE — spread properties
+ * skip the object literal's excess-property check, so the cast stays on
+ * that single option instead of the whole config.
+ */
+const metadataOnly = { connect: false } as const;
+
 async function databaseReachable(): Promise<boolean> {
   try {
-    const orm = await MikroORM.init({ dbName: 'mojito', clientUrl: DATABASE_URL, entities: ENTITIES, debug: false, connect: false });
+    const orm = await MikroORM.init({
+      dbName: 'mojito',
+      clientUrl: DATABASE_URL,
+      entities: ENTITIES,
+      debug: false,
+      ...metadataOnly,
+    });
     await orm.connect();
     await orm.close(true);
     return true;

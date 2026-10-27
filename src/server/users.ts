@@ -3,7 +3,7 @@ import { Session, Account, Server, ServerUser, User, PanelRole } from '~/db/enti
 import { orm } from './orm';
 import { HttpError } from './session';
 import { resolvePanelPermissions } from './session';
-import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, type PanelRoleName } from '~/lib/permissions';
+import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, isSubset, type PanelRoleName } from '~/lib/permissions';
 import type { IUser } from '~/db/types';
 
 /**
@@ -135,10 +135,6 @@ export async function assertWithinActorCeiling(
       'Tu ne peux accorder que les permissions que tu possèdes toi-même',
     );
   }
-}
-
-function isSubset(grant: string[], of: string[]): boolean {
-  return grant.every((statement) => of.includes(statement));
 }
 
 /** Loads a custom role (404 when unknown). */

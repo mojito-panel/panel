@@ -39,9 +39,8 @@ describe('signConsoleToken', () => {
   it('emits a payload conforming to the contract, with all permissions in V1', () => {
     const now = Math.floor(Date.now() / 1000);
     const { token, expiresAt } = signConsoleToken(
-      { userId: USER_ID, serverId: SERVER_ID },
+      { userId: USER_ID, serverId: SERVER_ID, now: now * 1000 },
       SECRET,
-      { now: now * 1000 },
     );
     const payload = decodePayload(token);
     expect(() => consoleTokenPayloadSchema.parse(payload)).not.toThrow();
@@ -66,7 +65,9 @@ describe('signConsoleToken', () => {
   it('rejects an unknown permission early', () => {
     expect(() =>
       signConsoleToken(
-        { userId: USER_ID, serverId: SERVER_ID, permissions: ['admin.*'] },
+        // Not a Permission — the cast is type-level only, the runtime
+        // rejection by the payload schema is what the test asserts.
+        { userId: USER_ID, serverId: SERVER_ID, permissions: ['admin.*'] as never },
         SECRET,
       ),
     ).toThrow();

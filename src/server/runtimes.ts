@@ -4,6 +4,9 @@
  * graph — transitively, cycle-checked — and pushes the resolved runtime
  * recipes with every install/reinstall request; the agent carries no
  * tool-specific code, it only knows how to install recipes.
+ *
+ * SERVICE module (`src/server/runtimes.ts`): pure business logic consumed
+ * by the services and the thin server functions of `src/server/functions/`.
  */
 import type { EntityManager } from '@mikro-orm/core';
 import { Recipe } from '~/db/entities';

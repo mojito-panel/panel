@@ -5,8 +5,9 @@ import { userServersList } from '~/lists/user-servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
-import { resolveRuntimeRecipes } from './runtimes';
+import { resolveRuntimeRecipes } from '../runtimes';
 import type { Recipe as RecipeContract } from '~/contract';
+import type { ServerStatusDb } from '~/db/types';
 import {
   requireUser,
   HttpError,
@@ -53,15 +54,6 @@ import {
   serverAllocationActionSchema,
 } from '~/validators/server';
 import { isHttpsScheme } from '~/validators/node';
-
-type ServerStatusDb =
-  | 'installing'
-  | 'install_failed'
-  | 'stopped'
-  | 'starting'
-  | 'running'
-  | 'stopping'
-  | 'crashed';
 
 /**
  * Visibility scope of the viewer on the server table: an admin sees every

@@ -5,7 +5,7 @@ import { Recipe } from '~/db/entities';
 import type { IServer } from '~/db/types';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import { mergeVariableDefinitions } from '~/lib/recipe-merge';
-import { resolveRuntimeRecipes } from './functions/runtimes';
+import { resolveRuntimeRecipes } from './runtimes';
 
 /**
  * Per-server recipe snapshot (self-contained server side).
