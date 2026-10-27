@@ -13,6 +13,22 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 
 const PREFIX = 'enc:v1:';
 
+/** Shipped placeholder secrets — never valid anywhere (.env.default and its obvious variants). */
+const PLACEHOLDER_SECRETS = new Set(['change-me-generate-a-32-bytes-secret']);
+
+/**
+ * True when BETTER_AUTH_SECRET is missing, too short, or a known shipped
+ * placeholder — i.e. the at-rest encryption key AND the better-auth
+ * signing secret would be publicly predictable. Checked at boot
+ * (src/server.ts): a production panel refuses to start, a dev setup
+ * gets a loud warning.
+ */
+export function isSecretInsecure(secret: string | undefined): boolean {
+  if (!secret || secret.length < 32) return true;
+  if (PLACEHOLDER_SECRETS.has(secret)) return true;
+  return /^change[-_ ]?me/i.test(secret);
+}
+
 function encryptionKey(): Buffer {
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret || secret.length < 32) {

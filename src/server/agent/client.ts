@@ -7,6 +7,13 @@ import type {
   FileObject,
   BackupOperationStatus,
 } from '~/contract';
+import {
+  backupOperationStatusSchema,
+  healthResponseSchema,
+  installStatusSchema,
+  nodeStatsSchema,
+} from '~/contract';
+import { z } from 'zod';
 import { decryptSecret } from '../crypto';
 import { isHttpsScheme } from '~/validators/node';
 
@@ -20,11 +27,18 @@ import { isHttpsScheme } from '~/validators/node';
  * on each call and never cached or logged.
  */
 
-interface AgentCallOptions {
+interface AgentCallOptions<T = unknown> {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   /** Abort the call (timeout, e.g. dashboard agent healthchecks). */
   signal?: AbortSignal;
+  /**
+   * Contract schema the response must satisfy — defense against a buggy
+   * or hostile agent feeding unvalidated data into panel DB rows.
+   * Optional: endpoints whose Zod schema is known-stale relative to the
+   * agent (server info) stay unvalidated for now.
+   */
+  schema?: z.ZodType<T>;
 }
 
 export class AgentError extends Error {
@@ -43,7 +57,7 @@ function baseUrl(node: Pick<INode, 'fqdn' | 'publicPort' | 'scheme'>): string {
 async function agentCall<T>(
   node: Pick<INode, 'fqdn' | 'publicPort' | 'scheme' | 'agentToken'>,
   path: string,
-  options: AgentCallOptions = {},
+  options: AgentCallOptions<T> = {},
 ): Promise<T> {
   const response = await fetch(`${baseUrl(node)}${path}`, {
     method: options.method ?? 'GET',
@@ -62,6 +76,9 @@ async function agentCall<T>(
     throw new AgentError(error, response.status);
   }
 
+  if (options.schema) {
+    return options.schema.parse(data);
+  }
   return data as T;
 }
 
@@ -93,7 +110,7 @@ export async function agentHealth(
   node: INode,
   options: { signal?: AbortSignal } = {},
 ): Promise<HealthResponse> {
-  return agentCall(node, '/health', options);
+  return agentCall(node, '/health', { ...options, schema: healthResponseSchema });
 }
 
 /** Node system snapshot (CPU/RAM/disk) — the caller measures the round-trip as latency. */
@@ -101,7 +118,7 @@ export async function agentGetStats(
   node: INode,
   options: { signal?: AbortSignal } = {},
 ): Promise<NodeStats> {
-  return agentCall(node, '/stats', options);
+  return agentCall(node, '/stats', { ...options, schema: nodeStatsSchema });
 }
 
 export async function agentInstallServer(
@@ -136,7 +153,7 @@ export async function agentGetInstallStatus(
   node: INode,
   serverId: string,
 ): Promise<InstallStatus> {
-  return agentCall(node, `/servers/${serverId}/install`);
+  return agentCall(node, `/servers/${serverId}/install`, { schema: installStatusSchema });
 }
 
 export interface AgentReinstallResponse {
@@ -330,7 +347,11 @@ export async function agentCreateBackup(
   serverId: string,
   body: { backupId: string; include?: string[] },
 ): Promise<BackupOperationStatus> {
-  return agentCall(node, `/servers/${serverId}/backups`, { method: 'POST', body });
+  return agentCall(node, `/servers/${serverId}/backups`, {
+    method: 'POST',
+    body,
+    schema: backupOperationStatusSchema,
+  });
 }
 
 /** Live status of a backup operation (create or restore) — 404 when unknown. */
@@ -339,7 +360,9 @@ export async function agentGetBackupStatus(
   serverId: string,
   backupId: string,
 ): Promise<BackupOperationStatus> {
-  return agentCall(node, `/servers/${serverId}/backups/${backupId}`);
+  return agentCall(node, `/servers/${serverId}/backups/${backupId}`, {
+    schema: backupOperationStatusSchema,
+  });
 }
 
 /** Starts a restoration (the agent stops the server first) — poll the status. */
@@ -352,6 +375,7 @@ export async function agentRestoreBackup(
   return agentCall(node, `/servers/${serverId}/backups/${backupId}/restore`, {
     method: 'POST',
     body,
+    schema: backupOperationStatusSchema,
   });
 }
 

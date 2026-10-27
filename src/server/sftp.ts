@@ -5,6 +5,7 @@ import { Account, Server, User } from '~/db/entities';
 import { sftpAuthRequestSchema } from '~/contract';
 import { toSftpPermissions } from '~/lib/permissions';
 import { parseSftpUsername } from '~/lib/sftp';
+import { FixedWindowLimiter } from '~/lib/rate-limit';
 import { findNodeByToken } from './node-token';
 import { loadServerForViewer } from './session';
 
@@ -27,6 +28,16 @@ import { loadServerForViewer } from './session';
 function reject(): Response {
   return Response.json({ error: 'Identifiants SFTP invalides' }, { status: 403 });
 }
+
+/**
+ * Password attempt throttle: 10 tries per username per 5 minutes. The
+ * SFTP callback is a password oracle (the SFTP password IS the panel
+ * account password) with no other rate limit — without this, an agent
+ * relays unlimited brute-force attempts against panel passwords.
+ * Rejected attempts answer the same uniform 403, so hitting the cap is
+ * indistinguishable from a bad password.
+ */
+const sftpAuthLimiter = new FixedWindowLimiter(10, 5 * 60 * 1000);
 
 /**
  * Handles POST /api/sftp/auth. 400 on a malformed body, 403 on any
@@ -67,6 +78,9 @@ async function authenticateSftpInner(request: Request): Promise<Response> {
 
   const connection = parseSftpUsername(parsed.data.username);
   if (!connection) {
+    return reject();
+  }
+  if (!sftpAuthLimiter.allow(connection.username.toLowerCase())) {
     return reject();
   }
 

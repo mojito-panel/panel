@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { serverNameField } from './server';
 
 /**
  * Admin-area server validators (/admin/servers — Pelican admin Servers
@@ -41,7 +42,7 @@ export type AdminChangeServerRecipeDto = z.infer<typeof adminChangeServerRecipeS
  * the form reuses it and adds the serverId at submit time.
  */
 export const updateAdminServerFormSchema = z.object({
-  name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
+  name: serverNameField,
   ownerId: z.string().min(1, 'Choisis un propriétaire'),
   /** RAM limit in MB — 0 = unlimited (no Job Object commit cap). */
   memoryMb: z

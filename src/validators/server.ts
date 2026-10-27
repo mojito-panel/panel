@@ -2,8 +2,25 @@ import { z } from 'zod';
 import { validateVariableValue, type RecipeVariable } from '~/contract';
 import { subuserPermissionsSchema } from '~/lib/permissions';
 
+/**
+ * Server name charset — the name is interpolated into server-side config
+ * files, batch launchers and command lines on the agent (server.cfg,
+ * UE ini, strict JSON, `cmd /c` batch files), so quotes, shell
+ * metacharacters and Windows-illegal filename characters must never
+ * reach it. Letters (any script), digits, spaces and `- _ .` only, and
+ * the name cannot start/end with a space or a dot (Windows dirs).
+ */
+export const serverNameField = z
+  .string()
+  .min(2, 'Le nom doit faire au moins 2 caractères')
+  .max(128, 'Le nom doit faire au plus 128 caractères')
+  .regex(
+    /^[\p{L}\p{N}](?:[\p{L}\p{N} ._-]{0,126}[\p{L}\p{N}])?$/u,
+    'Le nom ne peut contenir que des lettres, des chiffres, des espaces et - _ .',
+  );
+
 export const createServerSchema = z.object({
-  name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
+  name: serverNameField,
   nodeId: z.string().min(1, 'Choisis un node'),
   recipeId: z.string().min(1, 'Choisis une recette'),
   /** Free allocation claimed from the node's pool (Pelican semantics). */
