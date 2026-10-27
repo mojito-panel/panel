@@ -1,0 +1,53 @@
+# Panel CI — typecheck + full test suite on every push/PR to main.
+#
+# A Postgres 17 service container backs the database suites (they read
+# DATABASE_URL); when the database is unreachable the Postgres suites
+# self-skip, and the shipped-recipes suite self-skips when the sibling
+# `../recipes` checkout is absent (this workflow checks out the panel
+# repo alone).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: mojito
+          POSTGRES_PASSWORD: mojito
+          POSTGRES_DB: mojito
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://mojito:mojito@localhost:5432/mojito
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (src + tests)
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npx vitest run
