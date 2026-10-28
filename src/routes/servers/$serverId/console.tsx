@@ -9,6 +9,7 @@ import type {
   ConsoleClientMessage,
   ConsoleInstallStatus,
   ServerStatus,
+  ServerStats,
 } from '~/contract';
 import type { PanelServerStatus } from '~/components/app-sidebar';
 import {
@@ -24,6 +25,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '~/components/ui/input';
 import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
 import { InstallNotice } from '~/components/console/install-panel';
+import { ServerStatsCards } from '~/components/console/server-stats';
 import { ErrorState } from '~/components/error/error-state';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { hasServerPermissions } from '~/lib/permissions';
@@ -59,6 +61,10 @@ function ServerConsolePage() {
   const [consoleMode, setConsoleMode] = useState<ConsoleMode>('connecting');
   // Install status pushed by the agent over the WS (banner + DB sync trigger)
   const [installStatus, setInstallStatus] = useState<ConsoleInstallStatus | null>(null);
+  // Resource stats pushed by the agent over the WS (CPU/RAM/I-O cards):
+  // the full frame on connect (ring replay = the last minute of the
+  // tree's life), then one per second — always authoritative.
+  const [stats, setStats] = useState<ServerStats | null>(null);
   // Live agent WS (set by XtermConsole): when connected, console commands
   // go DIRECTLY to the agent (JWT-gated); otherwise via the panel.
   const wsSendRef = useRef<((message: ConsoleClientMessage) => void) | null>(null);
@@ -244,40 +250,47 @@ function ServerConsolePage() {
         <p className="text-sm text-destructive">{action.error.message}</p>
       )}
 
-      {/* Console card — runtime logs AND install output (same WS, same terminal) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Console</CardTitle>
-          <CardDescription>{consoleCaption(consoleMode, installActive, isAlive)}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <XtermConsole
-            serverId={serverId}
-            onConnection={handleConsoleConnection}
-            onStatus={(message) => handleConsoleStatus(message.status)}
-            onMode={setConsoleMode}
-            onInstallStatus={handleInstallStatus}
-          />
-        </CardContent>
+      {/* Console card + live resource cards — one grid, two placements:
+          wide viewport (xl) → the CPU/RAM/I/O cards stack in a column on
+          the RIGHT of the console; otherwise the three cards line up in a
+          row UNDER it. One render — the wrapper grid does the switching. */}
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Console</CardTitle>
+            <CardDescription>{consoleCaption(consoleMode, installActive, isAlive)}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <XtermConsole
+              serverId={serverId}
+              onConnection={handleConsoleConnection}
+              onStatus={(message) => handleConsoleStatus(message.status)}
+              onMode={setConsoleMode}
+              onInstallStatus={handleInstallStatus}
+              onStats={setStats}
+            />
+          </CardContent>
 
-        {/* Send commands (process stdin) — hidden during an install */}
-        {!installActive && canCommand && (
-          <CardFooter>
-            <form onSubmit={handleCommand} className="flex w-full gap-2">
-              <Input
-                placeholder={isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                disabled={!isAlive || submitCommand.isPending}
-              />
-              <Button type="submit" disabled={!isAlive || submitCommand.isPending || !command.trim()}>
-                <Send />
-                Envoyer
-              </Button>
-            </form>
-          </CardFooter>
-        )}
-      </Card>
+          {/* Send commands (process stdin) — hidden during an install */}
+          {!installActive && canCommand && (
+            <CardFooter>
+              <form onSubmit={handleCommand} className="flex w-full gap-2">
+                <Input
+                  placeholder={isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  disabled={!isAlive || submitCommand.isPending}
+                />
+                <Button type="submit" disabled={!isAlive || submitCommand.isPending || !command.trim()}>
+                  <Send />
+                  Envoyer
+                </Button>
+              </form>
+            </CardFooter>
+          )}
+        </Card>
+        <ServerStatsCards stats={stats} />
+      </div>
       {submitCommand.isError && (
         <p className="text-sm text-destructive">{submitCommand.error.message}</p>
       )}

@@ -87,7 +87,10 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
   // series toward each new frame (rAF, linear, one interval per morph) — a
   // continuous stream, with recharts animation OFF (it restarts interrupted
   // morphs from the old shape = the yoyo). See use-flow-samples.ts.
-  const flowSamples = useFlowSamples(stream.samples, HEALTH_STATS_INTERVAL_MS);
+  const flowSamples = useFlowSamples(stream.samples, HEALTH_STATS_INTERVAL_MS, [
+    'cpuPercent',
+    'memoryUsedMb',
+  ]);
   // mem is charted in Go (1 decimal) so the native tooltip value reads like
   // the CPU one — a custom formatter would REPLACE the whole tooltip row
   // (indicator + label + value), making the two charts hover differently.

@@ -6,6 +6,7 @@ import {
   type ConsoleClientMessage,
   type ConsoleInstallStatus,
   type ConsoleServerMessage,
+  type ServerStats,
 } from '~/contract';
 import { createConsoleTokenFn } from '~/server/functions/servers';
 import { consoleMessageEmoji, renderConsoleEvent } from './messages';
@@ -27,6 +28,11 @@ interface XtermConsoleProps {
   onMode?: (mode: ConsoleMode) => void;
   /** Install status pushed by the agent over the WS (steps, %, error). */
   onInstallStatus?: (status: ConsoleInstallStatus) => void;
+  /**
+   * Resource stats pushed by the agent over the WS (CPU/RAM/I-O cards):
+   * the ring replay on connect, then one full frame per sampling tick.
+   */
+  onStats?: (stats: ServerStats) => void;
 }
 
 /** WS attempts before showing the terminal-level connection error. */
@@ -52,6 +58,7 @@ export function XtermConsole({
   onStatus,
   onMode,
   onInstallStatus,
+  onStats,
 }: XtermConsoleProps) {
   const [ready, setReady] = useState(false);
   const createToken = useServerFn(createConsoleTokenFn);
@@ -61,11 +68,13 @@ export function XtermConsole({
   const onStatusRef = useRef(onStatus);
   const onModeRef = useRef(onMode);
   const onInstallStatusRef = useRef(onInstallStatus);
+  const onStatsRef = useRef(onStats);
   useEffect(() => {
     onConnectionRef.current = onConnection;
     onStatusRef.current = onStatus;
     onModeRef.current = onMode;
     onInstallStatusRef.current = onInstallStatus;
+    onStatsRef.current = onStats;
   });
 
   // The transport mode is owned by the page (via onMode) — no local state.
@@ -197,6 +206,11 @@ export function XtermConsole({
         }
         if (message.type === 'install-status') {
           onInstallStatusRef.current?.(message);
+          return;
+        }
+        if (message.type === 'stats') {
+          // Full authoritative frame — the page replaces its state wholesale.
+          onStatsRef.current?.(message.stats);
           return;
         }
         if (message.type === 'status') {

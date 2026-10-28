@@ -316,6 +316,60 @@ export const consoleErrorSchema = z.enum([
 
 export type ConsoleError = z.infer<typeof consoleErrorSchema>;
 
+// ─── Live server stats (agent → browser, via the console WS) ──────────────────
+
+/**
+ * One resource sample of a server's WHOLE process tree (every member of
+ * its Job Object), collected by the agent's sampling loop while the tree
+ * is up. CPU and I/O are deltas between two ticks; memory is the summed
+ * working set of the tree's processes.
+ */
+export const serverStatsSampleSchema = z.object({
+  /** Unix ms — the sample's collection time. */
+  at: z.number().int().nonnegative(),
+  /**
+   * CPU usage in percent OF ONE CORE — a 3-core server peaks at 300
+   * (docker stats semantics), so the chart can scale to the allocation.
+   */
+  cpuPercent: z.number().min(0),
+  /** Summed working set of the tree's processes (MB). */
+  memoryMb: z.number().min(0),
+  /**
+   * Job I/O throughput (bytes/s): file, network and device traffic
+   * BLENDED — Windows exposes no per-process network counter, so the
+   * panel labels the card "I/O", never "network".
+   */
+  ioBytesPerSec: z.number().min(0),
+});
+
+export type ServerStatsSample = z.infer<typeof serverStatsSampleSchema>;
+
+/**
+ * Full stats frame pushed on the console WS: the charts' axis scales
+ * plus the buffered samples of the CURRENT tree (oldest first). The
+ * agent replays the whole ring on every fresh connection — a page
+ * refresh shows the last minute — and a NEW tree flushes it.
+ */
+export const serverStatsSchema = z.object({
+  /** CPU chart axis max: allowed cores × 100 (host cores × 100 when unlimited). */
+  cpuMaxPercent: z.number().positive(),
+  /** Memory chart axis max: allocated MB (host total MB when unlimited). */
+  memoryMaxMb: z.number().positive(),
+  /** Samples of the current tree's life, oldest first. */
+  samples: z.array(serverStatsSampleSchema),
+});
+
+export type ServerStats = z.infer<typeof serverStatsSchema>;
+
+/**
+ * Stats sampling cadence — also the CPU % / I/O measurement window.
+ * Exported so the browser can match its chart animation to the frame rate.
+ */
+export const SERVER_STATS_INTERVAL_MS = 1000;
+
+/** Ring depth — the replayed window (one minute at the sampling cadence). */
+export const SERVER_STATS_MAX_SAMPLES = 60;
+
 /** Agent → browser. */
 export const consoleServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('auth-ok') }),
@@ -338,6 +392,16 @@ export const consoleServerMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     /**
+     * Live resource stats of the server's process tree (CPU/RAM/I-O
+     * cards): the FULL frame on connect (ring replay), then one per
+     * sampling tick — always authoritative, the client replaces its
+     * state wholesale.
+     */
+    type: z.literal('stats'),
+    stats: serverStatsSchema,
+  }),
+  z.object({
+    /**
      * Runtime console event (power action, watchdog finding, server online)
      * — a coded message the panel renders via its catalog. Buffered by the
      * agent and replayed on every fresh connection: `at` (unix ms) carries
@@ -355,6 +419,9 @@ export type ConsoleServerMessage = z.infer<typeof consoleServerMessageSchema>;
 
 /** install-status WS payload (console page banner). */
 export type ConsoleInstallStatus = Extract<ConsoleServerMessage, { type: 'install-status' }>;
+
+/** stats WS payload (console page resource cards). */
+export type ConsoleStatsMessage = Extract<ConsoleServerMessage, { type: 'stats' }>;
 
 // ─── Node health (admin dashboard) ───────────────────────────────────────────
 

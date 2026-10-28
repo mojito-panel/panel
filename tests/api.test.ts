@@ -499,6 +499,47 @@ describe('consoleServerMessageSchema', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'kaboom' }).success).toBe(false);
   });
 
+  it('validates a stats frame (ring replay / live push)', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'stats',
+        stats: {
+          cpuMaxPercent: 300,
+          memoryMaxMb: 1024,
+          samples: [
+            { at: 1790000000000, cpuPercent: 142.5, memoryMb: 512, ioBytesPerSec: 20480 },
+          ],
+        },
+      }).success,
+    ).toBe(true);
+    // Empty ring (server stopped / first second of a fresh start) is valid.
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'stats',
+        stats: { cpuMaxPercent: 300, memoryMaxMb: 1024, samples: [] },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a stats frame with a non-positive axis scale or a negative sample', () => {
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'stats',
+        stats: { cpuMaxPercent: 0, memoryMaxMb: 1024, samples: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'stats',
+        stats: {
+          cpuMaxPercent: 300,
+          memoryMaxMb: 1024,
+          samples: [{ at: 1790000000000, cpuPercent: -1, memoryMb: 0, ioBytesPerSec: 0 }],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects an unknown type', () => {
     expect(consoleServerMessageSchema.safeParse({ type: 'install-progress' }).success).toBe(false);
   });

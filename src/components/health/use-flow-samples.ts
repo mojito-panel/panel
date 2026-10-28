@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import type { NodeStats } from '~/contract';
 
 /**
  * Continuous-flow animation for the live charts — WITHOUT recharts's morph.
@@ -8,15 +7,15 @@ import type { NodeStats } from '~/contract';
  * at frame-rate cadence those restarts read as a yoyo (the curve bounces
  * back before reaching the new frame). Here WE drive the interpolation
  * instead (recharts renders with isAnimationActive={false}):
- * - on each new frame, a rAF loop glides the two charted series LINEARLY
+ * - on each new frame, a rAF loop glides the charted series LINEARLY
  *   from the CURRENT VISUAL state to the new frame, over exactly one
  *   frame interval — a continuous flow, never a step;
  * - a frame arriving mid-morph continues from the current visual state,
  *   so a restart-from-the-old-shape is impossible by construction.
  *
- * Only cpuPercent and memoryUsedMb glide — they are the charted series.
- * Everything else (timestamps, totals, version…) is taken from the target
- * frame, so the axis labels and stats stay honest.
+ * Only the CHARTED series glide (the `keys`); everything else
+ * (timestamps, totals, version…) is taken from the target frame, so the
+ * axis labels and stats stay honest.
  */
 
 /** Render cap — recharts re-renders per emit, 30 fps is plenty for a 1 s flow. */
@@ -27,13 +26,21 @@ function lerp(from: number, to: number, t: number): number {
 }
 
 /**
- * Returns a version of `samples` that flows continuously toward the latest
- * frame. `samples` must be the rolling WS buffer (oldest → newest).
+ * Returns a version of `samples` whose numeric `keys` flow continuously
+ * toward the latest frame. `samples` must be the rolling WS buffer
+ * (oldest → newest).
  */
-export function useFlowSamples(samples: NodeStats[], intervalMs: number): NodeStats[] {
-  const [display, setDisplay] = useState<NodeStats[]>(samples);
+export function useFlowSamples<T extends object>(
+  samples: T[],
+  intervalMs: number,
+  keys: ReadonlyArray<keyof T & string>,
+): T[] {
+  const [display, setDisplay] = useState<T[]>(samples);
   /** Last EMITTED (visual) frame — the morph always continues from here. */
-  const visualRef = useRef<NodeStats[]>(samples);
+  const visualRef = useRef<T[]>(samples);
+  // Effect key: the identity of an inline `keys` literal changes every
+  // render — the effect must only re-run on the keys' CONTENT.
+  const keysKey = keys.join(',');
 
   useEffect(() => {
     const from = visualRef.current;
@@ -48,6 +55,7 @@ export function useFlowSamples(samples: NodeStats[], intervalMs: number): NodeSt
     let raf = 0;
     let lastEmit = 0;
     const startedAt = performance.now();
+    const glidingKeys = keysKey.split(',');
 
     const tick = (now: number) => {
       const t = Math.min(1, (now - startedAt) / intervalMs);
@@ -62,11 +70,13 @@ export function useFlowSamples(samples: NodeStats[], intervalMs: number): NodeSt
       const frame = to.map((target, i) => {
         const source = from[i];
         if (!source) return target;
-        return {
-          ...target,
-          cpuPercent: lerp(source.cpuPercent, target.cpuPercent, t),
-          memoryUsedMb: lerp(source.memoryUsedMb, target.memoryUsedMb, t),
-        };
+        const sourceRecord = source as Record<string, unknown>;
+        const targetRecord = target as Record<string, unknown>;
+        const gliding: Record<string, number> = {};
+        for (const key of glidingKeys) {
+          gliding[key] = lerp(Number(sourceRecord[key]), Number(targetRecord[key]), t);
+        }
+        return { ...target, ...gliding };
       });
       visualRef.current = frame;
       setDisplay(frame);
@@ -79,7 +89,8 @@ export function useFlowSamples(samples: NodeStats[], intervalMs: number): NodeSt
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [samples, intervalMs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keys enter via keysKey
+  }, [samples, intervalMs, keysKey]);
 
   return display;
 }
