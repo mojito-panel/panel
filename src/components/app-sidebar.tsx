@@ -41,9 +41,9 @@ import { Skeleton } from '~/components/ui/skeleton';
 import { getBrandingFn } from '~/server/functions/settings';
 import { useAuth } from '~/contexts/use-auth';
 import {
-  canFromPermissions,
+  hasPermissions,
   hasAdminAreaAccess,
-  serverCan,
+  hasServerPermissions,
   type PermissionRequest,
 } from '~/lib/permissions';
 
@@ -173,10 +173,10 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
   const inServer = server !== undefined;
   const serverParams = server ? { serverId: server.id } : undefined;
   const visibleServerItems = serverItems.filter(
-    (item) => !item.permission || serverCan(server?.permissions ?? [], item.permission),
+    (item) => !item.permission || hasServerPermissions(server?.permissions ?? [], item.permission),
   );
   const visibleAdminItems = adminItems.filter(
-    (item) => canFromPermissions(permissions, item.permission),
+    (item) => hasPermissions(permissions, item.permission),
   );
 
   return (
@@ -269,7 +269,7 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-            {canFromPermissions(permissions, { 'panel.servers': ['read'] }) && (
+            {hasPermissions(permissions, { 'panel.servers': ['read'] }) && (
               <SidebarGroup>
                 <SidebarGroupContent>
                   <SidebarMenu>

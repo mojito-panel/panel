@@ -34,7 +34,7 @@ import { mergeQuery, type ListQuery } from '~/lists/define';
 import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
 import { adminServersList } from '~/lists/servers';
 import { adminUsersList } from '~/lists/users';
-import { canFromPermissions } from '~/lib/permissions';
+import { hasPermissions } from '~/lib/permissions';
 import { useAuth } from '~/contexts/use-auth';
 import { StatusBadge, isLiveData, statusLabel } from '~/components/status-badge';
 import { CardSection, TabsCard, type TabsCardTab } from '~/components/tabs-card';
@@ -134,8 +134,8 @@ function AdminServerPage() {
   }
 
   const server = query.data;
-  const canUpdate = canFromPermissions(permissions, { 'panel.servers': ['update'] });
-  const canDelete = canFromPermissions(permissions, { 'panel.servers': ['delete'] });
+  const canUpdate = hasPermissions(permissions, { 'panel.servers': ['update'] });
+  const canDelete = hasPermissions(permissions, { 'panel.servers': ['delete'] });
 
   return (
     <div>
@@ -194,7 +194,7 @@ function ServerRecordTabs({
 }) {
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
-  const canListUsers = canFromPermissions(permissions, { user: ['list'] });
+  const canListUsers = hasPermissions(permissions, { user: ['list'] });
 
   // Owner picker: one page of the users list (the user:list permission gates it)
   const listUsers = useServerFn(listUsersFn);

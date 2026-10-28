@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, redirect } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm, useStore } from '@tanstack/react-form';
@@ -11,6 +11,7 @@ import {
 } from '~/server/functions/admin';
 import { installServerFn } from '~/server/functions/servers';
 import { userServersList } from '~/lists/user-servers';
+import { hasPermissions } from '~/lib/permissions';
 import { createServerSchema, type CreateServerDto } from '~/validators/server';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -26,6 +27,18 @@ import { VariableField } from '~/components/variable-field';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 
 export const Route = createFileRoute('/_app/servers/new')({
+  // Creation is an admin feature (panel.servers.create) — the form stays in
+  // the user area layout but only admins (or a custom role carrying the
+  // statement) may deploy. Mirrors the server-side gate on installServerFn.
+  beforeLoad: ({ context }) => {
+    const user = (context as { user?: { permissions?: string[] } | null }).user;
+    if (!user) {
+      throw redirect({ to: '/login' });
+    }
+    if (!hasPermissions(user.permissions ?? [], { 'panel.servers': ['create'] })) {
+      throw redirect({ to: '/servers', search: userServersList.defaultSearch });
+    }
+  },
   component: NewServerPage,
 });
 

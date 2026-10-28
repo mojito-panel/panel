@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 
 import { readFileFn } from '~/server/functions/files';
 import { getServerFn } from '~/server/functions/servers';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { filesSearchSchema } from '~/validators/files';
 import { FileBrowser } from '~/components/files/file-browser';
 import { FileEditor } from '~/components/files/file-editor';
@@ -31,14 +31,14 @@ function FilesPage() {
     queryFn: () => getServer({ data: { serverId } }),
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
-  const canCreate = serverCan(permissions, { 'server.files': ['create'] });
-  const canWrite = serverCan(permissions, { 'server.files': ['write'] });
-  const canDelete = serverCan(permissions, { 'server.files': ['delete'] });
+  const canCreate = hasServerPermissions(permissions, { 'server.files': ['create'] });
+  const canWrite = hasServerPermissions(permissions, { 'server.files': ['write'] });
+  const canDelete = hasServerPermissions(permissions, { 'server.files': ['delete'] });
   // SFTP access follows the file grants (ANY server.files.* permission —
   // same rule as the /api/sftp/auth permission mapping)
   const sftp =
     serverQuery.data &&
-    serverCan(
+    hasServerPermissions(
       serverQuery.data.viewer.permissions,
       { 'server.files': ['read', 'write', 'create', 'delete'] },
       'OR',

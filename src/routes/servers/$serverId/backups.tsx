@@ -26,7 +26,7 @@ import {
   deleteBackupFn,
   getBackupDownloadUrlFn,
 } from '~/server/functions/backups';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { createBackupFormSchema } from '~/validators/server';
 
 /**
@@ -71,10 +71,10 @@ function ServerBackupsPage() {
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
   const includes = serverQuery.data?.recipe?.backup?.include;
 
-  const canCreate = serverCan(permissions, { 'server.backups': ['create'] });
-  const canRestore = serverCan(permissions, { 'server.backups': ['restore'] });
-  const canDelete = serverCan(permissions, { 'server.backups': ['delete'] });
-  const canRead = serverCan(permissions, { 'server.backups': ['read'] });
+  const canCreate = hasServerPermissions(permissions, { 'server.backups': ['create'] });
+  const canRestore = hasServerPermissions(permissions, { 'server.backups': ['restore'] });
+  const canDelete = hasServerPermissions(permissions, { 'server.backups': ['delete'] });
+  const canRead = hasServerPermissions(permissions, { 'server.backups': ['read'] });
 
   // The list syncs in-flight statuses with the agent — poll while the CURRENT PAGE has an active row
   const query = useQuery({

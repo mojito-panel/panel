@@ -10,8 +10,8 @@ import {
   BUILT_IN_ROLE_LABELS,
   panelRole,
   can,
-  canFromPermissions,
-  serverCan,
+  hasPermissions,
+  hasServerPermissions,
   hasAdminAreaAccess,
   flattenPermissions,
   parsePermissions,
@@ -52,6 +52,8 @@ describe('panel roles', () => {
     // No write access at all
     expect(can(moderatorRole, { 'panel.nodes': ['create'] })).toBe(false);
     expect(can(moderatorRole, { 'panel.recipes': ['update'] })).toBe(false);
+    // Server creation is an admin feature — NOT part of the read-only oversight
+    expect(can(moderatorRole, { 'panel.servers': ['create'] })).toBe(false);
     expect(can(moderatorRole, { user: ['set-role'] })).toBe(false);
     expect(can(moderatorRole, { user: ['ban'] })).toBe(false);
     // No per-server permissions via the panel role
@@ -62,6 +64,8 @@ describe('panel roles', () => {
     expect(can(userRole, { 'panel.overview': ['read'] })).toBe(false);
     expect(can(userRole, { user: ['list'] })).toBe(false);
     expect(can(userRole, { 'server.files': ['read'] })).toBe(false);
+    // Server creation is an admin feature (panel.servers.create)
+    expect(can(userRole, { 'panel.servers': ['create'] })).toBe(false);
   });
 
   it('exposes the full server permission set to owners', () => {
@@ -103,13 +107,13 @@ describe('can()', () => {
     expect(can(userRole, { 'unknown.resource': ['read'] })).toBe(false);
   });
 
-  it('canFromPermissions checks a flat grant list (panel AND per-server grants)', () => {
+  it('hasPermissions checks a flat grant list (panel AND per-server grants)', () => {
     const adminPermissions = flattenPermissions(adminRole.statements);
-    expect(canFromPermissions(adminPermissions, { 'panel.nodes': ['create'] })).toBe(true);
-    expect(canFromPermissions(adminPermissions, { user: ['set-role'] })).toBe(true);
-    expect(canFromPermissions([], { 'panel.nodes': ['create'] })).toBe(false);
-    expect(canFromPermissions(['server.files.read'], { 'server.files': ['read'] })).toBe(true);
-    expect(canFromPermissions(['server.files.read'], { 'panel.nodes': ['create'] })).toBe(false);
+    expect(hasPermissions(adminPermissions, { 'panel.nodes': ['create'] })).toBe(true);
+    expect(hasPermissions(adminPermissions, { user: ['set-role'] })).toBe(true);
+    expect(hasPermissions([], { 'panel.nodes': ['create'] })).toBe(false);
+    expect(hasPermissions(['server.files.read'], { 'server.files': ['read'] })).toBe(true);
+    expect(hasPermissions(['server.files.read'], { 'panel.nodes': ['create'] })).toBe(false);
   });
 });
 
@@ -167,18 +171,18 @@ describe('flat permission strings', () => {
   });
 });
 
-describe('serverCan() (sub-user grants)', () => {
+describe('hasServerPermissions() (sub-user grants)', () => {
   it('checks the viewer grant from the flat list', () => {
     const grant = ['server.console.read', 'server.console.command', 'server.power.start'];
-    expect(serverCan(grant, { 'server.console': ['read'] })).toBe(true);
-    expect(serverCan(grant, { 'server.console': ['command'] })).toBe(true);
-    expect(serverCan(grant, { 'server.power': ['start'] })).toBe(true);
-    expect(serverCan(grant, { 'server.power': ['kill'] })).toBe(false);
-    expect(serverCan(grant, { 'server.files': ['read'] })).toBe(false);
+    expect(hasServerPermissions(grant, { 'server.console': ['read'] })).toBe(true);
+    expect(hasServerPermissions(grant, { 'server.console': ['command'] })).toBe(true);
+    expect(hasServerPermissions(grant, { 'server.power': ['start'] })).toBe(true);
+    expect(hasServerPermissions(grant, { 'server.power': ['kill'] })).toBe(false);
+    expect(hasServerPermissions(grant, { 'server.files': ['read'] })).toBe(false);
   });
 
   it('returns false for an empty grant', () => {
-    expect(serverCan([], { 'server.files': ['read'] })).toBe(false);
+    expect(hasServerPermissions([], { 'server.files': ['read'] })).toBe(false);
   });
 });
 

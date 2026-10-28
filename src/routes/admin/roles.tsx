@@ -13,7 +13,7 @@ import {
 } from '~/server/functions/roles';
 import { useAuth } from '~/contexts/use-auth';
 import {
-  canFromPermissions,
+  hasPermissions,
   PANEL_PERMISSION_GROUPS,
   type PermissionStatements,
 } from '~/lib/permissions';
@@ -70,9 +70,9 @@ function AdminRolesPage() {
   const updateRole = useServerFn(updateRoleFn);
   const deleteRole = useServerFn(deleteRoleFn);
 
-  const canCreate = canFromPermissions(permissions, { 'panel.roles': ['create'] });
-  const canUpdate = canFromPermissions(permissions, { 'panel.roles': ['update'] });
-  const canDelete = canFromPermissions(permissions, { 'panel.roles': ['delete'] });
+  const canCreate = hasPermissions(permissions, { 'panel.roles': ['create'] });
+  const canUpdate = hasPermissions(permissions, { 'panel.roles': ['update'] });
+  const canDelete = hasPermissions(permissions, { 'panel.roles': ['delete'] });
 
   const query = useQuery({
     queryKey: ['admin-roles'],
@@ -136,7 +136,7 @@ function AdminRolesPage() {
     },
   });
 
-  if (!canFromPermissions(permissions, { 'panel.roles': ['read'] })) {
+  if (!hasPermissions(permissions, { 'panel.roles': ['read'] })) {
     return (
       <p className="text-sm text-muted-foreground">
         Tu n’as pas la permission de gérer les rôles.

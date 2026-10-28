@@ -10,6 +10,7 @@ import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { useAuth } from '~/contexts/use-auth';
+import { hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { userServersList, type UserServerRow } from '~/lists/user-servers';
 import { adminNodesList } from '~/lists/nodes';
@@ -36,6 +37,12 @@ function ServersPage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
   const search = Route.useSearch();
+
+  // Creation is an admin feature (panel.servers.create) — the button only
+  // shows to those who hold the statement.
+  const canCreate = hasPermissions(user?.permissions ?? [], {
+    'panel.servers': ['create'],
+  });
 
   const listServers = useServerFn(listServersFn);
   const deleteServer = useServerFn(deleteServerFn);
@@ -98,10 +105,12 @@ function ServersPage() {
                   </Button>
                 </>
               )}
-              <Button render={<Link to="/servers/new" />}>
-                <Plus />
-                Nouveau serveur
-              </Button>
+              {canCreate && (
+                <Button render={<Link to="/servers/new" />}>
+                  <Plus />
+                  Nouveau serveur
+                </Button>
+              )}
             </div>
           </CardAction>
         </CardHeader>

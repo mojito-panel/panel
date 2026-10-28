@@ -34,7 +34,7 @@ import {
   deleteScheduleFn,
   runScheduleNowFn,
 } from '~/server/functions/schedules';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { scheduleEditFormSchema, type ScheduleEditFormDto } from '~/validators/schedules';
 
 /**
@@ -82,10 +82,10 @@ function ServerSchedulesPage() {
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
 
-  const canCreate = serverCan(permissions, { 'server.schedules': ['create'] });
-  const canUpdate = serverCan(permissions, { 'server.schedules': ['update'] });
-  const canDelete = serverCan(permissions, { 'server.schedules': ['delete'] });
-  const canRead = serverCan(permissions, { 'server.schedules': ['read'] });
+  const canCreate = hasServerPermissions(permissions, { 'server.schedules': ['create'] });
+  const canUpdate = hasServerPermissions(permissions, { 'server.schedules': ['update'] });
+  const canDelete = hasServerPermissions(permissions, { 'server.schedules': ['delete'] });
+  const canRead = hasServerPermissions(permissions, { 'server.schedules': ['read'] });
 
   // Poll while a schedule is mid-run — the claim clears when the chain ends.
   const query = useQuery({

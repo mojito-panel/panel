@@ -26,7 +26,7 @@ import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-conso
 import { InstallNotice } from '~/components/console/install-panel';
 import { ErrorState } from '~/components/error/error-state';
 import { ConfirmDialog } from '~/components/confirm-dialog';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
   component: ServerConsolePage,
@@ -149,12 +149,12 @@ function ServerConsolePage() {
   // Per-server grants (sub-users) — hide what the viewer may not do. The
   // console JWT carries the same permissions: the agent refuses anyway.
   const permissions = server?.viewer?.permissions ?? [];
-  const canStart = serverCan(permissions, { 'server.power': ['start'] });
-  const canStop = serverCan(permissions, { 'server.power': ['stop'] });
-  const canRestart = serverCan(permissions, { 'server.power': ['restart'] });
-  const canKill = serverCan(permissions, { 'server.power': ['kill'] });
-  const canCommand = serverCan(permissions, { 'server.console': ['command'] });
-  const canRetryInstall = serverCan(permissions, { 'server.settings': ['update'] });
+  const canStart = hasServerPermissions(permissions, { 'server.power': ['start'] });
+  const canStop = hasServerPermissions(permissions, { 'server.power': ['stop'] });
+  const canRestart = hasServerPermissions(permissions, { 'server.power': ['restart'] });
+  const canKill = hasServerPermissions(permissions, { 'server.power': ['kill'] });
+  const canCommand = hasServerPermissions(permissions, { 'server.console': ['command'] });
+  const canRetryInstall = hasServerPermissions(permissions, { 'server.settings': ['update'] });
 
   // Install active: WS status first, persisted status while the WS has not
   // pushed yet (the DB is the source of truth for installs)

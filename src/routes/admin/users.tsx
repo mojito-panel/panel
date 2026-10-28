@@ -17,7 +17,7 @@ import {
 import { listRolesFn } from '~/server/functions/roles';
 import { createUserFormSchema, type CreateUserFormDto } from '~/validators/user';
 import { useAuth } from '~/contexts/use-auth';
-import { canFromPermissions } from '~/lib/permissions';
+import { hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminUsersList, type AdminUserRow, type AdminUsersContext } from '~/lists/users';
 import { Button } from '~/components/ui/button';
@@ -92,10 +92,10 @@ function AdminUsersPage() {
 
   // Panel-level grants — the server functions enforce the same ones
   // (list / create / set-role / ban / delete)
-  const canCreate = canFromPermissions(permissions, { user: ['create'] });
-  const canSetRole = canFromPermissions(permissions, { user: ['set-role'] });
-  const canBan = canFromPermissions(permissions, { user: ['ban'] });
-  const canDelete = canFromPermissions(permissions, { user: ['delete'] });
+  const canCreate = hasPermissions(permissions, { user: ['create'] });
+  const canSetRole = hasPermissions(permissions, { user: ['set-role'] });
+  const canBan = hasPermissions(permissions, { user: ['ban'] });
+  const canDelete = hasPermissions(permissions, { user: ['delete'] });
 
   // Roles (built-ins + custom) — feeds both role pickers
   const listRoles = useServerFn(listRolesFn);

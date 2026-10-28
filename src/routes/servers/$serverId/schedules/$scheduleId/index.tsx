@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { ScheduleFormFields } from '~/components/schedule-form';
 import { cronToHuman } from '~/lib/cron';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { serverSchedulesList } from '~/lists/schedules';
 import { getServerFn } from '~/server/functions/servers';
 import {
@@ -81,8 +81,8 @@ function ServerScheduleDetailPage() {
     queryFn: () => getServer({ data: { serverId } }),
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
-  const canUpdate = serverCan(permissions, { 'server.schedules': ['update'] });
-  const canDelete = serverCan(permissions, { 'server.schedules': ['delete'] });
+  const canUpdate = hasServerPermissions(permissions, { 'server.schedules': ['update'] });
+  const canDelete = hasServerPermissions(permissions, { 'server.schedules': ['delete'] });
 
   // Poll while the chain runs — the claim clears when the last task ends.
   const query = useQuery({

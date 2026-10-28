@@ -10,6 +10,7 @@ import type { Recipe as RecipeContract } from '~/contract';
 import type { ServerStatusDb } from '~/db/types';
 import {
   requireUser,
+  requirePanelPermission,
   HttpError,
   loadServerForViewer,
   loadServerWithPermission,
@@ -140,7 +141,9 @@ export const installServerFn = createServerFn({ method: 'POST' })
   .validator(createServerSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requireUser();
+    // Creation is an admin feature (Pelican semantics: an admin deploys for
+    // a user) — plain users never self-serve a server.
+    const user = await requirePanelPermission({ 'panel.servers': ['create'] });
     return installServer(data, user);
   });
 

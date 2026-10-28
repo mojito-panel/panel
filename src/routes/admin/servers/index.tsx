@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { toast } from 'sonner';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { Plus } from 'lucide-react';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { Button } from '~/components/ui/button';
 import { DataTable } from '~/components/data-table/data-table';
 import { useAuth } from '~/contexts/use-auth';
-import { canFromPermissions } from '~/lib/permissions';
+import { hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminServersList, type AdminServerRow } from '~/lists/servers';
 import { listNodesFn } from '~/server/functions/admin';
@@ -39,7 +41,8 @@ function AdminServersPage() {
   const deleteServer = useServerFn(deleteAdminServerFn);
   const listNodes = useServerFn(listNodesFn);
 
-  const canDelete = canFromPermissions(permissions, { 'panel.servers': ['delete'] });
+  const canDelete = hasPermissions(permissions, { 'panel.servers': ['delete'] });
+  const canCreate = hasPermissions(permissions, { 'panel.servers': ['create'] });
 
   // Options of the `node` filter (the node list is data, not a constant).
   const nodesQuery = useQuery({
@@ -90,6 +93,16 @@ function AdminServersPage() {
           <CardDescription>
             Tous les serveurs de l’installation, tous propriétaires confondus.
           </CardDescription>
+          {/* Creation stays in the user area (/servers/new): the form installs
+              a server owned by the signed-in admin, like any user. */}
+          {canCreate && (
+            <CardAction>
+              <Button render={<Link to="/servers/new" />}>
+                <Plus />
+                Nouveau serveur
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           <DataTable

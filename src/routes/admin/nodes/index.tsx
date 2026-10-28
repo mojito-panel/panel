@@ -13,7 +13,7 @@ import {
 } from '~/server/functions/admin';
 import { DataTable } from '~/components/data-table/data-table';
 import { useAuth } from '~/contexts/use-auth';
-import { canFromPermissions } from '~/lib/permissions';
+import { hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminNodesList, type AdminNodeRow } from '~/lists/nodes';
 import { createNodeSchema, type CreateNodeDto } from '~/validators/node';
@@ -56,7 +56,7 @@ function AdminNodesPage() {
   const createNode = useServerFn(createNodeFn);
   const deleteNode = useServerFn(deleteNodeFn);
 
-  const canDelete = canFromPermissions(permissions, { 'panel.nodes': ['delete'] });
+  const canDelete = hasPermissions(permissions, { 'panel.nodes': ['delete'] });
 
   const query = useQuery({
     queryKey: ['admin-nodes', search],

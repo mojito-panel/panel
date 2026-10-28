@@ -13,7 +13,7 @@ import {
   setPrimaryServerAllocationFn,
 } from '~/server/functions/servers';
 import { serverAllocationActionSchema } from '~/validators/server';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { DataTable } from '~/components/data-table/data-table';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
@@ -74,7 +74,7 @@ function ServerNetworkPage() {
     queryKey: ['server', serverId],
     queryFn: () => getServer({ data: { serverId } }),
   });
-  const canEdit = serverCan(serverQuery.data?.viewer?.permissions ?? [], {
+  const canEdit = hasServerPermissions(serverQuery.data?.viewer?.permissions ?? [], {
     'server.network': ['update'],
   });
 

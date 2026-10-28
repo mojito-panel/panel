@@ -8,7 +8,7 @@ import type { RecipeVariable } from '~/contract';
 import { getServerFn, updateServerVariablesFn } from '~/server/functions/servers';
 import { makeUpdateServerVariablesSchema } from '~/validators/server';
 import { ErrorState, PageSkeleton } from '~/components/error/error-state';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { VariableField } from '~/components/variable-field';
 import {
@@ -78,7 +78,7 @@ function ServerVariablesPage() {
   // variable values are not even sent by the server function
   if (
     !server.recipe.start ||
-    !serverCan(server.viewer.permissions, { 'server.variables': ['read'] })
+    !hasServerPermissions(server.viewer.permissions, { 'server.variables': ['read'] })
   ) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -94,7 +94,7 @@ function ServerVariablesPage() {
       // Narrowed above (recipe.start is null without server.variables.read)
       start={server.recipe.start}
       definitions={[...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort)}
-      canUpdate={serverCan(server.viewer.permissions, { 'server.variables': ['update'] })}
+      canUpdate={hasServerPermissions(server.viewer.permissions, { 'server.variables': ['update'] })}
     />
   );
 }

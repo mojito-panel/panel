@@ -10,7 +10,7 @@ import {
   reloadRecipeFn,
   deleteServerFn,
 } from '~/server/functions/servers';
-import { serverCan } from '~/lib/permissions';
+import { hasServerPermissions } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
 import { ErrorState, PageSkeleton } from '~/components/error/error-state';
@@ -87,7 +87,7 @@ function ServerSettingsPage() {
           'Ajuste les variables puis réinstalle le serveur pour appliquer la nouvelle version.',
       });
       if (
-        serverCan(query.data?.viewer.permissions ?? [], { 'server.variables': ['read'] })
+        hasServerPermissions(query.data?.viewer.permissions ?? [], { 'server.variables': ['read'] })
       ) {
         await navigate({ to: '/servers/$serverId/variables', params: { serverId } });
       }
@@ -106,7 +106,7 @@ function ServerSettingsPage() {
   // Per-server grants: reinstall needs server.settings.update, deletion is
   // owner/admin only (non-delegable)
   const viewer = server?.viewer;
-  const canReinstall = !!viewer && serverCan(viewer.permissions, { 'server.settings': ['update'] });
+  const canReinstall = !!viewer && hasServerPermissions(viewer.permissions, { 'server.settings': ['update'] });
   const canDelete = !!viewer && (viewer.isOwner || viewer.isAdmin);
 
   return (

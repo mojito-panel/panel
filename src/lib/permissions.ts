@@ -48,7 +48,7 @@ export const statement = {
   'panel.nodes': ['read', 'create', 'update', 'delete'],
   'panel.recipes': ['read', 'create', 'update', 'delete'],
   'panel.roles': ['read', 'create', 'update', 'delete'],
-  'panel.servers': ['read', 'update', 'delete'],
+  'panel.servers': ['read', 'create', 'update', 'delete'],
   'panel.settings': ['read', 'update'],
 
   // Per-server (Pelican "server permissions", granted to sub-users)
@@ -193,7 +193,7 @@ export function can(
  * works for panel-level grants (session user, custom roles) AND per-server
  * sub-user grants.
  */
-export function canFromPermissions(
+export function hasPermissions(
   permissions: string[],
   request: PermissionRequest,
   connector: 'AND' | 'OR' = 'AND',
@@ -201,12 +201,12 @@ export function canFromPermissions(
   return can(subuserRole(parsePermissions(permissions)), request, connector);
 }
 
-/** Per-server grant check — alias of `canFromPermissions`, for readability. */
-export const serverCan = canFromPermissions;
+/** Per-server grant check — alias of `hasPermissions`, for readability. */
+export const hasServerPermissions = hasPermissions;
 
 /** Entry ticket to the /admin area: any panel-level read permission. */
 export function hasAdminAreaAccess(permissions: string[]): boolean {
-  return canFromPermissions(
+  return hasPermissions(
     permissions,
     {
       'panel.overview': ['read'],

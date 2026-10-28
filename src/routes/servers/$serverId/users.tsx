@@ -14,7 +14,7 @@ import {
   removeServerUserFn,
 } from '~/server/functions/subusers';
 import {
-  serverCan,
+  hasServerPermissions,
   SERVER_PERMISSION_GROUPS,
   type PermissionStatements,
 } from '~/lib/permissions';
@@ -97,9 +97,9 @@ function ServerUsersPage() {
   });
   const permissions = serverQuery.data?.viewer?.permissions ?? [];
 
-  const canCreate = serverCan(permissions, { 'server.users': ['create'] });
-  const canUpdate = serverCan(permissions, { 'server.users': ['update'] });
-  const canRemove = serverCan(permissions, { 'server.users': ['delete'] });
+  const canCreate = hasServerPermissions(permissions, { 'server.users': ['create'] });
+  const canUpdate = hasServerPermissions(permissions, { 'server.users': ['update'] });
+  const canRemove = hasServerPermissions(permissions, { 'server.users': ['delete'] });
 
   const query = useQuery({
     queryKey: ['server-subusers', serverId, search],
@@ -165,7 +165,7 @@ function ServerUsersPage() {
 
   // Only deny once the viewer grants are known — while the server query is
   // in flight the table below renders its own skeleton
-  if (serverQuery.isSuccess && !serverCan(permissions, { 'server.users': ['read'] })) {
+  if (serverQuery.isSuccess && !hasServerPermissions(permissions, { 'server.users': ['read'] })) {
     return (
       <p className="text-sm text-muted-foreground">
         Tu n’as pas la permission de gérer les utilisateurs de ce serveur.
