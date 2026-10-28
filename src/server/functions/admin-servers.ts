@@ -157,7 +157,8 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
  * Live runtime status — ONE agent query (best-effort, like the node page's
  * health ping), syncing the persisted status so the rest of the panel sees
  * it too. Polled by the header at a regular interval; the DB status is the
- * fallback while it is in flight.
+ * fallback while it is in flight. `live` tells the two apart: only a real
+ * agent answer may show the live sonar rings, a DB fallback is never live.
  */
 export const getAdminServerStatusFn = createServerFn({ method: 'GET' })
   .validator(adminServerIdSchema)
@@ -169,19 +170,21 @@ export const getAdminServerStatusFn = createServerFn({ method: 'GET' })
     if (!node) throw new HttpError(500, 'Configuration du serveur incomplète');
 
     let status = server.status;
+    let live = false;
     try {
       const info = await agentGetServer(node, server.id);
       status = info.status;
+      live = true;
       // Sync the persisted status so the rest of the panel sees it too
       if (status !== server.status) {
         server.status = status;
         await em.flush();
       }
     } catch {
-      // Agent unreachable → serve the DB status
+      // Agent unreachable → serve the DB status (never marked live)
     }
 
-    return { status };
+    return { status, live };
   });
 
 // ─── Update (name, owner transfer, limits) ────────────────────────────────────

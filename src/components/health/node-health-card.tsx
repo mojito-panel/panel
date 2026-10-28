@@ -1,6 +1,6 @@
 import { HEALTH_STATS_INTERVAL_MS, type NodeStats } from '~/contract';
+import { LiveIndicator } from '~/components/status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import { StatusBall } from '~/components/status-badge';
 import { useNodeStatsStream } from '~/components/health/use-node-stats-stream';
 import { useFlowSamples } from '~/components/health/use-flow-samples';
 import { Skeleton } from '~/components/ui/skeleton';
@@ -75,27 +75,6 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Pulsing "en direct" pill — lime tint of the status badges, ping halo. */
-function LiveIndicator({ live }: { live: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${
-        live
-          ? 'border-lime-400/50 bg-lime-400/15 text-lime-400'
-          : 'border-border bg-muted text-muted-foreground'
-      }`}
-    >
-      <span className="relative flex size-1.5">
-        {live && (
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime-400 opacity-60" />
-        )}
-        <span className={`relative inline-flex size-1.5 rounded-full ${live ? 'bg-lime-400' : 'bg-muted-foreground'}`} />
-      </span>
-      {live ? 'en direct' : 'connexion…'}
-    </span>
-  );
-}
-
 export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
   const online = node.status === 'online';
   const stream = useNodeStatsStream(node.id);
@@ -132,7 +111,6 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <StatusBall status={online ? 'online' : 'offline'} />
             <CardTitle className="text-base">{node.name}</CardTitle>
             {online && <LiveIndicator live={connection === 'live'} />}
           </div>

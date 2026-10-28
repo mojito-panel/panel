@@ -4,6 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { AppSidebar, type PanelServerStatus } from '~/components/app-sidebar';
+import { isLiveData } from '~/components/status-badge';
 import { AppShell } from '~/components/app-shell';
 import { getServerFn, getServerRuntimeFn } from '~/server/functions/servers';
 
@@ -49,6 +50,9 @@ function ServerLayout() {
   // (the runtime fn returns null when the agent is unreachable)
   const status: PanelServerStatus | undefined =
     runtimeQuery.data?.status ?? undefined;
+  // Sonar rings while the agent answer is fresh (< 20 s) — a null status
+  // (agent unreachable) is never live, whatever the fetch age.
+  const statusLive = status !== undefined && isLiveData(runtimeQuery);
 
   return (
     <TooltipProvider>
@@ -58,6 +62,7 @@ function ServerLayout() {
             id: serverId,
             name: server?.name,
             status,
+            statusLive,
             statusFetching: runtimeQuery.isPending,
             permissions: server?.viewer?.permissions,
             permissionsLoaded: query.isSuccess,

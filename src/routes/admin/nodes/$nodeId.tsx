@@ -28,7 +28,7 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { CardSection, TabsCard } from '~/components/tabs-card';
 import { Skeleton } from '~/components/ui/skeleton';
-import { StatusBadge } from '~/components/status-badge';
+import { StatusBadge, isLiveData } from '~/components/status-badge';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
@@ -111,7 +111,9 @@ function AdminNodeEditPage() {
         {healthQuery.isPending ? (
           <Skeleton className="h-6 w-24 rounded-full" />
         ) : (
-          <StatusBadge status={liveStatus} />
+          // Sonar rings while the health ping is fresh (< 20 s) — the fn
+          // always measures the agent (online OR offline), never errors.
+          <StatusBadge status={liveStatus} live={isLiveData(healthQuery)} />
         )}
       </div>
       <p className="text-muted-foreground">

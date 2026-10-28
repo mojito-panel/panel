@@ -151,3 +151,60 @@
   border-bottom-width: 4px;
   border-bottom-color: color-mix(in oklab, var(--destructive) 30%, transparent);
 }
+
+/* ─── Status indicator animations (components/status-badge.tsx) ────────────── */
+@theme {
+  /* Soft aura expanding around an active status dot (beacon). */
+  --animate-halo: halo 2.4s ease-out infinite;
+  /* Breathing glow of an in-progress LED indicator. */
+  --animate-led: led 1.6s ease-in-out infinite;
+  /* Concentric sonar rings around a live status dot (live data < 20 s). */
+  --animate-live-ring: live-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+  @keyframes halo {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    70%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
+
+  @keyframes led {
+    0%,
+    100% {
+      box-shadow: 0 0 2px 0 currentColor;
+    }
+    50% {
+      box-shadow: 0 0 7px 1.5px currentColor;
+    }
+  }
+
+  @keyframes live-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.6;
+    }
+    75%,
+    100% {
+      transform: scale(3);
+      opacity: 0;
+    }
+  }
+}
+
+/* Decorative rings vanish entirely, the LED settles as a plain dot. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-halo,
+  .animate-live-ring {
+    animation: none;
+    visibility: hidden;
+  }
+
+  .animate-led {
+    animation: none;
+  }
+}

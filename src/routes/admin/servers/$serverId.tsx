@@ -36,7 +36,7 @@ import { adminServersList } from '~/lists/servers';
 import { adminUsersList } from '~/lists/users';
 import { canFromPermissions } from '~/lib/permissions';
 import { useAuth } from '~/contexts/use-auth';
-import { StatusBadge, statusLabel } from '~/components/status-badge';
+import { StatusBadge, isLiveData, statusLabel } from '~/components/status-badge';
 import { CardSection, TabsCard, type TabsCardTab } from '~/components/tabs-card';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -147,7 +147,12 @@ function AdminServerPage() {
             {statusQuery.isPending ? (
               <Skeleton className="h-6 w-24 rounded-full" />
             ) : (
-              <StatusBadge status={statusQuery.data?.status ?? server.status} />
+              // Sonar rings only when the AGENT answered within the last
+              // 20 s — the fn serves the DB status when it cannot (live=false).
+              <StatusBadge
+                status={statusQuery.data?.status ?? server.status}
+                live={(statusQuery.data?.live ?? false) && isLiveData(statusQuery)}
+              />
             )}
             {server.suspended && (
               <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">

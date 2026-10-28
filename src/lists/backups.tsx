@@ -1,4 +1,5 @@
 import { Download, RotateCcw, Trash2 } from 'lucide-react';
+import { InProgressBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import { formatSize } from '~/components/files/format-size';
 import { defineList, field } from '~/lists/define';
@@ -41,19 +42,27 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as BackupStatus[]).map((value
   label: STATUS_LABELS[value],
 }));
 
-/** Small status chip (backups have their own lifecycle, not StatusBadge). */
+/**
+ * Small status chip — in-progress jobs (pending/running/restoring) share
+ * the glass LED pill of the status badges; terminal states keep their
+ * own tint (backups have their own lifecycle, not StatusBadge).
+ */
 function BackupStatusChip({ status }: { status: BackupStatus }) {
-  const cls =
-    status === 'completed'
-      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-      : status === 'failed'
-        ? 'bg-destructive/15 text-destructive'
-        : 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {STATUS_LABELS[status]}
-    </span>
-  );
+  if (status === 'completed') {
+    return (
+      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+        {STATUS_LABELS.completed}
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+        {STATUS_LABELS.failed}
+      </span>
+    );
+  }
+  return <InProgressBadge label={STATUS_LABELS[status]} />;
 }
 
 /** Row actions of the backups list, supplied by the page (mutations + toasts). */

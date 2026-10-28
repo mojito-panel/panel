@@ -137,6 +137,8 @@ interface ServerContext {
   name?: string;
   /** Last-known (DB) status — shown until the live status arrives. */
   status?: PanelServerStatus;
+  /** True while the live status data is fresh (< 20 s) — sonar rings. */
+  statusLive?: boolean;
   /** True while the live agent status query is in flight. */
   statusFetching?: boolean;
   /** Viewer's per-server permissions (flat list) — sub-users see fewer tabs. */
@@ -196,7 +198,7 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
                     <Skeleton className="h-3 w-16" />
                   ) : (
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <StatusBall status={server.status ?? 'unknown'} />
+                      <StatusBall status={server.status ?? 'unknown'} live={server.statusLive} />
                       {statusLabel(server.status ?? 'unknown')}
                     </span>
                   )}

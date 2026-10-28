@@ -1,5 +1,6 @@
-import { Loader2, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
+import { InProgressBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 
 /** Minimal shape of the install status pushed by the agent over the WS. */
@@ -36,9 +37,9 @@ export function InstallNotice({ status, onRetry, retryPending, retryError }: Ins
     );
   }
   return (
-    <p className="flex items-center gap-2 text-sm text-muted-foreground">
-      <Loader2 className="size-4 animate-spin" />
-      Installation en cours — suivez la progression ci-dessous.
+    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <InProgressBadge label="Installation en cours" tone="blue" />
+      <span>— suivez la progression ci-dessous.</span>
     </p>
   );
 }

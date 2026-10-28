@@ -4,7 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
 import { getAdminOverviewFn, getAdminOverviewHealthFn } from '~/server/functions/admin';
 import { adminNodesList } from '~/lists/nodes';
-import { StatusBadge } from '~/components/status-badge';
+import { StatusBadge, isLiveData } from '~/components/status-badge';
 import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
 import {
@@ -141,7 +141,13 @@ function AdminOverviewPage() {
                     {healthQuery.isPending ? (
                       <Skeleton className="h-6 w-24 rounded-full" />
                     ) : (
-                      <StatusBadge status={health?.status ?? node.status} />
+                      // Sonar rings while the ping is fresh (< 20 s) — the
+                      // fn measures every node (online OR offline); a node
+                      // missing from the answer falls back to its DB status.
+                      <StatusBadge
+                        status={health?.status ?? node.status}
+                        live={health != null && isLiveData(healthQuery)}
+                      />
                     )}
                   </div>
                 </div>
