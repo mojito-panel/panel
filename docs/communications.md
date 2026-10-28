@@ -77,7 +77,7 @@ Installation can take minutes (JDK, Mojang JAR…). It starts in the **backgroun
 
 ```mermaid
 sequenceDiagram
-    participant N as Browser (/servers/new)
+    participant N as Browser (/admin/servers/new)
     participant P as Panel (installServerFn)
     participant D as Postgres
     participant A as Agent (POST /servers/install)

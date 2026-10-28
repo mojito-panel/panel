@@ -93,11 +93,11 @@ function AdminServersPage() {
           <CardDescription>
             Tous les serveurs de l’installation, tous propriétaires confondus.
           </CardDescription>
-          {/* Creation stays in the user area (/servers/new): the form installs
-              a server owned by the signed-in admin, like any user. */}
+          {/* Creation form lives at /admin/servers/new — same permission
+              (panel.servers.create), guarded again in its beforeLoad. */}
           {canCreate && (
             <CardAction>
-              <Button render={<Link to="/servers/new" />}>
+              <Button render={<Link to="/admin/servers/new" />}>
                 <Plus />
                 Nouveau serveur
               </Button>

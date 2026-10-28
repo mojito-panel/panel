@@ -10,7 +10,7 @@ import {
   listFreeNodeAllocationsFn,
 } from '~/server/functions/admin';
 import { installServerFn } from '~/server/functions/servers';
-import { userServersList } from '~/lists/user-servers';
+import { adminServersList } from '~/lists/servers';
 import { hasPermissions } from '~/lib/permissions';
 import { createServerSchema, type CreateServerDto } from '~/validators/server';
 import { Button } from '~/components/ui/button';
@@ -26,17 +26,18 @@ import {
 import { VariableField } from '~/components/variable-field';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 
-export const Route = createFileRoute('/_app/servers/new')({
-  // Creation is an admin feature (panel.servers.create) — the form stays in
-  // the user area layout but only admins (or a custom role carrying the
-  // statement) may deploy. Mirrors the server-side gate on installServerFn.
+export const Route = createFileRoute('/admin/servers/new')({
+  // The /admin layout already requires admin area access — this narrows it
+  // to panel.servers.create: a moderator (read-only oversight) or a custom
+  // role without the statement must NOT deploy. Mirrors the server-side
+  // gate on installServerFn.
   beforeLoad: ({ context }) => {
     const user = (context as { user?: { permissions?: string[] } | null }).user;
     if (!user) {
       throw redirect({ to: '/login' });
     }
     if (!hasPermissions(user.permissions ?? [], { 'panel.servers': ['create'] })) {
-      throw redirect({ to: '/servers', search: userServersList.defaultSearch });
+      throw redirect({ to: '/admin/servers', search: adminServersList.defaultSearch });
     }
   },
   component: NewServerPage,
@@ -347,8 +348,8 @@ function NewServerPage() {
       </Card>
 
       <p className="mt-6">
-        <Button variant="ghost" render={<Link to="/servers" search={userServersList.defaultSearch} />}>
-          ← Mes serveurs
+        <Button variant="ghost" render={<Link to="/admin/servers" search={adminServersList.defaultSearch} />}>
+          ← Serveurs
         </Button>
       </p>
     </div>

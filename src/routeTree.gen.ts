@@ -25,12 +25,12 @@ import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as ServersServerIdRouteRouteImport } from './routes/servers/$serverId/route'
 import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
-import { Route as AppServersNewRouteImport } from './routes/_app/servers/new'
 import { Route as AdminNodesIndexRouteImport } from './routes/admin/nodes/index'
 import { Route as AdminNodesNodeIdRouteImport } from './routes/admin/nodes/$nodeId'
 import { Route as AdminRecipesIndexRouteImport } from './routes/admin/recipes/index'
 import { Route as AdminServersIndexRouteImport } from './routes/admin/servers/index'
 import { Route as AdminServersServerIdRouteImport } from './routes/admin/servers/$serverId'
+import { Route as AdminServersNewRouteImport } from './routes/admin/servers/new'
 import { Route as ApiAgentServersRouteImport } from './routes/api/agent/servers'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSftpAuthRouteImport } from './routes/api/sftp/auth'
@@ -127,11 +127,6 @@ const AppServersIndexRoute = AppServersIndexRouteImport.update({
   path: '/servers/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppServersNewRoute = AppServersNewRouteImport.update({
-  id: '/servers/new',
-  path: '/servers/new',
-  getParentRoute: () => AppRoute,
-} as any)
 const AdminNodesIndexRoute = AdminNodesIndexRouteImport.update({
   id: '/nodes/',
   path: '/nodes/',
@@ -155,6 +150,11 @@ const AdminServersIndexRoute = AdminServersIndexRouteImport.update({
 const AdminServersServerIdRoute = AdminServersServerIdRouteImport.update({
   id: '/servers/$serverId',
   path: '/servers/$serverId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminServersNewRoute = AdminServersNewRouteImport.update({
+  id: '/servers/new',
+  path: '/servers/new',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const ApiAgentServersRoute = ApiAgentServersRouteImport.update({
@@ -257,9 +257,9 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/': typeof AdminIndexRoute
-  '/servers/new': typeof AppServersNewRoute
   '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/admin/servers/$serverId': typeof AdminServersServerIdRoute
+  '/admin/servers/new': typeof AdminServersNewRoute
   '/api/agent/servers': typeof ApiAgentServersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sftp/auth': typeof ApiSftpAuthRoute
@@ -294,9 +294,9 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin': typeof AdminIndexRoute
-  '/servers/new': typeof AppServersNewRoute
   '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/admin/servers/$serverId': typeof AdminServersServerIdRoute
+  '/admin/servers/new': typeof AdminServersNewRoute
   '/api/agent/servers': typeof ApiAgentServersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sftp/auth': typeof ApiSftpAuthRoute
@@ -335,9 +335,9 @@ export interface FileRoutesById {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/admin/': typeof AdminIndexRoute
-  '/_app/servers/new': typeof AppServersNewRoute
   '/admin/nodes/$nodeId': typeof AdminNodesNodeIdRoute
   '/admin/servers/$serverId': typeof AdminServersServerIdRoute
+  '/admin/servers/new': typeof AdminServersNewRoute
   '/api/agent/servers': typeof ApiAgentServersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sftp/auth': typeof ApiSftpAuthRoute
@@ -376,9 +376,9 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/users'
     | '/admin/'
-    | '/servers/new'
     | '/admin/nodes/$nodeId'
     | '/admin/servers/$serverId'
+    | '/admin/servers/new'
     | '/api/agent/servers'
     | '/api/auth/$'
     | '/api/sftp/auth'
@@ -413,9 +413,9 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/users'
     | '/admin'
-    | '/servers/new'
     | '/admin/nodes/$nodeId'
     | '/admin/servers/$serverId'
+    | '/admin/servers/new'
     | '/api/agent/servers'
     | '/api/auth/$'
     | '/api/sftp/auth'
@@ -453,9 +453,9 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/users'
     | '/admin/'
-    | '/_app/servers/new'
     | '/admin/nodes/$nodeId'
     | '/admin/servers/$serverId'
+    | '/admin/servers/new'
     | '/api/agent/servers'
     | '/api/auth/$'
     | '/api/sftp/auth'
@@ -605,13 +605,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppServersIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/servers/new': {
-      id: '/_app/servers/new'
-      path: '/servers/new'
-      fullPath: '/servers/new'
-      preLoaderRoute: typeof AppServersNewRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/admin/nodes/': {
       id: '/admin/nodes/'
       path: '/nodes'
@@ -645,6 +638,13 @@ declare module '@tanstack/react-router' {
       path: '/servers/$serverId'
       fullPath: '/admin/servers/$serverId'
       preLoaderRoute: typeof AdminServersServerIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/servers/new': {
+      id: '/admin/servers/new'
+      path: '/servers/new'
+      fullPath: '/admin/servers/new'
+      preLoaderRoute: typeof AdminServersNewRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/api/agent/servers': {
@@ -773,6 +773,7 @@ interface AdminRouteRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   AdminNodesNodeIdRoute: typeof AdminNodesNodeIdRoute
   AdminServersServerIdRoute: typeof AdminServersServerIdRoute
+  AdminServersNewRoute: typeof AdminServersNewRoute
   AdminNodesIndexRoute: typeof AdminNodesIndexRoute
   AdminRecipesIndexRoute: typeof AdminRecipesIndexRoute
   AdminServersIndexRoute: typeof AdminServersIndexRoute
@@ -791,6 +792,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   AdminNodesNodeIdRoute: AdminNodesNodeIdRoute,
   AdminServersServerIdRoute: AdminServersServerIdRoute,
+  AdminServersNewRoute: AdminServersNewRoute,
   AdminNodesIndexRoute: AdminNodesIndexRoute,
   AdminRecipesIndexRoute: AdminRecipesIndexRoute,
   AdminServersIndexRoute: AdminServersIndexRoute,
@@ -803,12 +805,10 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
-  AppServersNewRoute: typeof AppServersNewRoute
   AppServersIndexRoute: typeof AppServersIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppServersNewRoute: AppServersNewRoute,
   AppServersIndexRoute: AppServersIndexRoute,
 }
 
