@@ -170,16 +170,14 @@ function ServerConsolePage() {
 
   // Why the stats cards are empty. The agent only sends stats frames when
   // something runs (live tree or install) — no frame with the server
-  // stopped is its NORMAL answer, not a stale agent; no frame while the
-  // server runs (or an install is active) is the outdated-agent case.
+  // stopped is its NORMAL answer, not a fault; while it runs, the first
+  // sample needs two ticks (baseline + delta), so "waiting" is transient.
   const statsEmptyHint =
-    stats === null
-      ? !isAlive && !installActive
-        ? 'Démarrez le serveur pour collecter ses ressources.'
-        : consoleMode === 'ws'
-          ? 'Aucune statistique reçue — mettez l’agent à jour.'
-          : 'Connexion à l’agent…'
-      : 'En attente de données…';
+    stats === null && !isAlive && !installActive
+      ? 'Démarrez le serveur pour collecter ses ressources.'
+      : consoleMode === 'ws' || stats !== null
+        ? 'En attente de données…'
+        : 'Connexion à l’agent…';
 
   const handleCommand = (e: FormEvent) => {
     e.preventDefault();
