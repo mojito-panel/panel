@@ -258,130 +258,146 @@ function CreateSshKeyDialog({
               }}
               className="space-y-4"
             >
-              <Tabs
-                value={form.getFieldValue('mode')}
-                onValueChange={(v) => v && form.setFieldValue('mode', v as CreateSshKeyDto['mode'])}
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="generate">Générer une paire</TabsTrigger>
-                  <TabsTrigger value="import">Importer une clé</TabsTrigger>
-                </TabsList>
+              {/* The mode drives the Tabs, the visible fields and the submit
+                  label — read REACTIVELY via form.Subscribe (getFieldValue is
+                  a one-time read: without the subscription a tab click
+                  updates the store but never re-renders the dialog). */}
+              <form.Subscribe selector={(s) => s.values.mode}>
+                {(mode) => (
+                  <>
+                    <Tabs
+                      value={mode}
+                      onValueChange={(v) =>
+                        v && form.setFieldValue('mode', v as CreateSshKeyDto['mode'])
+                      }
+                    >
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="generate">Générer une paire</TabsTrigger>
+                        <TabsTrigger value="import">Importer une clé</TabsTrigger>
+                      </TabsList>
 
-                <TabsContent value="generate" className="pt-2">
-                  <p className="text-sm text-muted-foreground">
-                    Une paire Ed25519 est générée par le panel (ssh-keygen). La
-                    clé privée est stockée chiffrée et ne sera plus jamais
-                    affichée — seule la clé publique sera à autoriser sur ton
-                    dépôt.
-                  </p>
-                </TabsContent>
-
-                <TabsContent value="import" className="space-y-4">
-                  <form.Field name="privateKey">
-                    {(field) => (
-                      <div className="space-y-2">
-                        <Label htmlFor="ssh-private-key">Clé privée</Label>
-                        <Textarea
-                          id="ssh-private-key"
-                          rows={6}
-                          placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n…'}
-                          className="font-mono text-xs"
-                          value={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                          onBlur={field.handleBlur}
-                        />
-                        {field.state.meta.errors.length > 0 && (
-                          <p className="text-sm text-destructive">
-                            {field.state.meta.errors[0]?.message}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </form.Field>
-                  <form.Field name="publicKey">
-                    {(field) => (
-                      <div className="space-y-2">
-                        <Label htmlFor="ssh-public-key">Clé publique (optionnelle)</Label>
-                        <Textarea
-                          id="ssh-public-key"
-                          rows={2}
-                          placeholder="ssh-ed25519 AAAA… utilisateur@hôte"
-                          className="font-mono text-xs"
-                          value={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                          onBlur={field.handleBlur}
-                        />
-                        {field.state.meta.errors.length > 0 && (
-                          <p className="text-sm text-destructive">
-                            {field.state.meta.errors[0]?.message}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Laisser vide : la clé publique est déduite de la clé
-                          privée. Si elle est fournie, elle est vérifiée contre
-                          la clé privée.
+                      <TabsContent value="generate" className="space-y-4 pt-2">
+                        <p className="text-sm text-muted-foreground">
+                          Une paire Ed25519 est générée par le panel
+                          (ssh-keygen). La clé privée est stockée chiffrée et
+                          ne sera plus jamais affichée — seule la clé publique
+                          sera à autoriser sur ton dépôt.
                         </p>
-                      </div>
-                    )}
-                  </form.Field>
-                </TabsContent>
-              </Tabs>
+                        <form.Field name="comment">
+                          {(field) => (
+                            <div className="space-y-2">
+                              <Label htmlFor="ssh-key-comment">Commentaire (optionnel)</Label>
+                              <Input
+                                id="ssh-key-comment"
+                                placeholder="mojito-panel"
+                                value={field.state.value}
+                                onChange={(e) => field.handleChange(e.target.value)}
+                                onBlur={field.handleBlur}
+                              />
+                              {field.state.meta.errors.length > 0 && (
+                                <p className="text-sm text-destructive">
+                                  {field.state.meta.errors[0]?.message}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </form.Field>
+                      </TabsContent>
 
-              <form.Field name="name">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="ssh-key-name">Nom d’affichage</Label>
-                    <Input
-                      id="ssh-key-name"
-                      placeholder="Déploiement GitHub"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">{field.state.meta.errors[0]?.message}</p>
-                    )}
-                  </div>
-                )}
-              </form.Field>
+                      <TabsContent value="import" className="space-y-4">
+                        <form.Field name="privateKey">
+                          {(field) => (
+                            <div className="space-y-2">
+                              <Label htmlFor="ssh-private-key">Clé privée</Label>
+                              <Textarea
+                                id="ssh-private-key"
+                                rows={6}
+                                placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n…'}
+                                className="font-mono text-xs"
+                                value={field.state.value}
+                                onChange={(e) => field.handleChange(e.target.value)}
+                                onBlur={field.handleBlur}
+                              />
+                              {field.state.meta.errors.length > 0 && (
+                                <p className="text-sm text-destructive">
+                                  {field.state.meta.errors[0]?.message}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </form.Field>
+                        <form.Field name="publicKey">
+                          {(field) => (
+                            <div className="space-y-2">
+                              <Label htmlFor="ssh-public-key">Clé publique (optionnelle)</Label>
+                              <Textarea
+                                id="ssh-public-key"
+                                rows={2}
+                                placeholder="ssh-ed25519 AAAA… utilisateur@hôte"
+                                className="font-mono text-xs"
+                                value={field.state.value}
+                                onChange={(e) => field.handleChange(e.target.value)}
+                                onBlur={field.handleBlur}
+                              />
+                              {field.state.meta.errors.length > 0 && (
+                                <p className="text-sm text-destructive">
+                                  {field.state.meta.errors[0]?.message}
+                                </p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                Laisser vide : la clé publique est déduite de la
+                                clé privée. Si elle est fournie, elle est
+                                vérifiée contre la clé privée.
+                              </p>
+                            </div>
+                          )}
+                        </form.Field>
+                      </TabsContent>
+                    </Tabs>
 
-              {form.getFieldValue('mode') === 'generate' && (
-                <form.Field name="comment">
-                  {(field) => (
-                    <div className="space-y-2">
-                      <Label htmlFor="ssh-key-comment">Commentaire (optionnel)</Label>
-                      <Input
-                        id="ssh-key-comment"
-                        placeholder="mojito-panel"
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        onBlur={field.handleBlur}
-                      />
-                      {field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">{field.state.meta.errors[0]?.message}</p>
+                    <form.Field name="name">
+                      {(field) => (
+                        <div className="space-y-2">
+                          <Label htmlFor="ssh-key-name">Nom d’affichage</Label>
+                          <Input
+                            id="ssh-key-name"
+                            placeholder="Déploiement GitHub"
+                            value={field.state.value}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            onBlur={field.handleBlur}
+                          />
+                          {field.state.meta.errors.length > 0 && (
+                            <p className="text-sm text-destructive">
+                              {field.state.meta.errors[0]?.message}
+                            </p>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
-                </form.Field>
-              )}
+                    </form.Field>
 
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Annuler
-                </Button>
-                <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
-                  {([canSubmit, isSubmitting]) => (
-                    <Button type="submit" disabled={!canSubmit || isSubmitting || create.isPending}>
-                      <KeySquare />
-                      {create.isPending
-                        ? 'Création…'
-                        : form.getFieldValue('mode') === 'generate'
-                          ? 'Générer la paire'
-                          : 'Importer la clé'}
-                    </Button>
-                  )}
-                </form.Subscribe>
-              </div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                        Annuler
+                      </Button>
+                      <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
+                        {([canSubmit, isSubmitting]) => (
+                          <Button
+                            type="submit"
+                            disabled={!canSubmit || isSubmitting || create.isPending}
+                          >
+                            <KeySquare />
+                            {create.isPending
+                              ? 'Création…'
+                              : mode === 'generate'
+                                ? 'Générer la paire'
+                                : 'Importer la clé'}
+                          </Button>
+                        )}
+                      </form.Subscribe>
+                    </div>
+                  </>
+                )}
+              </form.Subscribe>
             </form>
           </>
         )}
