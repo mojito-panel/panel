@@ -11,11 +11,19 @@ import { Input } from '~/components/ui/input';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { serverBackupsList, type ServerBackupRow } from '~/lists/backups';
 import { getServerFn } from '~/server/functions/servers';
@@ -55,6 +63,8 @@ function ServerBackupsPage() {
   // Pending restore: which backup and whether it truncates the folder.
   const [toRestore, setToRestore] = useState<{ backup: ServerBackupRow; truncate: boolean } | null>(null);
   const [toDelete, setToDelete] = useState<ServerBackupRow | null>(null);
+  // Create dialog, opened from the list card's action button.
+  const [createOpen, setCreateOpen] = useState(false);
 
   const getServer = useServerFn(getServerFn);
   const listBackups = useServerFn(listBackupsFn);
@@ -91,16 +101,6 @@ function ServerBackupsPage() {
     await queryClient.invalidateQueries({ queryKey: ['server-backups', serverId] });
   };
 
-  const create = useMutation({
-    mutationFn: (input: { name?: string }) =>
-      createBackup({ data: { serverId, name: input.name || undefined } }),
-    onSuccess: async () => {
-      await invalidate();
-      toast.success('Sauvegarde démarrée');
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
   const restore = useMutation({
     mutationFn: (input: { backupId: string; truncate: boolean }) =>
       restoreBackup({
@@ -132,15 +132,6 @@ function ServerBackupsPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  // "Create a backup" form — optional name, contents come from the recipe
-  const form = useForm({
-    defaultValues: { name: '' },
-    validators: { onChange: createBackupFormSchema },
-    onSubmit: ({ value }) => {
-      create.mutate({ name: value.name || undefined });
-    },
-  });
-
   // Search updates write the WHOLE validated query back (reducer form would
   // require the raw params type): the page resets below are part of the patch.
   const onSearchChange = (patch: Partial<ListQuery>) =>
@@ -166,78 +157,60 @@ function ServerBackupsPage() {
 
   return (
     <div className="space-y-6">
-      {/* ─── Create a backup ─── */}
+      {/* ─── Backup list — create lives in the card's action, like every list page ─── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sauvegardes</CardTitle>
+          <CardDescription>
+            {includes && includes.length > 0
+              ? `Contenu (recette) : ${includes.join(', ')} — le dossier .bin de l'agent est toujours exclu.`
+              : 'Aucun contenu déclaré par la recette : tout le serveur est sauvegardé (sauf le dossier .bin de l’agent).'}
+          </CardDescription>
+          {canCreate && (
+            <CardAction>
+              <Button onClick={() => setCreateOpen(true)}>
+                <HardDriveDownload />
+                Sauvegarder
+              </Button>
+            </CardAction>
+          )}
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            list={serverBackupsList}
+            rows={query.data?.rows ?? []}
+            rowCount={query.data?.rowCount ?? 0}
+            search={search}
+            onSearchChange={onSearchChange}
+            isPending={query.isPending}
+            isFetching={query.isFetching}
+            error={query.error}
+            emptyMessage="Aucune sauvegarde pour l’instant."
+            rowContext={{
+              canRestore,
+              canDelete,
+              downloading: download.isPending,
+              restoring: restore.isPending,
+              deleting: remove.isPending,
+              onDownload,
+              onRestore,
+              onDelete: setToDelete,
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      {/* ─── Create a backup (dialog opened from the list card's action button) ─── */}
       {canCreate && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Créer une sauvegarde</CardTitle>
-            <CardDescription>
-              {includes && includes.length > 0
-                ? `Contenu (recette) : ${includes.join(', ')} — le dossier .bin de l'agent est toujours exclu.`
-                : 'Aucun contenu déclaré par la recette : tout le serveur est sauvegardé (sauf le dossier .bin de l’agent).'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                form.handleSubmit();
-              }}
-              className="max-w-sm space-y-4"
-            >
-              <form.Field name="name">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="Nom (optionnel)"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
-                        {String(field.state.meta.errors[0])}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </form.Field>
-              <form.Subscribe selector={(s) => [s.isSubmitting, create.isPending]}>
-                {([isSubmitting, pending]) => (
-                  <Button type="submit" disabled={isSubmitting || pending}>
-                    <HardDriveDownload />
-                    {pending ? 'Démarrage…' : 'Sauvegarder'}
-                  </Button>
-                )}
-              </form.Subscribe>
-            </form>
-          </CardContent>
-        </Card>
+        <CreateBackupDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          createBackup={createBackup}
+          serverId={serverId}
+          onCreated={invalidate}
+        />
       )}
 
-      {/* ─── Backup list ─── */}
-      <DataTable
-        list={serverBackupsList}
-        rows={query.data?.rows ?? []}
-        rowCount={query.data?.rowCount ?? 0}
-        search={search}
-        onSearchChange={onSearchChange}
-        isPending={query.isPending}
-        isFetching={query.isFetching}
-        error={query.error}
-        emptyMessage="Aucune sauvegarde pour l’instant."
-        rowContext={{
-          canRestore,
-          canDelete,
-          downloading: download.isPending,
-          restoring: restore.isPending,
-          deleting: remove.isPending,
-          onDownload,
-          onRestore,
-          onDelete: setToDelete,
-        }}
-      />
       <ConfirmDialog
         open={toRestore !== null}
         onOpenChange={(open) => !open && setToRestore(null)}
@@ -274,5 +247,92 @@ function ServerBackupsPage() {
         pending={remove.isPending}
       />
     </div>
+  );
+}
+
+/** "Create a backup" dialog, opened from the list card's action button. */
+function CreateBackupDialog({
+  open,
+  onOpenChange,
+  createBackup,
+  serverId,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  createBackup: (args: { data: { serverId: string; name?: string } }) => Promise<unknown>;
+  serverId: string;
+  onCreated: () => Promise<void>;
+}) {
+  const form = useForm({
+    defaultValues: { name: '' },
+    validators: { onChange: createBackupFormSchema },
+    onSubmit: ({ value }) => {
+      create.mutate({ name: value.name || undefined });
+    },
+  });
+
+  const create = useMutation({
+    mutationFn: (input: { name?: string }) =>
+      createBackup({ data: { serverId, name: input.name } }),
+    onSuccess: async () => {
+      await onCreated();
+      form.reset();
+      onOpenChange(false);
+      toast.success('Sauvegarde démarrée');
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Créer une sauvegarde</DialogTitle>
+          <DialogDescription>
+            Le nom est optionnel — sans nom, la sauvegarde porte la date du jour.
+            Le contenu de l’archive est déclaré par la recette du serveur.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+        >
+          <form.Field name="name">
+            {(field) => (
+              <div className="space-y-2">
+                <Input
+                  placeholder="Nom (optionnel)"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">
+                    {field.state.meta.errors[0]?.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Annuler
+            </Button>
+            <form.Subscribe selector={(s) => [s.isSubmitting, create.isPending]}>
+              {([isSubmitting, pending]) => (
+                <Button type="submit" disabled={isSubmitting || pending}>
+                  <HardDriveDownload />
+                  {pending ? 'Démarrage…' : 'Sauvegarder'}
+                </Button>
+              )}
+            </form.Subscribe>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
