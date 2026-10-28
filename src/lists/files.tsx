@@ -1,6 +1,7 @@
 import { Download, File as FileIcon, Folder, Pencil, Trash2 } from 'lucide-react';
 import { formatSize } from '~/components/files/format-size';
 import { Button } from '~/components/ui/button';
+import { Checkbox } from '~/components/ui/checkbox';
 import type { FileObject } from '~/contract';
 import { defineList, field } from '~/lists/define';
 
@@ -13,11 +14,28 @@ import { defineList, field } from '~/lists/define';
  * same columns as every other list of the panel.
  */
 
+/** Bulk selection state of the listing, supplied by the browser. */
+export interface FilesSelection {
+  /** Selected entry paths of the current directory. */
+  selected: readonly string[];
+  /** Whether every listed entry is selected (the header checkbox). */
+  allSelected: boolean;
+  /** Whether at least one listed entry is selected (the indeterminate state). */
+  someSelected: boolean;
+  onToggle: (path: string) => void;
+  onToggleAll: () => void;
+}
+
 /** Row actions of the listing, supplied by the browser. */
 export interface FilesContext {
   canWrite: boolean;
   canDelete: boolean;
   deleting: boolean;
+  /**
+   * Bulk selection — null hides the checkboxes (no delete grant, or a
+   * context-less render like a picker).
+   */
+  selection: FilesSelection | null;
   onOpen: (entry: FileObject) => void;
   onDownload: (entry: FileObject) => void;
   onRename: (entry: FileObject) => void;
@@ -30,6 +48,33 @@ export const filesList = defineList<FileObject, FilesContext>({
   mode: 'client',
   defaultSort: { column: 'name', desc: false },
   columns: {
+    select: {
+      header: '',
+      pinned: true,
+      headerCell: (context) => {
+        const selection = context?.selection;
+        if (!selection) return null;
+        return (
+          <Checkbox
+            checked={selection.allSelected}
+            indeterminate={!selection.allSelected && selection.someSelected}
+            onCheckedChange={() => selection.onToggleAll()}
+            aria-label="Tout sélectionner"
+          />
+        );
+      },
+      cell: (entry, context) => {
+        const selection = context?.selection;
+        if (!selection) return null;
+        return (
+          <Checkbox
+            checked={selection.selected.includes(entry.path)}
+            onCheckedChange={() => selection.onToggle(entry.path)}
+            aria-label={`Sélectionner ${entry.name}`}
+          />
+        );
+      },
+    },
     name: {
       header: 'Nom',
       sort: true,

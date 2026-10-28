@@ -44,13 +44,15 @@ function buildColumns<TData extends RowData, TContext>(
 ): ColumnDef<typeof clientTableFeatures, TData>[] {
   return Object.entries(list.columns).map(([id, definition]) => ({
     id,
-    header: ({ column }) => (
-      <DataTableColumnHeader
-        column={column}
-        title={definition.header}
-        className={definition.className}
-      />
-    ),
+    header: definition.headerCell
+      ? () => definition.headerCell?.(rowContext)
+      : ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title={definition.header}
+            className={definition.className}
+          />
+        ),
     cell: ({ row }) => definition.cell(row.original, rowContext as TContext),
     enableSorting: Boolean(definition.sort),
     enableColumnFilter: Boolean(definition.filter),

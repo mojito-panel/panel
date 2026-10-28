@@ -156,6 +156,12 @@ export interface ListColumn<TData, TContext = void> {
   /** Shown in the table header and reused as the filter button label. */
   header: ReactNode;
   /**
+   * Fully custom header, replacing the standard label (e.g. the "select all"
+   * checkbox of a selection column). Receives the page's `rowContext` — like
+   * the cells, it must degrade to nothing when the context is absent.
+   */
+  headerCell?: (context: TContext | undefined) => ReactNode;
+  /**
    * Cell renderer — receives the row as returned by the list server function,
    * plus the page-provided `rowContext` (row actions need the page's mutations;
    * the list module cannot import a server function that imports it back).

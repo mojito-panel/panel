@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useState, type ChangeEvent } from 'react';
-import { ArrowUp, FilePlus, FolderPlus, Upload } from 'lucide-react';
+import { useEffect, useState, type ChangeEvent } from 'react';
+import { ArrowUp, FilePlus, FolderPlus, Trash2, Upload } from 'lucide-react';
 
 import { MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
 import { ListTable } from '~/components/data-table/list-table';
@@ -55,6 +55,10 @@ export function FileBrowser({
   const [renaming, setRenaming] = useState<FileObject | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<FileObject | null>(null);
+  /** Bulk selection confirm — the paths live in `selected` below. */
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  /** Selected entry paths of the CURRENT directory — cleared on navigation. */
+  const [selected, setSelected] = useState<string[]>([]);
   /** Table state of the listing (client mode: filtered/sorted/paginated locally). */
   const [tableQuery, setTableQuery] = useState<ListQuery>(filesList.defaultSearch);
 
@@ -62,6 +66,27 @@ export function FileBrowser({
     queryKey: ['files', serverId, dir],
     queryFn: () => listFiles({ data: { serverId, path: dir } }),
   });
+
+  // A selection belongs to one directory listing — navigating clears it.
+  useEffect(() => {
+    setSelected([]);
+  }, [dir]);
+
+  // The agent's os.ReadDir never yields "."/".." (the parent has its own
+  // navigation button above the table), but the listing is agent-controlled
+  // data driving destructive row actions — it is never trusted blindly.
+  const entries = (query.data?.files ?? []).filter(
+    (entry) => entry.name !== '.' && entry.name !== '..',
+  );
+  const allSelected = entries.length > 0 && entries.every((entry) => selected.includes(entry.path));
+  const someSelected = entries.some((entry) => selected.includes(entry.path));
+
+  const toggleSelected = (path: string) =>
+    setSelected((previous) =>
+      previous.includes(path) ? previous.filter((p) => p !== path) : [...previous, path],
+    );
+
+  const toggleAll = () => setSelected(allSelected ? [] : entries.map((entry) => entry.path));
 
   const create = useMutation({
     mutationFn: (data: { name: string; type: 'file' | 'directory' }) =>
@@ -92,6 +117,7 @@ export function FileBrowser({
     mutationFn: (paths: string[]) => deleteEntries({ data: { serverId, paths } }),
     onSuccess: () => {
       setError(null);
+      setSelected([]);
       onRefresh();
     },
     onError: (err) => setError(err.message),
@@ -198,6 +224,30 @@ export function FileBrowser({
 
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
 
+      {/* Bulk selection bar — bulk delete of the checked entries */}
+      {canDelete && selected.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
+          <span>
+            {selected.length} élément{selected.length > 1 ? 's' : ''} sélectionné
+            {selected.length > 1 ? 's' : ''}
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={remove.isPending}
+              onClick={() => setConfirmBulk(true)}
+            >
+              <Trash2 />
+              Supprimer la sélection
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Create entry (name + type) */}
       {creating && (
         <CreateEntryForm
@@ -229,7 +279,7 @@ export function FileBrowser({
             <div className="p-3">
               <ListTable
                 list={filesList}
-                rows={query.data?.files ?? []}
+                rows={entries}
                 search={tableQuery}
                 onSearchChange={(patch) =>
                   setTableQuery((previous) => mergeQuery(previous, patch))
@@ -240,6 +290,15 @@ export function FileBrowser({
                   canWrite,
                   canDelete,
                   deleting: remove.isPending,
+                  selection: canDelete
+                    ? {
+                        selected,
+                        allSelected,
+                        someSelected,
+                        onToggle: toggleSelected,
+                        onToggleAll: toggleAll,
+                      }
+                    : null,
                   onOpen: open,
                   onDownload: (entry) => onDownload(entry.path),
                   onRename: (entry) => setRenaming(entry),
@@ -267,6 +326,20 @@ export function FileBrowser({
           setToDelete(null);
         }}
         title={toDelete ? `Supprimer « ${toDelete.name} »${toDelete.isDirectory ? ' et son contenu' : ''} ?` : ''}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={remove.isPending}
+      />
+      <ConfirmDialog
+        open={confirmBulk}
+        onOpenChange={(open) => !open && setConfirmBulk(false)}
+        onConfirm={() => {
+          remove.mutate([...selected]);
+          setConfirmBulk(false);
+        }}
+        title={`Supprimer ${selected.length} élément${selected.length > 1 ? 's' : ''} ?`}
+        description="Les dossiers sélectionnés seront supprimés avec tout leur contenu. Cette action est irréversible."
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
         destructive
