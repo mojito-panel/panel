@@ -507,7 +507,13 @@ describe('consoleServerMessageSchema', () => {
           cpuMaxPercent: 300,
           memoryMaxMb: 1024,
           samples: [
-            { at: 1790000000000, cpuPercent: 142.5, memoryMb: 512, ioBytesPerSec: 20480 },
+            {
+              at: 1790000000000,
+              cpuPercent: 142.5,
+              memoryMb: 512,
+              rxBytesPerSec: 20480,
+              txBytesPerSec: 4096,
+            },
           ],
         },
       }).success,
@@ -534,7 +540,9 @@ describe('consoleServerMessageSchema', () => {
         stats: {
           cpuMaxPercent: 300,
           memoryMaxMb: 1024,
-          samples: [{ at: 1790000000000, cpuPercent: -1, memoryMb: 0, ioBytesPerSec: 0 }],
+          samples: [
+            { at: 1790000000000, cpuPercent: -1, memoryMb: 0, rxBytesPerSec: 0, txBytesPerSec: 0 },
+          ],
         },
       }).success,
     ).toBe(false);

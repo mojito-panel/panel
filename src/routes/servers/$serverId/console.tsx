@@ -61,7 +61,7 @@ function ServerConsolePage() {
   const [consoleMode, setConsoleMode] = useState<ConsoleMode>('connecting');
   // Install status pushed by the agent over the WS (banner + DB sync trigger)
   const [installStatus, setInstallStatus] = useState<ConsoleInstallStatus | null>(null);
-  // Resource stats pushed by the agent over the WS (CPU/RAM/I-O cards):
+  // Resource stats pushed by the agent over the WS (CPU/RAM/Réseau cards):
   // the full frame on connect (ring replay = the last minute of the
   // tree's life), then one per second — always authoritative.
   const [stats, setStats] = useState<ServerStats | null>(null);
@@ -300,7 +300,7 @@ function ServerConsolePage() {
         )}
       </Card>
 
-      {/* Live resource cards (CPU / RAM / I-O) — under the console. */}
+      {/* Live resource cards (CPU / RAM / Réseau) — under the console. */}
       <ServerStatsCards stats={stats} hint={statsEmptyHint} />
       {submitCommand.isError && (
         <p className="text-sm text-destructive">{submitCommand.error.message}</p>

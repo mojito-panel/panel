@@ -321,8 +321,8 @@ export type ConsoleError = z.infer<typeof consoleErrorSchema>;
 /**
  * One resource sample of a server's WHOLE process tree (every member of
  * its Job Object), collected by the agent's sampling loop while the tree
- * is up. CPU and I/O are deltas between two ticks; memory is the summed
- * working set of the tree's processes.
+ * is up. CPU and network are deltas between two ticks; memory is the
+ * job-wide commit charge.
  */
 export const serverStatsSampleSchema = z.object({
   /** Unix ms — the sample's collection time. */
@@ -332,14 +332,12 @@ export const serverStatsSampleSchema = z.object({
    * (docker stats semantics), so the chart can scale to the allocation.
    */
   cpuPercent: z.number().min(0),
-  /** Summed working set of the tree's processes (MB). */
+  /** Job-wide commit charge of the tree (MB) — the quantity SERVER_MEMORY caps. */
   memoryMb: z.number().min(0),
-  /**
-   * Job I/O throughput (bytes/s): file, network and device traffic
-   * BLENDED — Windows exposes no per-process network counter, so the
-   * panel labels the card "I/O", never "network".
-   */
-  ioBytesPerSec: z.number().min(0),
+  /** Download rate — every network receive of the tree's processes (bytes/s). */
+  rxBytesPerSec: z.number().min(0),
+  /** Upload rate — every network send of the tree's processes (bytes/s). */
+  txBytesPerSec: z.number().min(0),
 });
 
 export type ServerStatsSample = z.infer<typeof serverStatsSampleSchema>;
