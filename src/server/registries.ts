@@ -409,6 +409,20 @@ export async function importRegistryEntry(
 }
 
 /**
+ * Reads ONE catalog entry (with its cached file content) — the "view JSON"
+ * dialog of the catalog page. The list queries exclude the content column;
+ * this fetches a single entry on demand.
+ */
+export async function getRegistryEntry(
+  registryId: string,
+  path: string,
+): Promise<{ path: string; content: string }> {
+  const entry = await orm.em.findOne(RegistryEntry, { registryId, path });
+  if (!entry) throw new HttpError(404, 'Fichier introuvable dans le registre');
+  return { path: entry.path, content: entry.content };
+}
+
+/**
  * Updates one recipe from its source (the "Mettre à jour" action of
  * /admin/recipes): resolves the content — direct URL fetch, registry cache,
  * or a depth-1 clone when the registry is gone — validates it against the

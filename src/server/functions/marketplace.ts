@@ -99,6 +99,14 @@ function findEntryRecipe(
   return recipes.find((recipe) => recipe.sourceUrl === sourceUrl) ?? null;
 }
 
+/** Light columns of a catalog entry — all the status counts need. */
+interface RegistryEntryLight {
+  registryId: string;
+  path: string;
+  sha: string;
+  error: string | null;
+}
+
 /** Catalog entry + its local recipe, in the shape `computeEntryStatus` takes. */
 function toStatusInput(
   entry: { error: string | null; sha: string },
@@ -135,7 +143,7 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
     const recipes = await loadRecipeSourceRows();
 
     const registryIds = registries.map((registry) => registry.id);
-    const entries = registryIds.length
+    const entryRows = registryIds.length
       ? await em.find(
           RegistryEntry,
           { registryId: { $in: registryIds } },
@@ -144,6 +152,12 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           { fields: ['registryId', 'path', 'sha', 'error'] },
         )
       : [];
+    const entries: RegistryEntryLight[] = entryRows.map((entry) => ({
+      registryId: entry.registryId,
+      path: entry.path,
+      sha: entry.sha,
+      error: entry.error ?? null,
+    }));
 
     // Attached SSH keys (private repositories) — names for the card badges.
     const keyIds = [
@@ -156,7 +170,7 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
     const keys = keyIds.length > 0 ? await em.find(SshKey, { id: { $in: keyIds } }) : [];
     const keyNames = new Map(keys.map((key) => [key.id, key.name]));
 
-    const entriesByRegistry = new Map<string, RegistryEntry[]>();
+    const entriesByRegistry = new Map<string, RegistryEntryLight[]>();
     for (const entry of entries) {
       const group = entriesByRegistry.get(entry.registryId);
       if (group) group.push(entry);
@@ -293,7 +307,10 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
       const recipe = registry.branchName
         ? findEntryRecipe(recipes, registry, entry.path)
         : null;
-      const { status } = toStatusInput(entry, recipe);
+      const { status } = toStatusInput(
+        { error: entry.error ?? null, sha: entry.sha },
+        recipe,
+      );
       return {
         path: entry.path,
         name: entry.name ?? null,

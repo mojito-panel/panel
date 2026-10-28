@@ -259,7 +259,11 @@ function MarketplacePage() {
                       la commande <code>git clone</code> du panel (Git pour
                       Windows requis). Dépôts publics en https ; dépôts privés
                       en ssh via une clé (voir{' '}
-                      <Link to="/admin/keys" className="underline hover:text-foreground">
+                      <Link
+                        to="/admin/keys"
+                        search={adminSshKeysList.defaultSearch}
+                        className="underline hover:text-foreground"
+                      >
                         Clés SSH
                       </Link>
                       ). La première synchronisation démarre dès l’ajout.
@@ -523,7 +527,11 @@ function SshKeyPicker({
       <p className="text-xs text-muted-foreground">
         Dépôt privé en ssh ? Sélectionne la clé de déploiement à utiliser pour
         le clonage —{' '}
-        <Link to="/admin/keys" className="underline hover:text-foreground">
+        <Link
+          to="/admin/keys"
+          search={adminSshKeysList.defaultSearch}
+          className="underline hover:text-foreground"
+        >
           gérer les clés
         </Link>
         .

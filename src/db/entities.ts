@@ -180,7 +180,7 @@ export const RegistryEntry = defineEntity({
     id: p.string().primary(),
     registryId: p.string().fieldName('registry_id'),
     /** POSIX path inside the repo — "steamcmd/enshrouded/recipe-enshrouded.json". */
-    path: p.string(512),
+    path: p.string().length(512),
     /** Canonical recipe hash (raw-text hash when the file does not validate). */
     sha: p.text(),
     /** Recipe id when the file validates — the slug a local import would use. */
