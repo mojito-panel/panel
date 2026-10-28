@@ -1,9 +1,4 @@
 import '@tanstack/react-start/server-only';
-import { z, ZodError } from 'zod';
-import { nanoid } from '~/lib/nanoid';
-import { Recipe, Server } from '~/db/entities';
-import { orm } from './orm';
-import { HttpError } from './session';
 import {
   isRuntimeRecipeJson,
   parseRecipe,
@@ -13,6 +8,14 @@ import {
   type RecipeVariable,
   type RuntimeRecipe,
 } from '~/contract';
+import { z } from 'zod';
+import { nanoid } from '~/lib/nanoid';
+import { recipeErrorMessage } from '~/lib/recipe-source';
+import { Recipe, Server } from '~/db/entities';
+import { orm } from './orm';
+import { HttpError } from './session';
+
+export { recipeErrorMessage };
 
 /**
  * Recipe business service (server-only): plain functions doing all the DB
@@ -20,11 +23,53 @@ import {
  * request context (the `withOrmContext` middleware).
  */
 
+/** Provenance stamp applied on import/update — see ~/lib/recipe-source. */
+export interface RecipeSourceStamp {
+  /** Canonical source URL (direct or git-fragment form). */
+  url: string;
+  /** Canonical hash of the imported content. */
+  sha: string;
+}
+
 /**
- * Parses raw JSON and validates it against the contract (recipe v4) —
- * runtime recipes (type: runtime) are validated by their own schema.
+ * Converts a github.com/…/blob/… URL to raw.githubusercontent.com/…/raw/…
+ * (catalog GitHub URLs point to the web page, not the raw file).
  */
-export function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
+export function normalizeRecipeUrl(url: string): string {
+  const parsed = new URL(url);
+  if (parsed.hostname === 'github.com' && parsed.pathname.includes('/blob/')) {
+    return `https://raw.githubusercontent.com${parsed.pathname.replace('/blob/', '/raw/')}${parsed.search}`;
+  }
+  return url;
+}
+
+/** Downloads a recipe's JSON from a URL (.json extension required). */
+export async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
+  const normalized = normalizeRecipeUrl(url);
+  if (!new URL(normalized).pathname.toLowerCase().endsWith('.json')) {
+    throw new HttpError(400, 'Seules les URLs pointant vers un .json sont supportées');
+  }
+  let res: Response;
+  try {
+    res = await fetch(normalized, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    throw new HttpError(502, `Téléchargement impossible : ${(err as Error).message}`);
+  }
+  if (!res.ok) {
+    throw new HttpError(502, `Téléchargement échoué (HTTP ${res.status})`);
+  }
+  const body = await res.text();
+  if (body.length > 2_000_000) {
+    throw new HttpError(413, 'Fichier trop volumineux (> 2 Mo)');
+  }
+  return body;
+}
+
+/** Validates a raw recipe string, mapping the error to a 400 HttpError. */
+export function assertValidRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
   const parsed: unknown = JSON.parse(raw);
   if (isRuntimeRecipeJson(parsed)) {
     return parseRuntimeRecipe(parsed);
@@ -32,29 +77,15 @@ export function parseRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
   return parseRecipe(parsed);
 }
 
-/** Readable error message (ZodError → list of fields in error). */
-export function recipeErrorMessage(err: unknown): string {
-  if (err instanceof ZodError) {
-    return err.issues.map((i) => `${i.path.join('.') || 'recipe'} : ${i.message}`).join(' · ');
-  }
-  return (err as Error).message;
-}
-
-/** Validates a raw recipe string, mapping the error to a 400 HttpError. */
-export function assertValidRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
-  try {
-    return parseRecipeJson(raw);
-  } catch (err) {
-    throw new HttpError(400, `Recipe invalide : ${recipeErrorMessage(err)}`);
-  }
-}
-
 /**
  * Creates the recipe or updates the one with the same slug (upsert —
- * a re-import updates the definition, like Pelican eggs).
+ * a re-import updates the definition, like Pelican eggs). An optional
+ * provenance stamp records WHERE the recipe came from and refreshes the
+ * update-check columns (the imported content IS the upstream content).
  */
 export async function upsertRecipe(
   recipeJson: RecipeDefinition | RuntimeRecipe,
+  source?: RecipeSourceStamp,
 ): Promise<{ slug: string; name: string; created: boolean }> {
   const em = orm.em;
   const existing = await em.findOne(Recipe, { slug: recipeJson.id });
@@ -64,6 +95,12 @@ export async function upsertRecipe(
     existing.name = recipeJson.name;
     existing.schemaVersion = recipeJson.schema_version;
     existing.json = recipeJson;
+    if (source) {
+      existing.sourceUrl = source.url;
+      existing.sourceSha = source.sha;
+      existing.remoteSha = source.sha;
+      existing.remoteCheckedAt = now;
+    }
     existing.updatedAt = now;
     await em.flush();
     return { slug: existing.slug, name: existing.name, created: false };
@@ -75,6 +112,9 @@ export async function upsertRecipe(
     name: recipeJson.name,
     schemaVersion: recipeJson.schema_version,
     json: recipeJson,
+    ...(source
+      ? { sourceUrl: source.url, sourceSha: source.sha, remoteSha: source.sha, remoteCheckedAt: now }
+      : {}),
     createdAt: now,
     updatedAt: now,
   });
@@ -86,7 +126,7 @@ export async function upsertRecipe(
 /**
  * Creates a new recipe from the editor UI. Unlike an import (upsert), a
  * slug clash is REJECTED — the editor shows the conflict instead of
- * silently overwriting.
+ * silently overwriting. Hand-made recipes carry no provenance stamp.
  */
 export async function createRecipe(
   recipeJson: RecipeDefinition | RuntimeRecipe,
@@ -117,6 +157,8 @@ export async function createRecipe(
 /**
  * Edits an existing recipe: the full JSON is revalidated against the
  * contract schema. The slug (id) can change — uniqueness is rechecked.
+ * An edit via the editor is a LOCAL change: the provenance columns are left
+ * alone so the next check flags it as "modified locally".
  */
 export async function updateRecipe(
   recipeId: string,

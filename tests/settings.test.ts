@@ -157,6 +157,7 @@ describe('settings validators', () => {
       favicon: '',
       gravatar: true,
       registrationEnabled: false,
+      marketplaceSyncInterval: 360,
     });
     expect(parsed.success).toBe(true);
   });

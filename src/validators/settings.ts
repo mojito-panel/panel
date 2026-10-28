@@ -14,6 +14,12 @@ export const updateGeneralSettingsSchema = z.object({
     .refine((v) => v === '' || /^https?:\/\/\S+$/.test(v), 'Doit être une URL http(s) ou vide'),
   gravatar: z.boolean(),
   registrationEnabled: z.boolean(),
+  /** Minutes between automatic marketplace update checks (0 = manual only). */
+  marketplaceSyncInterval: z
+    .number()
+    .int('Doit être un nombre entier de minutes')
+    .min(0, 'Doit être positif (0 = manuel)')
+    .max(10080, 'Maximum une semaine (10080 minutes)'),
 });
 
 export type UpdateGeneralSettingsDto = z.infer<typeof updateGeneralSettingsSchema>;
@@ -48,6 +54,7 @@ export interface GeneralSettingsDto {
   favicon: string;
   gravatar: boolean;
   registrationEnabled: boolean;
+  marketplaceSyncInterval: number;
 }
 
 /** Mail tab state — `hasPassword` replaces the stored secret (never sent). */

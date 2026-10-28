@@ -48,6 +48,7 @@ export function GeneralSettingsForm({
       favicon: general.favicon,
       gravatar: general.gravatar,
       registrationEnabled: general.registrationEnabled,
+      marketplaceSyncInterval: general.marketplaceSyncInterval,
     },
     onSubmit: ({ value }) => update.mutate(value),
   });
@@ -124,6 +125,28 @@ export function GeneralSettingsForm({
             onChange={(checked) => field.handleChange(checked)}
             forced={forced['app:registration_enabled']}
           />
+        )}
+      </form.Field>
+
+      <form.Field name="marketplaceSyncInterval">
+        {(field) => (
+          <SettingFieldShell
+            id="settings-marketplace-interval"
+            label="Vérification marketplace (minutes)"
+            hint="Intervalle entre les vérifications automatiques des mises à jour de recettes (registres et URLs). 0 = vérification manuelle uniquement — le bouton « Synchroniser » reste toujours disponible."
+            forced={forced['marketplace:sync_interval']}
+            errors={field.state.meta.errors}
+          >
+            <Input
+              id="settings-marketplace-interval"
+              type="number"
+              min={0}
+              value={field.state.value}
+              onChange={(e) => field.handleChange(Number(e.target.value))}
+              onBlur={field.handleBlur}
+              disabled={forced['marketplace:sync_interval'] !== undefined}
+            />
+          </SettingFieldShell>
         )}
       </form.Field>
 

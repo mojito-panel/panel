@@ -21,6 +21,7 @@ import {
   getRecipeFn,
   deleteRecipeFn,
 } from '~/server/functions/admin';
+import { updateRecipeFromSourceFn } from '~/server/functions/marketplace';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
@@ -61,6 +62,7 @@ function AdminRecipesPage() {
   const importEgg = useServerFn(importEggFn);
   const getRecipe = useServerFn(getRecipeFn);
   const deleteRecipe = useServerFn(deleteRecipeFn);
+  const updateFromSource = useServerFn(updateRecipeFromSourceFn);
 
   const query = useQuery({
     queryKey: ['admin-recipes', search],
@@ -95,6 +97,16 @@ function AdminRecipesPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
       toast.success('Recette supprimée');
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  /** Update one recipe from its source (registry, git clone or direct URL). */
+  const updateSource = useMutation({
+    mutationFn: (recipeId: string) => updateFromSource({ data: { recipeId } }),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      toast.success(`Recette « ${result.name} » mise à jour depuis sa source`);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -144,10 +156,14 @@ function AdminRecipesPage() {
     form.reset();
   };
 
-  /** Re-import from the recipe's updateUrl (upsert — same behavior as Pelican). */
-  const updateFromUrl = (url: string) => {
-    importMutation.reset();
-    importMutation.mutate({ jsons: [], urls: [url] });
+  /** Update from the source — asks first when local changes would be overwritten. */
+  const [recipeToUpdate, setRecipeToUpdate] = useState<AdminRecipeRow | null>(null);
+  const onUpdateFromSource = (recipe: AdminRecipeRow) => {
+    if (recipe.sourceStatus === 'modified_locally') {
+      setRecipeToUpdate(recipe);
+      return;
+    }
+    updateSource.mutate(recipe.id);
   };
 
   /** Export: downloads the recipe's raw JSON. */
@@ -198,7 +214,8 @@ function AdminRecipesPage() {
             rowContext={{
               importing: importMutation.isPending,
               deleting: remove.isPending,
-              onUpdateFromUrl: (url) => updateFromUrl(url),
+              updating: updateSource.isPending,
+              onUpdateFromSource: onUpdateFromSource,
               onExport: (recipe) => void exportRecipe(recipe),
               onDelete: setRecipeToDelete,
             }}
@@ -220,6 +237,23 @@ function AdminRecipesPage() {
         cancelLabel="Annuler"
         destructive
         pending={remove.isPending}
+      />
+
+      {/* A source update overwrites local edits — the admin confirms first. */}
+      <ConfirmDialog
+        open={recipeToUpdate !== null}
+        onOpenChange={(open) => {
+          if (!open) setRecipeToUpdate(null);
+        }}
+        onConfirm={() => {
+          if (recipeToUpdate) updateSource.mutate(recipeToUpdate.id);
+          setRecipeToUpdate(null);
+        }}
+        title={`« ${recipeToUpdate?.name} » a été modifiée localement`}
+        description="Mettre à jour depuis la source écrasera les modifications locales — la recette redeviendra identique au fichier du registre."
+        confirmLabel="Mettre à jour quand même"
+        cancelLabel="Annuler"
+        pending={updateSource.isPending}
       />
 
       {/* ─── Import panel (hidden behind the list card's action button) ─── */}

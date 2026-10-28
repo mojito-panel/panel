@@ -78,6 +78,7 @@ export const getSettingsFn = createServerFn({ method: 'GET' })
         favicon: values['app:favicon'],
         gravatar: parseSettingBool(values['app:gravatar']),
         registrationEnabled: parseSettingBool(values['app:registration_enabled']),
+        marketplaceSyncInterval: Number(values['marketplace:sync_interval']),
       },
       mail: {
         // Casts: the write path only stores valid values (validated enums)
@@ -108,6 +109,7 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
       SETTING_KEYS.appFavicon,
       SETTING_KEYS.appGravatar,
       SETTING_KEYS.appRegistrationEnabled,
+      SETTING_KEYS.marketplaceSyncInterval,
     ];
     assertNotForced(keys);
 
@@ -116,6 +118,7 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
       'app:favicon': data.favicon,
       'app:gravatar': formatSettingBool(data.gravatar),
       'app:registration_enabled': formatSettingBool(data.registrationEnabled),
+      'marketplace:sync_interval': String(data.marketplaceSyncInterval),
     });
 
     return { updated: true };

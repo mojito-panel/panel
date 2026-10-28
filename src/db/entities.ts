@@ -1,4 +1,5 @@
 import { defineEntity, p } from '@mikro-orm/core';
+import type { RegistryEntry } from '~/lib/recipe-source';
 
 // ─── better-auth (migrations managed by MikroORM like everything else) ──────
 
@@ -108,6 +109,51 @@ export const Recipe = defineEntity({
     name: p.string().length(128),
     schemaVersion: p.integer().fieldName('schema_version').default(1),
     json: p.json<Record<string, unknown>>(),
+    /**
+     * Provenance — WHERE this recipe came from (~/lib/recipe-source):
+     * a direct https .json URL, or "<repo>#<branch>:<path>" for a registry
+     * file. Null = hand-made: no update checks, the editor is the truth.
+     */
+    sourceUrl: p.text().fieldName('source_url').nullable(),
+    /** Canonical hash of the recipe as imported/updated from the source. */
+    sourceSha: p.text().fieldName('source_sha').nullable(),
+    /**
+     * Canonical hash of the upstream content at the last successful check —
+     * null WITH remote_checked_at set means the check ran and found nothing
+     * usable (the file disappeared upstream).
+     */
+    remoteSha: p.text().fieldName('remote_sha').nullable(),
+    remoteCheckedAt: p.datetime().fieldName('remote_checked_at').nullable(),
+    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+  },
+});
+
+/**
+ * A recipe REGISTRY: any public https git repository added from the admin
+ * marketplace, whose recipe files are imported in one click and checked for
+ * updates. The sync (pg-boss job, src/server/registries.ts) clones the repo
+ * depth 1, builds the catalog entries and caches them on the row — imports
+ * read from the cache, they never clone.
+ */
+export const RecipeRegistry = defineEntity({
+  name: 'recipe_registry',
+  properties: {
+    id: p.string().primary(),
+    name: p.string().length(128),
+    /** Canonical https git URL of the repository (~/lib/recipe-source). */
+    url: p.text(),
+    /** Branch tracked by the syncs — '' = the repository's default branch. */
+    branch: p.string().length(128).default(''),
+    /** Branch name the last sync resolved — feeds the recipe source URLs. */
+    branchName: p.string().length(128).default(''),
+    /** Catalog cache of the last sync (content included — null before it). */
+    entries: p.json<RegistryEntry[]>().nullable(),
+    /** HEAD commit SHA of the last sync — registry bookkeeping. */
+    headSha: p.text().nullable(),
+    lastSyncedAt: p.datetime().nullable(),
+    /** Last sync failure (null on success) — shown on the marketplace page. */
+    lastError: p.text().nullable(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },

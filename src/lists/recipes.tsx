@@ -1,8 +1,10 @@
 import { Link } from '@tanstack/react-router';
-import { Download, Pencil, RefreshCw } from 'lucide-react';
+import { Download, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
 import { defineList, field } from '~/lists/define';
+import { parseRecipeSource, type RecipeSourceStatus } from '~/lib/recipe-source';
 
 /**
  * /admin/recipes — every recipe imported in the panel (Pelican "Eggs").
@@ -20,7 +22,10 @@ export interface AdminRecipeRow {
   /** Recipe type — 'runtime' badges the row, null = a regular app recipe. */
   type: string | null;
   variableCount: number;
-  updateUrl: string | null;
+  /** Provenance — the stored source URL, or the recipe's own update_url. */
+  sourceUrl: string | null;
+  /** Update status relative to the source (~/lib/recipe-source). */
+  sourceStatus: RecipeSourceStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,9 +34,18 @@ export interface AdminRecipeRow {
 export interface AdminRecipesContext {
   importing: boolean;
   deleting: boolean;
-  onUpdateFromUrl: (url: string) => void;
+  updating: boolean;
+  onUpdateFromSource: (recipe: AdminRecipeRow) => void;
   onExport: (recipe: AdminRecipeRow) => void;
   onDelete: (recipe: AdminRecipeRow) => void;
+}
+
+/** Compact display of a source URL — git fragments read as repo + path. */
+function sourceLabel(sourceUrl: string): string {
+  const source = parseRecipeSource(sourceUrl);
+  if (!source) return sourceUrl;
+  if (source.kind === 'direct') return source.url;
+  return `${source.repoUrl} · ${source.path}`;
 }
 
 export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>({
@@ -67,19 +81,25 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
       header: 'Variables',
       cell: (recipe) => <span className="text-muted-foreground">{recipe.variableCount}</span>,
     },
-    updateUrl: {
-      header: 'Mise à jour',
+    source: {
+      header: 'Source',
       cell: (recipe) =>
-        recipe.updateUrl ? (
+        recipe.sourceUrl ? (
           <span
             className="block max-w-xs truncate text-xs text-muted-foreground"
-            title={recipe.updateUrl}
+            title={recipe.sourceUrl}
           >
-            {recipe.updateUrl}
+            {sourceLabel(recipe.sourceUrl)}
           </span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
+    },
+    sourceStatus: {
+      header: 'Mise à jour',
+      // Display-only: the status is computed from the source columns at read
+      // time (canonical hashes), so it has no SQL path to filter or sort on.
+      cell: (recipe) => <RecipeSourceStatusBadge status={recipe.sourceStatus} />,
     },
     updatedAt: {
       header: 'Modifiée le',
@@ -106,14 +126,13 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
         // A picker renders this list without a page — nothing to act on.
         context === undefined ? null : (
         <div className="flex justify-end gap-1">
-          {recipe.updateUrl && (
+          {recipe.sourceUrl && (
             <Button
               variant="ghost"
               size="sm"
-              title="Re-importer depuis l'URL de mise à jour"
-              disabled={context.importing}
-              onClick={() => context.onUpdateFromUrl(recipe.updateUrl as string)}
-
+              title="Re-importer depuis la source"
+              disabled={context.importing || context.updating}
+              onClick={() => context.onUpdateFromSource(recipe)}
             >
               <RefreshCw />
               Mettre à jour
@@ -137,6 +156,7 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
             disabled={context.deleting}
             onClick={() => context.onDelete(recipe)}
           >
+            <Trash2 />
             Supprimer
           </Button>
         </div>

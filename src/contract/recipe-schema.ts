@@ -452,6 +452,19 @@ export function safeParseRecipe(data: unknown) {
 }
 
 /**
+ * Parses raw JSON TEXT and validates it against the contract — a runtime
+ * recipe (type: "runtime") is validated by its own schema, an app recipe by
+ * the app schema. Throws (JSON.parse or ZodError) on invalid input.
+ */
+export function parseRecipeJson(raw: string): Recipe | RuntimeRecipe {
+  const parsed: unknown = JSON.parse(raw);
+  if (isRuntimeRecipeJson(parsed)) {
+    return parseRuntimeRecipe(parsed);
+  }
+  return parseRecipe(parsed);
+}
+
+/**
  * Extracts the variable names referenced in a `{{VAR}}` template.
  * UPPERCASE only — the agent's system variables are included.
  */

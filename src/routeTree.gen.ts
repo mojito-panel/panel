@@ -25,6 +25,7 @@ import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as ServersServerIdRouteRouteImport } from './routes/servers/$serverId/route'
 import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
+import { Route as AdminMarketplaceIndexRouteImport } from './routes/admin/marketplace/index'
 import { Route as AdminNodesIndexRouteImport } from './routes/admin/nodes/index'
 import { Route as AdminNodesNodeIdRouteImport } from './routes/admin/nodes/$nodeId'
 import { Route as AdminRecipesIndexRouteImport } from './routes/admin/recipes/index'
@@ -43,6 +44,7 @@ import { Route as ServersServerIdNetworkRouteImport } from './routes/servers/$se
 import { Route as ServersServerIdSettingsRouteImport } from './routes/servers/$serverId/settings'
 import { Route as ServersServerIdUsersRouteImport } from './routes/servers/$serverId/users'
 import { Route as ServersServerIdVariablesRouteImport } from './routes/servers/$serverId/variables'
+import { Route as AdminMarketplaceRegistryIdIndexRouteImport } from './routes/admin/marketplace/$registryId/index'
 import { Route as AdminRecipesRecipeIdIndexRouteImport } from './routes/admin/recipes/$recipeId/index'
 import { Route as AdminRecipesNewIndexRouteImport } from './routes/admin/recipes/new/index'
 import { Route as ServersServerIdSchedulesIndexRouteImport } from './routes/servers/$serverId/schedules/index'
@@ -126,6 +128,11 @@ const AppServersIndexRoute = AppServersIndexRouteImport.update({
   id: '/servers/',
   path: '/servers/',
   getParentRoute: () => AppRoute,
+} as any)
+const AdminMarketplaceIndexRoute = AdminMarketplaceIndexRouteImport.update({
+  id: '/marketplace/',
+  path: '/marketplace/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminNodesIndexRoute = AdminNodesIndexRouteImport.update({
   id: '/nodes/',
@@ -218,6 +225,12 @@ const ServersServerIdVariablesRoute =
     path: '/variables',
     getParentRoute: () => ServersServerIdRouteRoute,
   } as any)
+const AdminMarketplaceRegistryIdIndexRoute =
+  AdminMarketplaceRegistryIdIndexRouteImport.update({
+    id: '/marketplace/$registryId/',
+    path: '/marketplace/$registryId/',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
 const AdminRecipesRecipeIdIndexRoute =
   AdminRecipesRecipeIdIndexRouteImport.update({
     id: '/recipes/$recipeId/',
@@ -272,10 +285,12 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers/': typeof AppServersIndexRoute
+  '/admin/marketplace/': typeof AdminMarketplaceIndexRoute
   '/admin/nodes/': typeof AdminNodesIndexRoute
   '/admin/recipes/': typeof AdminRecipesIndexRoute
   '/admin/servers/': typeof AdminServersIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
+  '/admin/marketplace/$registryId/': typeof AdminMarketplaceRegistryIdIndexRoute
   '/admin/recipes/$recipeId/': typeof AdminRecipesRecipeIdIndexRoute
   '/admin/recipes/new/': typeof AdminRecipesNewIndexRoute
   '/servers/$serverId/schedules/': typeof ServersServerIdSchedulesIndexRoute
@@ -309,10 +324,12 @@ export interface FileRoutesByTo {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers': typeof AppServersIndexRoute
+  '/admin/marketplace': typeof AdminMarketplaceIndexRoute
   '/admin/nodes': typeof AdminNodesIndexRoute
   '/admin/recipes': typeof AdminRecipesIndexRoute
   '/admin/servers': typeof AdminServersIndexRoute
   '/servers/$serverId': typeof ServersServerIdIndexRoute
+  '/admin/marketplace/$registryId': typeof AdminMarketplaceRegistryIdIndexRoute
   '/admin/recipes/$recipeId': typeof AdminRecipesRecipeIdIndexRoute
   '/admin/recipes/new': typeof AdminRecipesNewIndexRoute
   '/servers/$serverId/schedules': typeof ServersServerIdSchedulesIndexRoute
@@ -350,10 +367,12 @@ export interface FileRoutesById {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/_app/servers/': typeof AppServersIndexRoute
+  '/admin/marketplace/': typeof AdminMarketplaceIndexRoute
   '/admin/nodes/': typeof AdminNodesIndexRoute
   '/admin/recipes/': typeof AdminRecipesIndexRoute
   '/admin/servers/': typeof AdminServersIndexRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
+  '/admin/marketplace/$registryId/': typeof AdminMarketplaceRegistryIdIndexRoute
   '/admin/recipes/$recipeId/': typeof AdminRecipesRecipeIdIndexRoute
   '/admin/recipes/new/': typeof AdminRecipesNewIndexRoute
   '/servers/$serverId/schedules/': typeof ServersServerIdSchedulesIndexRoute
@@ -391,10 +410,12 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/servers/'
+    | '/admin/marketplace/'
     | '/admin/nodes/'
     | '/admin/recipes/'
     | '/admin/servers/'
     | '/servers/$serverId/'
+    | '/admin/marketplace/$registryId/'
     | '/admin/recipes/$recipeId/'
     | '/admin/recipes/new/'
     | '/servers/$serverId/schedules/'
@@ -428,10 +449,12 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/servers'
+    | '/admin/marketplace'
     | '/admin/nodes'
     | '/admin/recipes'
     | '/admin/servers'
     | '/servers/$serverId'
+    | '/admin/marketplace/$registryId'
     | '/admin/recipes/$recipeId'
     | '/admin/recipes/new'
     | '/servers/$serverId/schedules'
@@ -468,10 +491,12 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/_app/servers/'
+    | '/admin/marketplace/'
     | '/admin/nodes/'
     | '/admin/recipes/'
     | '/admin/servers/'
     | '/servers/$serverId/'
+    | '/admin/marketplace/$registryId/'
     | '/admin/recipes/$recipeId/'
     | '/admin/recipes/new/'
     | '/servers/$serverId/schedules/'
@@ -605,6 +630,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppServersIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/admin/marketplace/': {
+      id: '/admin/marketplace/'
+      path: '/marketplace'
+      fullPath: '/admin/marketplace/'
+      preLoaderRoute: typeof AdminMarketplaceIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/nodes/': {
       id: '/admin/nodes/'
       path: '/nodes'
@@ -731,6 +763,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdVariablesRouteImport
       parentRoute: typeof ServersServerIdRouteRoute
     }
+    '/admin/marketplace/$registryId/': {
+      id: '/admin/marketplace/$registryId/'
+      path: '/marketplace/$registryId'
+      fullPath: '/admin/marketplace/$registryId/'
+      preLoaderRoute: typeof AdminMarketplaceRegistryIdIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/recipes/$recipeId/': {
       id: '/admin/recipes/$recipeId/'
       path: '/recipes/$recipeId'
@@ -774,9 +813,11 @@ interface AdminRouteRouteChildren {
   AdminNodesNodeIdRoute: typeof AdminNodesNodeIdRoute
   AdminServersServerIdRoute: typeof AdminServersServerIdRoute
   AdminServersNewRoute: typeof AdminServersNewRoute
+  AdminMarketplaceIndexRoute: typeof AdminMarketplaceIndexRoute
   AdminNodesIndexRoute: typeof AdminNodesIndexRoute
   AdminRecipesIndexRoute: typeof AdminRecipesIndexRoute
   AdminServersIndexRoute: typeof AdminServersIndexRoute
+  AdminMarketplaceRegistryIdIndexRoute: typeof AdminMarketplaceRegistryIdIndexRoute
   AdminRecipesRecipeIdIndexRoute: typeof AdminRecipesRecipeIdIndexRoute
   AdminRecipesNewIndexRoute: typeof AdminRecipesNewIndexRoute
 }
@@ -793,9 +834,11 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminNodesNodeIdRoute: AdminNodesNodeIdRoute,
   AdminServersServerIdRoute: AdminServersServerIdRoute,
   AdminServersNewRoute: AdminServersNewRoute,
+  AdminMarketplaceIndexRoute: AdminMarketplaceIndexRoute,
   AdminNodesIndexRoute: AdminNodesIndexRoute,
   AdminRecipesIndexRoute: AdminRecipesIndexRoute,
   AdminServersIndexRoute: AdminServersIndexRoute,
+  AdminMarketplaceRegistryIdIndexRoute: AdminMarketplaceRegistryIdIndexRoute,
   AdminRecipesRecipeIdIndexRoute: AdminRecipesRecipeIdIndexRoute,
   AdminRecipesNewIndexRoute: AdminRecipesNewIndexRoute,
 }

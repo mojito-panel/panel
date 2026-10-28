@@ -3,6 +3,7 @@ import { initOrm } from '~/db';
 import { isSecretInsecure } from '~/server/crypto';
 import { startQueue } from '~/server/queue';
 import { startScheduleRunner } from '~/server/schedules';
+import { startMarketplaceRunner } from '~/server/registries';
 
 /**
  * Custom server entrypoint — TanStack Start detects src/server.ts automatically.
@@ -37,6 +38,7 @@ console.log('[bootstrap] MikroORM migrations OK');
 // task worker + its tick interval (boot sweep included).
 await startQueue();
 startScheduleRunner();
+startMarketplaceRunner();
 
 export default createServerEntry({
   fetch(request) {

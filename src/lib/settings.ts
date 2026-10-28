@@ -32,6 +32,10 @@ export const SETTING_KEYS = {
   mailEncryption: 'mail:smtp:encryption',
   mailFromAddress: 'mail:from:address',
   mailFromName: 'mail:from:name',
+  /** Marketplace (recipe registries): minutes between automatic checks. */
+  marketplaceSyncInterval: 'marketplace:sync_interval',
+  /** Marketplace: timestamp of the last automatic check (internal). */
+  marketplaceLastCheck: 'marketplace:last_check',
 } as const;
 
 export type SettingName = keyof typeof SETTING_KEYS;
@@ -65,6 +69,11 @@ export const SETTING_DEFAULTS: Record<SettingKey, string> = {
   'mail:smtp:encryption': 'tls',
   'mail:from:address': '',
   'mail:from:name': 'Mojito Panel',
+  // Automatic update checks (registries + direct-URL sources) run at boot
+  // then every N minutes; 0 = manual only (the Sync buttons always work).
+  'marketplace:sync_interval': '360',
+  // Empty = never checked (the first sweep stamps it).
+  'marketplace:last_check': '',
 };
 
 /** Secrets stored encrypted at rest and never round-tripped to the client. */

@@ -82,6 +82,19 @@ docs/              # Architecture documentation
 ## Documentation
 
 - [Panel ↔ Agent ↔ Web client communications](docs/communications.md) — detailed flows with Mermaid diagrams: authentication, live installation tracking, WS console (JWT), power actions, reinstallation, variable editing, status lifecycle.
+- **Recipe marketplace** (`/admin/marketplace`) — any git repository can be added
+  as a registry: public **https** (GitHub, GitLab, Gitea, self-hosted…) or
+  **ssh** (`ssh://…` or `git@host:path` — SSH registries clone with the system
+  `git` binary, inheriting the panel host's git/ssh configuration, so private
+  repositories work through the panel user's `~/.ssh` keys; Git must be installed
+  on the panel host for SSH). Syncs are durable pg-boss jobs: a scheduled sweep
+  (interval in `/admin/settings`, default 6 h, 0 = manual) clones each registry
+  depth 1, caches the catalog (`recipe-*.json` files, their validation state
+  and optional vertical cover images as base64) and stamps the upstream hashes;
+  the "Mettre à jour" actions compare canonical content hashes
+  (formatting-independent). Recipes keep a source URL (`<repo>#<branch>:<path>`
+  for registry files, a direct URL otherwise) so update checks work whatever
+  the origin — the Pelican-style `update_url` seeds the source of legacy recipes.
 
 ## Configuration
 

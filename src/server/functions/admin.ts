@@ -25,16 +25,20 @@ import {
   revokeAllocation,
 } from '../nodes';
 import {
-  parseRecipeJson,
   recipeErrorMessage,
   assertValidRecipeJson,
+  fetchRecipeJsonFromUrl,
+  normalizeRecipeUrl,
   upsertRecipe,
   createRecipe,
   updateRecipe,
   requireRecipe,
   deleteRecipe,
   storedRecipeVariables,
+  type RecipeSourceStamp,
 } from '../recipes';
+import { canonicalRecipeHash } from '../registry-entries';
+import { computeRecipeStatus, type RecipeSourceStatus } from '~/lib/recipe-source';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import {
   createNodeSchema,
@@ -58,7 +62,7 @@ import {
   deleteRecipeSchema,
 } from '~/validators/recipe';
 import { importEgg } from '~/contract/egg-import';
-import type { RecipeVariable } from '~/contract';
+import { parseRecipeJson, type RecipeVariable } from '~/contract';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
@@ -406,43 +410,6 @@ export const revokeAllocationFn = createServerFn({ method: 'POST' })
 // ─── Recipes ───────────────────────────────────────────────────────────────────
 
 /**
- * Converts a github.com/…/blob/… URL to raw.githubusercontent.com/…/raw/…
- * (catalog GitHub URLs point to the web page, not the raw file).
- */
-function normalizeRecipeUrl(url: string): string {
-  const parsed = new URL(url);
-  if (parsed.hostname === 'github.com' && parsed.pathname.includes('/blob/')) {
-    return `https://raw.githubusercontent.com${parsed.pathname.replace('/blob/', '/raw/')}${parsed.search}`;
-  }
-  return url;
-}
-
-/** Downloads a recipe's JSON from a URL (.json extension required). */
-async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
-  const normalized = normalizeRecipeUrl(url);
-  if (!new URL(normalized).pathname.toLowerCase().endsWith('.json')) {
-    throw new HttpError(400, 'Seules les URLs pointant vers un .json sont supportées');
-  }
-  let res: Response;
-  try {
-    res = await fetch(normalized, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch (err) {
-    throw new HttpError(502, `Téléchargement impossible : ${(err as Error).message}`);
-  }
-  if (!res.ok) {
-    throw new HttpError(502, `Téléchargement échoué (HTTP ${res.status})`);
-  }
-  const body = await res.text();
-  if (body.length > 2_000_000) {
-    throw new HttpError(413, 'Fichier trop volumineux (> 2 Mo)');
-  }
-  return body;
-}
-
-/**
  * Admin recipe list (/admin/recipes) — filter/sort/pagination run in the
  * database (`adminRecipesList`).
  */
@@ -461,19 +428,34 @@ export const listRecipesFn = createServerFn({ method: 'POST' })
 
     return {
       rowCount,
-      rows: rows.map((recipe): AdminRecipeRow => ({
-        id: recipe.id,
-        slug: recipe.slug,
-        name: recipe.name,
+      rows: rows.map((recipe): AdminRecipeRow => {
         /** Recipe type ('runtime' badges the list row, null = app recipe). */
-        type: typeof recipe.json.type === 'string' ? recipe.json.type : null,
-        /** Number of declared variables (auto-generated form at creation). */
-        variableCount: storedRecipeVariables(recipe.json).length,
-        updateUrl:
-          typeof recipe.json.update_url === 'string' ? recipe.json.update_url : null,
-        createdAt: recipe.createdAt,
-        updatedAt: recipe.updatedAt,
-      })),
+        const type = typeof recipe.json.type === 'string' ? recipe.json.type : null;
+        /** Provenance — the stored stamp, or the recipe's own update_url. */
+        const sourceUrl =
+          recipe.sourceUrl ??
+          (typeof recipe.json.update_url === 'string' ? recipe.json.update_url : null);
+        const storedSha = canonicalRecipeHash(recipe.json);
+        const sourceStatus: RecipeSourceStatus = computeRecipeStatus({
+          sourceUrl,
+          sourceSha: recipe.sourceSha ?? null,
+          remoteSha: recipe.remoteSha ?? null,
+          remoteCheckedAt: recipe.remoteCheckedAt ?? null,
+          storedSha,
+        });
+
+        return {
+          id: recipe.id,
+          slug: recipe.slug,
+          name: recipe.name,
+          type,
+          variableCount: storedRecipeVariables(recipe.json).length,
+          sourceUrl,
+          sourceStatus,
+          createdAt: recipe.createdAt,
+          updatedAt: recipe.updatedAt,
+        };
+      }),
     };
   });
 
@@ -526,7 +508,7 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
         const raw = source.url ? await fetchRecipeJsonFromUrl(source.url) : source.raw;
         if (!raw) throw new HttpError(400, 'JSON vide');
         const recipeJson = parseRecipeJson(raw);
-        const saved = await upsertRecipe(recipeJson);
+        const saved = await upsertRecipe(recipeJson, recipeSourceStamp(recipeJson, source.url));
         imported.push({ ...saved, source: label });
       } catch (err) {
         failed.push({ source: label, error: recipeErrorMessage(err) });
@@ -535,6 +517,25 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
 
     return { imported, failed };
   });
+
+/**
+ * Provenance of an import (~/lib/recipe-source): a URL import records that
+ * URL (normalized — github blob → raw) as the recipe's source; a paste/file
+ * import falls back to the recipe's own `update_url` when it carries one.
+ * Either way the imported content is the baseline of the update checks.
+ */
+function recipeSourceStamp(
+  recipeJson: { update_url?: string },
+  url?: string,
+): RecipeSourceStamp | undefined {
+  if (url) {
+    return { url: normalizeRecipeUrl(url), sha: canonicalRecipeHash(recipeJson) };
+  }
+  if (recipeJson.update_url) {
+    return { url: normalizeRecipeUrl(recipeJson.update_url), sha: canonicalRecipeHash(recipeJson) };
+  }
+  return undefined;
+}
 
 /**
  * PTDL_v2 (Pelican egg) import: maps the egg to a recipe v3 and upserts
@@ -563,7 +564,8 @@ export const importEggFn = createServerFn({ method: 'POST' })
       throw new HttpError(400, `Œuf invalide : ${recipeErrorMessage(err)}`);
     }
 
-    const saved = await upsertRecipe(recipeJson);
+    // The mapped egg keeps its update_url — it becomes the recipe's source.
+    const saved = await upsertRecipe(recipeJson, recipeSourceStamp(recipeJson));
     return { ...saved, warnings };
   });
 
