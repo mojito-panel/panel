@@ -7,7 +7,8 @@ import type {
   Verification,
   Node,
   Recipe,
-  RecipeRegistry,
+  Registry,
+  RegistryEntry,
   SshKey,
   Server,
   Allocation,
@@ -28,7 +29,8 @@ export interface IAccount extends InferEntity<typeof Account> {}
 export interface IVerification extends InferEntity<typeof Verification> {}
 export interface INode extends InferEntity<typeof Node> {}
 export interface IRecipe extends InferEntity<typeof Recipe> {}
-export interface IRecipeRegistry extends InferEntity<typeof RecipeRegistry> {}
+export interface IRegistry extends InferEntity<typeof Registry> {}
+export interface IRegistryEntry extends InferEntity<typeof RegistryEntry> {}
 export interface ISshKey extends InferEntity<typeof SshKey> {}
 export interface IServer extends InferEntity<typeof Server> {}
 export interface IAllocation extends InferEntity<typeof Allocation> {}

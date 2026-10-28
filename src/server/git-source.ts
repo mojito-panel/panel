@@ -32,6 +32,11 @@ export interface GitCloneResult {
   headSha: string;
   /** Branch name the clone resolved (registry default, or the tracked ref). */
   branch: string;
+  /**
+   * Cover artwork of the repository itself (base64 data URL) — the repo-root
+   * `cover.png|jpg|jpeg|webp`. Null when the repo ships none.
+   */
+  cover: string | null;
 }
 
 /** One recipe file of a clone, with its optional vertical cover (data URL). */
@@ -92,13 +97,32 @@ export async function cloneRecipeFiles(
 
   try {
     const resolved = await cloneRepository(url, branch, dir, sshEnv);
-    return { files: await readRecipeFiles(dir), ...resolved };
+    return { files: await readRecipeFiles(dir), cover: await readRootCover(dir), ...resolved };
   } finally {
     // Best effort: an abandoned (timed-out) clone may still be writing — a
     // failed removal only leaks a temp directory until the OS cleans it.
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     if (sshDir) await rm(sshDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/**
+ * Reads the REPO-ROOT cover — `cover.png`, `cover.jpg`, `cover.jpeg` or
+ * `cover.webp` at the root of the clone — the registry's own artwork
+ * (distinct from the per-recipe sibling covers). Base64 data URL, null when
+ * the repo ships none (the UI renders a generated gradient instead).
+ */
+async function readRootCover(root: string): Promise<string | null> {
+  for (const [name, mime] of Object.entries(COVER_FILES)) {
+    try {
+      const buffer = await readFile(join(root, name));
+      if (buffer.byteLength === 0 || buffer.byteLength > MAX_COVER_BYTES) continue;
+      return `data:${mime};base64,${buffer.toString('base64')}`;
+    } catch {
+      // No such file — try the next extension.
+    }
+  }
+  return null;
 }
 
 /**

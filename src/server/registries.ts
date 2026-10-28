@@ -1,7 +1,7 @@
 import '@tanstack/react-start/server-only';
 import type { Job } from 'pg-boss';
-import { Recipe, RecipeRegistry, SshKey } from '~/db/entities';
-import type { IRecipe, IRecipeRegistry, ISshKey } from '~/db/types';
+import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
+import type { IRecipe, IRegistry, IRegistryEntry, ISshKey } from '~/db/types';
 import { parseRecipeJson } from '~/contract';
 import { nanoid } from '~/lib/nanoid';
 import {
@@ -9,7 +9,6 @@ import {
   formatGitSource,
   parseRecipeSource,
   type GitRecipeSource,
-  type RegistryEntry,
 } from '~/lib/recipe-source';
 import { orm, runWithOrmContext } from './orm';
 import { HttpError } from './session';
@@ -17,7 +16,12 @@ import { decryptSecret } from './crypto';
 import { requireSshKey } from './ssh-keys';
 import { getQueue, startQueue } from './queue';
 import { getSettingValue, writeSettings } from './settings';
-import { buildRegistryEntries, canonicalRecipeHash, sha256Text } from './registry-entries';
+import {
+  buildRegistryEntries,
+  canonicalRecipeHash,
+  sha256Text,
+  type RegistryEntryDraft,
+} from './registry-entries';
 import { cloneRecipeFiles, readGitFile } from './git-source';
 import {
   fetchRecipeJsonFromUrl,
@@ -31,8 +35,13 @@ import {
  * Recipe marketplace service (server-only) — registries, syncs and the
  * unified recipe update checks.
  *
- * A REGISTRY is any public https git repository of recipes. Its sync is a
- * durable pg-boss job on the `marketplace-sync` queue:
+ * A REGISTRY is any git repository — public https or ssh, GitHub, GitLab,
+ * Gitea, self-hosted… Its sync clones it depth 1, validates every recipe
+ * file into `registry_entry` rows (delete + bulk insert per sync), caches
+ * the repo-root cover on the row and stamps the upstream hashes of the
+ * imported recipes. A failed sync keeps the previous catalog and lands its
+ * error on the row. Its transport is a durable pg-boss job on the
+ * `marketplace-sync` queue:
  *
  *   - manual: "Sync now" (one registry) sends `{ registryId }` — collapsed by
  *     a 60 s singleton key so double-clicks cannot stack clones;
@@ -76,7 +85,7 @@ export async function addRegistry(input: {
   branch: string;
   /** SSH key for a PRIVATE repository — '' / null = none (public https). */
   sshKeyId?: string | null;
-}): Promise<IRecipeRegistry> {
+}): Promise<IRegistry> {
   const em = orm.em;
 
   let url: string;
@@ -86,7 +95,7 @@ export async function addRegistry(input: {
     throw new HttpError(422, (err as Error).message);
   }
 
-  const clash = await em.findOne(RecipeRegistry, { url });
+  const clash = await em.findOne(Registry, { url });
   if (clash) {
     throw new HttpError(409, 'Ce dépôt est déjà enregistré comme registre');
   }
@@ -94,17 +103,17 @@ export async function addRegistry(input: {
   // A key must exist when given ('' is the form's "none" sentinel).
   const sshKeyId = input.sshKeyId ? (await requireSshKey(input.sshKeyId)).id : null;
 
-  const registry = em.create(RecipeRegistry, {
+  const registry = em.create(Registry, {
     id: nanoid(),
     name: input.name,
     url,
     branch: input.branch,
     branchName: '',
-    entries: null,
     headSha: null,
     lastSyncedAt: null,
     lastError: null,
     sshKeyId,
+    cover: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -129,7 +138,7 @@ export async function updateRegistry(input: {
   sshKeyId?: string | null;
 }): Promise<{ synced: boolean }> {
   const em = orm.em;
-  const registry = await em.findOne(RecipeRegistry, { id: input.registryId });
+  const registry = await em.findOne(Registry, { id: input.registryId });
   if (!registry) throw new HttpError(404, 'Registre introuvable');
 
   const sshKeyId = input.sshKeyId ? (await requireSshKey(input.sshKeyId)).id : null;
@@ -155,9 +164,11 @@ export async function updateRegistry(input: {
  */
 export async function deleteRegistry(registryId: string): Promise<void> {
   const em = orm.em;
-  const registry = await em.findOne(RecipeRegistry, { id: registryId });
+  const registry = await em.findOne(Registry, { id: registryId });
   if (!registry) throw new HttpError(404, 'Registre introuvable');
 
+  // Loose ids (no FK cascade) — the catalog rows go with their registry.
+  await em.nativeDelete(RegistryEntry, { registryId });
   em.remove(registry);
   await em.flush();
 }
@@ -174,29 +185,32 @@ export async function enqueueRegistrySync(registryId: string): Promise<void> {
 // ─── Sync ─────────────────────────────────────────────────────────────────────
 
 /**
- * Syncs one registry: clone depth 1, build the catalog, cache it on the
- * row and stamp the upstream hashes of the recipes imported from it. A
- * failure lands in `lastError` (the previous catalog stays readable).
+ * Syncs one registry: clone depth 1, validate every recipe file into
+ * `registry_entry` rows (the previous set is REPLACED), cache the repo-root
+ * cover on the row and stamp the upstream hashes of the recipes imported
+ * from it. A failure lands in `lastError` (the previous catalog stays
+ * readable).
  */
-async function syncRegistryRow(registry: IRecipeRegistry): Promise<void> {
+async function syncRegistryRow(registry: IRegistry): Promise<void> {
   const em = orm.em;
   try {
     const sshKey = await sshKeyOf(registry);
-    const { files, headSha, branch } = await cloneRecipeFiles(
+    const { files, headSha, branch, cover } = await cloneRecipeFiles(
       registry.url,
       registry.branch,
       sshKey ? decryptSecret(sshKey.privateKey) : null,
     );
 
-    const entries = buildRegistryEntries(files);
-    registry.entries = entries;
+    const drafts = buildRegistryEntries(files);
+    registry.cover = cover;
     registry.headSha = headSha;
     registry.branchName = branch;
     registry.lastSyncedAt = new Date();
     registry.lastError = null;
     await em.flush();
 
-    await stampRegistryRecipes(registry, entries);
+    await replaceRegistryEntries(registry.id, drafts);
+    await stampRegistryRecipes(registry, drafts);
   } catch (err) {
     registry.lastSyncedAt = new Date();
     registry.lastError = (err as Error).message;
@@ -205,31 +219,67 @@ async function syncRegistryRow(registry: IRecipeRegistry): Promise<void> {
 }
 
 /**
+ * Replaces the catalog of one registry: every previous `registry_entry` row
+ * goes, the fresh draft set is bulk-inserted (one flush). The catalog is
+ * small (recipes repos carry dozens of files, not thousands) and the sync
+ * is never hot — a wholesale replace keeps the table strictly equal to the
+ * last clone, with no diff logic to get wrong.
+ */
+async function replaceRegistryEntries(registryId: string, drafts: RegistryEntryDraft[]): Promise<void> {
+  const em = orm.em;
+  await em.nativeDelete(RegistryEntry, { registryId });
+
+  const now = new Date();
+  for (const draft of drafts) {
+    em.persist(
+      em.create(RegistryEntry, {
+        id: nanoid(),
+        registryId,
+        path: draft.path,
+        sha: draft.sha,
+        slug: draft.slug,
+        name: draft.name,
+        type: draft.type,
+        description: draft.description,
+        error: draft.error,
+        cover: draft.cover,
+        content: draft.content,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+  }
+  await em.flush();
+}
+
+/**
  * The SSH key a registry clones with — null when the registry has none
  * (public https, or the panel host's own ssh configuration).
  */
-async function sshKeyOf(registry: IRecipeRegistry): Promise<ISshKey | null> {
+async function sshKeyOf(registry: IRegistry): Promise<ISshKey | null> {
   if (!registry.sshKeyId) return null;
   return orm.em.findOne(SshKey, { id: registry.sshKeyId });
 }
 
 /**
  * Stamps the upstream hashes of every recipe imported from this registry
- * (matched by its source URL — `"<repo>#<branch>:<path>"`). A path that
- * disappeared upstream reads as null sha + a checked timestamp: "gone".
+ * (matched by its source URL — `"<repo>#<branch>:<path>"`). Only the LIGHT
+ * entry columns are read (path/sha — never the cached file contents). A
+ * path that disappeared upstream reads as null sha + a checked timestamp:
+ * "gone".
  */
-async function stampRegistryRecipes(registry: IRecipeRegistry, entries: RegistryEntry[]): Promise<void> {
+async function stampRegistryRecipes(registry: IRegistry, drafts: RegistryEntryDraft[]): Promise<void> {
   if (!registry.branchName) return;
 
   const em = orm.em;
   const prefix = `${registry.url}#${registry.branchName}:`;
   const recipes = await em.find(Recipe, { sourceUrl: { $ne: null } });
-  const bySourceUrl = new Map(entries.map((entry) => [`${prefix}${entry.path}`, entry]));
+  const shaBySourceUrl = new Map(drafts.map((draft) => [`${prefix}${draft.path}`, draft.sha]));
   const now = new Date();
 
   for (const recipe of recipes) {
     if (!recipe.sourceUrl?.startsWith(prefix)) continue;
-    recipe.remoteSha = bySourceUrl.get(recipe.sourceUrl)?.sha ?? null;
+    recipe.remoteSha = shaBySourceUrl.get(recipe.sourceUrl) ?? null;
     recipe.remoteCheckedAt = now;
   }
   await em.flush();
@@ -237,10 +287,35 @@ async function stampRegistryRecipes(registry: IRecipeRegistry, entries: Registry
 
 // ─── Imports & updates ────────────────────────────────────────────────────────
 
+/** Outcome of one recipe import of the cascade. */
+export interface ImportedDependency {
+  slug: string;
+  name: string;
+  created: boolean;
+}
+
+/** Report of a one-click registry import: the recipe + its imported requirements. */
+export interface RegistryImportReport {
+  slug: string;
+  name: string;
+  created: boolean;
+  /** Requirements imported along (each recipe the panel did not have yet). */
+  imported: ImportedDependency[];
+  /**
+   * Requirement ids found NOWHERE — neither an existing local recipe nor an
+   * entry of the same registry. The install would fail on them.
+   */
+  missing: string[];
+}
+
 /**
- * Imports (or updates) one catalog entry in one click: the content comes
- * from the registry's cache (no clone), the recipe gets the git-form source
- * URL and the entry hash as its provenance stamp.
+ * Imports (or updates) one catalog entry in one click — WITH its runtimes:
+ * every recipe the target `requires` is resolved transitively from the SAME
+ * registry (an existing local recipe by slug satisfies the requirement, an
+ * entry of the registry is imported along, anything else lands in
+ * `missing`). The contents come from the registry's catalog rows (no
+ * clone); each recipe gets the git-form source URL and the entry hash as
+ * its provenance stamp.
  *
  * A slug clash with a recipe from ANOTHER source is refused — overwriting
  * another origin silently is never OK.
@@ -248,31 +323,89 @@ async function stampRegistryRecipes(registry: IRecipeRegistry, entries: Registry
 export async function importRegistryEntry(
   registryId: string,
   path: string,
-): Promise<{ slug: string; name: string; created: boolean }> {
+): Promise<RegistryImportReport> {
   const em = orm.em;
-  const registry = await em.findOne(RecipeRegistry, { id: registryId });
+  const registry = await em.findOne(Registry, { id: registryId });
   if (!registry) throw new HttpError(404, 'Registre introuvable');
-
-  const entry = (registry.entries ?? []).find((candidate) => candidate.path === path);
-  if (!entry) throw new HttpError(404, 'Fichier introuvable dans le registre');
-  if (entry.error) throw new HttpError(422, `Recipe invalide : ${entry.error}`);
   if (!registry.branchName) throw new HttpError(409, 'Le registre n’est pas encore synchronisé');
 
-  const recipeJson = parseRecipeJson(entry.content);
-  const source = {
-    url: formatGitSource(registry.url, registry.branchName, entry.path),
-    sha: entry.sha,
+  /** The registry's catalog, light columns only — id→slug and slug→entry. */
+  const entries = await em.find(RegistryEntry, { registryId });
+  const entryBySlug = new Map(
+    entries
+      .filter((entry) => entry.slug !== null && !entry.error)
+      .map((entry) => [entry.slug as string, entry]),
+  );
+
+  /** Imports one entry, cascading into ITS requirements (DFS, cycle-safe). */
+  const imported = new Map<string, ImportedDependency>();
+  const missing = new Set<string>();
+  const inProgress = new Set<string>();
+
+  const importOne = async (entry: IRegistryEntry): Promise<void> => {
+    const recipeJson = parseRecipeJson(entry.content);
+    const source = {
+      url: formatGitSource(registry.url, registry.branchName as string, entry.path),
+      sha: entry.sha,
+    };
+
+    const existing = await em.findOne(Recipe, { slug: recipeJson.id });
+    if (existing && existing.sourceUrl !== source.url) {
+      throw new HttpError(
+        409,
+        `La recette « ${recipeJson.id} » existe déjà avec une autre source — mets-la à jour depuis sa propre source, ou renomme-la d’abord`,
+      );
+    }
+
+    const result = await upsertRecipe(recipeJson, source);
+    imported.set(recipeJson.id, result);
+
+    for (const requiredId of recipeJson.requires) {
+      await resolveRequirement(requiredId);
+    }
   };
 
-  const existing = await em.findOne(Recipe, { slug: recipeJson.id });
-  if (existing && existing.sourceUrl !== source.url) {
-    throw new HttpError(
-      409,
-      `La recette « ${recipeJson.id} » existe déjà avec une autre source — mets-la à jour depuis sa propre source, ou renomme-la d’abord`,
-    );
+  /** Satisfies one `requires` id: local recipe, same-registry entry, or missing. */
+  const resolveRequirement = async (requiredId: string): Promise<void> => {
+    if (imported.has(requiredId)) return; // Imported during this cascade.
+    if (inProgress.has(requiredId)) return; // Cycle — the outer import finishes it.
+
+    const local = await em.findOne(Recipe, { slug: requiredId });
+    if (local) return; // Already installed.
+
+    const entry = entryBySlug.get(requiredId);
+    if (!entry) {
+      missing.add(requiredId);
+      return;
+    }
+
+    inProgress.add(requiredId);
+    try {
+      await importOne(entry);
+    } finally {
+      inProgress.delete(requiredId);
+    }
+  };
+
+  const entry = entries.find((candidate) => candidate.path === path);
+  if (!entry) throw new HttpError(404, 'Fichier introuvable dans le registre');
+  if (entry.error) throw new HttpError(422, `Recipe invalide : ${entry.error}`);
+
+  inProgress.add(entry.slug ?? path);
+  try {
+    await importOne(entry);
+  } finally {
+    inProgress.clear();
   }
 
-  return upsertRecipe(recipeJson, source);
+  const main = imported.get(entry.slug ?? '') ?? { slug: '', name: '', created: false };
+  return {
+    slug: main.slug,
+    name: main.name,
+    created: main.created,
+    imported: [...imported.values()].filter((dependency) => dependency.slug !== main.slug),
+    missing: [...missing],
+  };
 }
 
 /**
@@ -325,10 +458,13 @@ export async function updateRecipeFromSource(
  */
 async function readGitRecipeFile(source: GitRecipeSource): Promise<string> {
   const em = orm.em;
-  const registry = await em.findOne(RecipeRegistry, { url: source.repoUrl });
+  const registry = await em.findOne(Registry, { url: source.repoUrl });
 
-  if (registry?.entries && registry.branchName === source.branch) {
-    const entry = registry.entries.find((candidate) => candidate.path === source.path);
+  if (registry && registry.branchName === source.branch) {
+    const entry = await em.findOne(RegistryEntry, {
+      registryId: registry.id,
+      path: source.path,
+    });
     if (entry) {
       if (entry.error) throw new HttpError(422, `Recipe invalide : ${entry.error}`);
       return entry.content;
@@ -354,7 +490,7 @@ async function readGitRecipeFile(source: GitRecipeSource): Promise<string> {
  * when no registry of the repository carries a key.
  */
 async function sshKeyOfRegistryUrl(repoUrl: string): Promise<ISshKey | null> {
-  const registry = await orm.em.findOne(RecipeRegistry, { url: repoUrl, sshKeyId: { $ne: null } });
+  const registry = await orm.em.findOne(Registry, { url: repoUrl, sshKeyId: { $ne: null } });
   if (!registry?.sshKeyId) return null;
   return orm.em.findOne(SshKey, { id: registry.sshKeyId });
 }
@@ -369,7 +505,7 @@ async function sshKeyOfRegistryUrl(repoUrl: string): Promise<ISshKey | null> {
 async function runSweep(): Promise<void> {
   const em = orm.em;
 
-  const registries = await em.find(RecipeRegistry, {});
+  const registries = await em.find(Registry, {});
   for (const registry of registries) {
     await syncRegistryRow(registry);
   }
@@ -415,7 +551,7 @@ async function maybeEnqueueSweep(): Promise<void> {
 async function checkUncoveredRecipeSources(): Promise<void> {
   const em = orm.em;
   const recipes = await em.find(Recipe, { sourceUrl: { $ne: null } });
-  const registries = await em.find(RecipeRegistry, {});
+  const registries = await em.find(Registry, {});
   const now = new Date();
 
   const gitGroups = new Map<string, IRecipe[]>();
@@ -507,7 +643,7 @@ interface MarketplaceJobData {
 async function runMarketplaceJob(data: MarketplaceJobData): Promise<void> {
   try {
     if (data.registryId) {
-      const registry = await orm.em.findOne(RecipeRegistry, { id: data.registryId });
+      const registry = await orm.em.findOne(Registry, { id: data.registryId });
       if (registry) await syncRegistryRow(registry);
     } else {
       await runSweep();

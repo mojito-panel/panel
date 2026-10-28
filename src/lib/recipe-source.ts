@@ -168,34 +168,12 @@ export function computeRecipeStatus(state: RecipeSourceState): RecipeSourceStatu
 // ─── Registry catalog entries ─────────────────────────────────────────────────
 
 /**
- * One catalog entry of a registry — the cached view of one recipe file of
- * the repository, as the last sync read it (content included, so imports
- * read from the cache and never clone).
+ * The catalog entries of a registry used to be cached as a JSONB array on
+ * the registry row; they now live in their own `registry_entry` table
+ * (`RegistryEntry` in ~/db/entities) and the sync replaces the row set.
+ * The statuses below stay pure: they compare ONE upstream entry against
+ * the locally installed copy of the recipe.
  */
-export interface RegistryEntry {
-  /** POSIX path inside the repo — "steamcmd/enshrouded/recipe-enshrouded.json". */
-  path: string;
-  /** Canonical recipe hash (raw-text hash when the file does not validate). */
-  sha: string;
-  /** Recipe id when the file validates — the slug a local import would use. */
-  slug: string | null;
-  name: string | null;
-  /** 'runtime' or null (app recipe). */
-  type: string | null;
-  description: string | null;
-  /** Validation error — the entry is listed but not importable. */
-  error: string | null;
-  /**
-   * Vertical cover artwork of the recipe (base64 data URL) — read from the
-   * sibling `cover.png|jpg|jpeg|webp` of the recipe file at sync time. Null
-   * when the repository ships none (the UI shows its built-in placeholder).
-   */
-  cover: string | null;
-  /** Raw file content — imports and the catalog "view JSON" read from this. */
-  content: string;
-}
-
-/** Status of one catalog entry relative to the locally installed recipes. */
 export type RegistryEntryStatus =
   | 'not_imported'
   | 'up_to_date'
@@ -207,7 +185,8 @@ export type RegistryEntryStatus =
 /**
  * One catalog card of the marketplace page — the wire shape returned by
  * `listRegistryEntriesFn`: the registry entry matched against the recipes
- * table (cover included, `content` empty when gone upstream).
+ * table (cover included, `content` EXCLUDED — fetched on demand by
+ * `getRegistryEntryFn` for the "view JSON" dialog / the import).
  */
 export interface RegistryCatalogEntry {
   /** POSIX path inside the repository. */
@@ -219,10 +198,8 @@ export interface RegistryCatalogEntry {
   description: string | null;
   /** Why the file does not validate — the entry is listed, not importable. */
   error: string | null;
-  /** Vertical cover artwork (base64 data URL) — null = built-in placeholder. */
+  /** Vertical cover artwork (base64 data URL) — null = generated gradient. */
   cover: string | null;
-  /** Raw file content — the "view JSON" dialog reads it. */
-  content: string;
   status: RegistryEntryStatus;
   recipeId: string | null;
   recipeName: string | null;
@@ -243,7 +220,7 @@ export interface RegistryEntryRecipeRef {
  * and differing hashes mean an update is available upstream.
  */
 export function computeEntryStatus(
-  entry: Pick<RegistryEntry, 'error' | 'sha'>,
+  entry: { error: string | null; sha: string },
   recipe: RegistryEntryRecipeRef | null,
 ): RegistryEntryStatus {
   if (entry.error) return 'invalid';
@@ -254,6 +231,15 @@ export function computeEntryStatus(
   const baseline = recipe.sourceSha ?? recipe.storedSha;
   if (baseline && baseline !== entry.sha) return 'update_available';
   return 'up_to_date';
+}
+
+/** What the catalog row knows about the locally installed copy (null = none). */
+export interface RegistryEntryRecipeRef {
+  recipeId: string;
+  slug: string;
+  name: string;
+  sourceSha: string | null;
+  storedSha: string | null;
 }
 
 // ─── Error formatting ─────────────────────────────────────────────────────────

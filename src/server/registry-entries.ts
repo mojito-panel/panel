@@ -7,7 +7,7 @@ import { recipeErrorMessage } from '~/lib/recipe-source';
  * Registry catalog building (pure node — no ORM, no server-only marker, so
  * unit tests import it directly). The sync service clones a registry repo,
  * hands the recipe files to `buildRegistryEntries` and stores the result as
- * the registry's `entries` cache.
+ * `registry_entry` rows (replacing the previous set).
  */
 
 /**
@@ -43,17 +43,40 @@ export interface RawRegistryFile {
 }
 
 /**
- * Builds the catalog entries of a registry from the files of its clone:
- * every `recipe-*.json` is parsed and validated against the contract, its
- * metadata (id, name, type, description) extracted and its canonical hash
- * computed. A file that fails validation stays in the catalog with its
- * `error` — the admin sees WHY it is not importable instead of a mystery.
- *
- * Entries are sorted by path (the recipes repo groups by category, so the
- * catalog reads grouped too).
+ * One catalog entry of a sync — the INSERT draft of a `registry_entry` row
+ * (id/registryId/timestamps excluded). Every `recipe-*.json` is parsed and
+ * validated against the contract, its metadata (id, name, type,
+ * description) extracted and its canonical hash computed. A file that fails
+ * validation stays in the catalog with its `error` — the admin sees WHY it
+ * is not importable instead of a mystery.
  */
-export function buildRegistryEntries(files: RawRegistryFile[]): import('~/lib/recipe-source').RegistryEntry[] {
-  const entries: import('~/lib/recipe-source').RegistryEntry[] = [];
+export interface RegistryEntryDraft {
+  /** POSIX path inside the repo — "steamcmd/enshrouded/recipe-enshrouded.json". */
+  path: string;
+  /** Canonical recipe hash (raw-text hash when the file does not validate). */
+  sha: string;
+  /** Recipe id when the file validates — the slug a local import would use. */
+  slug: string | null;
+  name: string | null;
+  /** 'runtime' or null (app recipe). */
+  type: string | null;
+  description: string | null;
+  /** Validation error — the entry is listed but not importable. */
+  error: string | null;
+  /** Vertical cover artwork (base64 data URL) — null when the repo ships none. */
+  cover: string | null;
+  /** Raw file content — imports and the catalog "view JSON" read from this. */
+  content: string;
+}
+
+/**
+ * Builds the catalog entries of a registry from the files of its clone.
+ * Entries are sorted by path (the recipes repo groups by category, so the
+ * catalog reads grouped too) — the catalog PAGE applies its own display
+ * order (runtimes first, then name).
+ */
+export function buildRegistryEntries(files: RawRegistryFile[]): RegistryEntryDraft[] {
+  const entries: RegistryEntryDraft[] = [];
 
   for (const file of files) {
     if (!RECIPE_FILE_PATTERN.test(file.path)) continue;

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { Recipe, RecipeRegistry, SshKey } from '~/db/entities';
+import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
 import { orm } from '../orm';
 import { HttpError, requirePanelPermission } from '../session';
 import { withOrmContext } from '../middleware';
@@ -15,12 +15,11 @@ import {
   addRegistry,
   deleteRegistry,
   enqueueRegistrySync,
+  getRegistryEntry,
   importRegistryEntry,
   updateRecipeFromSource,
   updateRegistry,
 } from '../registries';
-import { listSshKeys } from '../ssh-keys';
-import { adminRegistriesList, type AdminRegistryRow } from '~/lists/registries';
 import {
   addRegistrySchema,
   importRegistryEntrySchema,
@@ -34,6 +33,38 @@ import {
  * the unified recipe source updates. Thin: permission + validator + request
  * context, then service calls (../registries, ../recipes).
  */
+
+/**
+ * One registry card of the marketplace grid (what listRegistriesFn returns)
+ * — the registry, its cover and its catalog status counts. The private key
+ * NEVER travels: only its display name (badge) and the detached id.
+ */
+export interface RegistryCardRow {
+  id: string;
+  name: string;
+  url: string;
+  /** Tracked branch — '' = the repository's default. */
+  branch: string;
+  /** Branch name resolved by the last sync (feeds the recipe source URLs). */
+  branchName: string;
+  /** Repo-root cover (base64 data URL) — null = generated gradient. */
+  cover: string | null;
+  /** True until the first sync lands — the page polls meanwhile. */
+  neverSynced: boolean;
+  lastSyncedAt: Date | null;
+  lastError: string | null;
+  entryCount: number;
+  /** Catalog status counts, matched against the recipes table. */
+  notImported: number;
+  upToDate: number;
+  updateAvailable: number;
+  modifiedLocally: number;
+  invalid: number;
+  upstreamGone: number;
+  /** SSH key of a PRIVATE repository — the clone authenticates with it. */
+  sshKeyId: string | null;
+  sshKeyName: string | null;
+}
 
 /** Source columns of a recipe, as the catalog status computation needs them. */
 interface RecipeSourceRow {
@@ -87,15 +118,34 @@ function toStatusInput(
 
 // ─── Registries (/admin/marketplace) ─────────────────────────────────────────
 
-/** Full registry set with their catalog status counts (small, unpaginated). */
+/**
+ * Full registry set with their catalog status counts, for the CARD GRID of
+ * the marketplace page (covers included — a registry card renders its
+ * repo-root cover or a generated gradient). The entry counts are computed
+ * from LIGHT columns only (registryId/path/sha/error — never the cached
+ * file contents), so the page stays cheap however big the catalogs grow.
+ */
 export const listRegistriesFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
-  .handler(async (): Promise<{ registries: AdminRegistryRow[] }> => {
+  .handler(async (): Promise<{ registries: RegistryCardRow[] }> => {
     await requirePanelPermission({ 'panel.recipes': ['read'] });
 
-    const registries = await orm.em.find(RecipeRegistry, {});
+    const em = orm.em;
+    const registries = await em.find(Registry, {});
     const recipes = await loadRecipeSourceRows();
-    // Attached SSH keys (private repositories) — names for the list badges.
+
+    const registryIds = registries.map((registry) => registry.id);
+    const entries = registryIds.length
+      ? await em.find(
+          RegistryEntry,
+          { registryId: { $in: registryIds } },
+          // Light columns only — the cached file contents (and covers) stay
+          // out of the registry list however big the catalogs grow.
+          { fields: ['registryId', 'path', 'sha', 'error'] },
+        )
+      : [];
+
+    // Attached SSH keys (private repositories) — names for the card badges.
     const keyIds = [
       ...new Set(
         registries
@@ -103,13 +153,20 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           .filter((id): id is string => id !== null),
       ),
     ];
-    const keys = keyIds.length > 0 ? await orm.em.find(SshKey, { id: { $in: keyIds } }) : [];
+    const keys = keyIds.length > 0 ? await em.find(SshKey, { id: { $in: keyIds } }) : [];
     const keyNames = new Map(keys.map((key) => [key.id, key.name]));
+
+    const entriesByRegistry = new Map<string, RegistryEntry[]>();
+    for (const entry of entries) {
+      const group = entriesByRegistry.get(entry.registryId);
+      if (group) group.push(entry);
+      else entriesByRegistry.set(entry.registryId, [entry]);
+    }
 
     const rows = registries
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((registry): AdminRegistryRow => {
-        const entries = registry.entries ?? [];
+      .map((registry): RegistryCardRow => {
+        const entries = entriesByRegistry.get(registry.id) ?? [];
         let notImported = 0;
         let upToDate = 0;
         let updateAvailable = 0;
@@ -147,6 +204,7 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           url: registry.url,
           branch: registry.branch,
           branchName: registry.branchName,
+          cover: registry.cover ?? null,
           neverSynced: registry.lastSyncedAt === null || registry.lastSyncedAt === undefined,
           lastSyncedAt: registry.lastSyncedAt ?? null,
           lastError: registry.lastError ?? null,
@@ -208,18 +266,29 @@ export const deleteRegistryFn = createServerFn({ method: 'POST' })
 
 // ─── Catalog (/admin/marketplace/$registryId) ────────────────────────────────
 
-/** One registry's catalog: its entries matched against the recipes table. */
+/**
+ * One registry's catalog: its `registry_entry` rows (WITHOUT the cached
+ * file contents — heavy and useless to a card grid) matched against the
+ * recipes table. Runtimes sort first, then name A-Z.
+ */
 export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
   .validator(registryIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.recipes': ['read'] });
 
-    const registry = await orm.em.findOne(RecipeRegistry, { id: data.registryId });
+    const registry = await orm.em.findOne(Registry, { id: data.registryId });
     if (!registry) throw new HttpError(404, 'Registre introuvable');
 
     const recipes = await loadRecipeSourceRows();
-    const entries = registry.entries ?? [];
+    // Light columns only — the cached file CONTENT stays out of the grid
+    // (the "view JSON" dialog fetches one entry on demand).
+    const entries = await orm.em.find(
+      RegistryEntry,
+      { registryId: data.registryId },
+      { exclude: ['content'] },
+    );
+
     const rows: RegistryCatalogEntry[] = entries.map((entry): RegistryCatalogEntry => {
       const recipe = registry.branchName
         ? findEntryRecipe(recipes, registry, entry.path)
@@ -227,13 +296,12 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
       const { status } = toStatusInput(entry, recipe);
       return {
         path: entry.path,
-        name: entry.name,
-        slug: entry.slug,
-        type: entry.type,
-        description: entry.description,
-        error: entry.error,
-        cover: entry.cover,
-        content: entry.content,
+        name: entry.name ?? null,
+        slug: entry.slug ?? null,
+        type: entry.type ?? null,
+        description: entry.description ?? null,
+        error: entry.error ?? null,
+        cover: entry.cover ?? null,
         status,
         recipeId: recipe?.id ?? null,
         recipeName: recipe?.name ?? null,
@@ -256,7 +324,6 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
           description: null,
           error: null,
           cover: null,
-          content: '',
           status: 'upstream_gone',
           recipeId: recipe.id,
           recipeName: recipe.name,
@@ -264,7 +331,15 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
       }
     }
 
-    rows.sort((a, b) => a.path.localeCompare(b.path));
+    // Runtimes first (they are required by other recipes), then name A-Z
+    // (falling back to the slug, then the path for the nameless ones).
+    rows.sort((a, b) => {
+      const runtimeRank = Number(b.type === 'runtime') - Number(a.type === 'runtime');
+      if (runtimeRank !== 0) return runtimeRank;
+      const aName = a.name ?? a.slug ?? a.path;
+      const bName = b.name ?? b.slug ?? b.path;
+      return aName.localeCompare(bName);
+    });
 
     return {
       registry: {
@@ -273,6 +348,7 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
         url: registry.url,
         branch: registry.branch,
         branchName: registry.branchName,
+        cover: registry.cover ?? null,
         neverSynced: registry.lastSyncedAt === null || registry.lastSyncedAt === undefined,
         lastSyncedAt: registry.lastSyncedAt ?? null,
         lastError: registry.lastError ?? null,
@@ -281,7 +357,23 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
     };
   });
 
-/** Imports (or updates) one catalog entry in one click. */
+/** Raw file content of ONE catalog entry — the "view JSON" dialog reads it. */
+export const getRegistryEntryFn = createServerFn({ method: 'POST' })
+  .validator(importRegistryEntrySchema) // { registryId, path } — same shape
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.recipes': ['read'] });
+
+    const entry = await orm.em.findOne(RegistryEntry, {
+      registryId: data.registryId,
+      path: data.path,
+    });
+    if (!entry) throw new HttpError(404, 'Fichier introuvable dans le registre');
+
+    return { path: entry.path, content: entry.content };
+  });
+
+/** Imports (or updates) one catalog entry in one click — with its runtimes. */
 export const importRegistryEntryFn = createServerFn({ method: 'POST' })
   .validator(importRegistryEntrySchema)
   .middleware([withOrmContext])

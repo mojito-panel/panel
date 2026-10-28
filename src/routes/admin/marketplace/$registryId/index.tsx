@@ -9,11 +9,11 @@ import {
   listRegistryEntriesFn,
   syncRegistryFn,
   importRegistryEntryFn,
+  getRegistryEntryFn,
 } from '~/server/functions/marketplace';
 import { ConfirmDialog } from '~/components/confirm-dialog';
-import { MarketplaceCover } from '~/components/marketplace-cover';
+import { CoverImage } from '~/components/cover-image';
 import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
-import { adminRegistriesList } from '~/lists/registries';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -96,6 +96,7 @@ function RegistryCatalogPage() {
   const listEntries = useServerFn(listRegistryEntriesFn);
   const syncRegistry = useServerFn(syncRegistryFn);
   const importEntry = useServerFn(importRegistryEntryFn);
+  const getEntry = useServerFn(getRegistryEntryFn);
 
   const query = useQuery({
     queryKey: ['registry-entries', registryId],
@@ -126,7 +127,20 @@ function RegistryCatalogPage() {
       importEntry({ data: { registryId, path: row.path } }),
     onSuccess: async (result) => {
       await invalidateCatalog();
-      toast.success(`Recette « ${result.name} » ${result.created ? 'importée' : 'mise à jour'}`);
+      toast.success(
+        `Recette « ${result.name} » ${result.created ? 'importée' : 'mise à jour'}` +
+          (result.imported.length > 0
+            ? ` — ${result.imported.length} dépendance(s) importée(s)`
+            : ''),
+      );
+      for (const dependency of result.imported) {
+        toast.success(
+          `Dépendance « ${dependency.name} » ${dependency.created ? 'importée' : 'à jour'}`,
+        );
+      }
+      for (const missing of result.missing) {
+        toast.warning(`Dépendance « ${missing} » introuvable dans ce registre`);
+      }
     },
     onError: (error) => toast.error(error.message),
   });
@@ -137,6 +151,14 @@ function RegistryCatalogPage() {
   // An update overwrites local edits — the admin confirms first.
   const [rowToConfirm, setRowToConfirm] = useState<RegistryCatalogEntry | null>(null);
   const [rowToView, setRowToView] = useState<RegistryCatalogEntry | null>(null);
+
+  // The cached file CONTENT is not in the grid (heavy) — the view dialog
+  // fetches ONE entry on demand.
+  const viewQuery = useQuery({
+    queryKey: ['registry-entry', registryId, rowToView?.path],
+    queryFn: () => getEntry({ data: { registryId, path: rowToView?.path ?? '' } }),
+    enabled: rowToView !== null,
+  });
 
   const onImport = (row: RegistryCatalogEntry) => {
     if (row.status === 'modified_locally') {
@@ -165,7 +187,6 @@ function RegistryCatalogPage() {
           <CardTitle className="flex items-center gap-2">
             <Link
               to="/admin/marketplace"
-              search={adminRegistriesList.defaultSearch}
               className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
               title="Retour aux registres"
             >
@@ -274,9 +295,9 @@ function RegistryCatalogPage() {
                       : 'flex flex-col overflow-hidden rounded-lg border transition-shadow hover:shadow-md'
                   }
                 >
-                  <MarketplaceCover
+                  <CoverImage
                     cover={row.cover}
-                    name={row.name ?? row.path}
+                    seed={`${registryId}:${row.path}`}
                     className="rounded-b-none border-b"
                   />
                   <div className="flex flex-1 flex-col gap-2 p-3">
@@ -330,7 +351,7 @@ function RegistryCatalogPage() {
                       ) : (
                         <span className="flex-1" />
                       )}
-                      {row.content && (
+                      {row.status !== 'upstream_gone' && (
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -381,7 +402,11 @@ function RegistryCatalogPage() {
             </DialogDescription>
           </DialogHeader>
           <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
-            {rowToView?.content}
+            {viewQuery.isPending
+              ? 'Chargement…'
+              : (viewQuery.error
+                  ? viewQuery.error.message
+                  : (viewQuery.data?.content ?? ''))}
           </pre>
         </DialogContent>
       </Dialog>

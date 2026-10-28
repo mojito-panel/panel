@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { nanoid } from '~/lib/nanoid';
 import { looksLikePrivateKey, parsePublicKey } from '~/lib/ssh-key';
-import { SshKey, RecipeRegistry } from '~/db/entities';
+import { SshKey, Registry } from '~/db/entities';
 import type { ISshKey } from '~/db/types';
 import { orm } from './orm';
 import { HttpError } from './session';
@@ -203,7 +203,7 @@ export async function deleteSshKey(sshKeyId: string): Promise<void> {
   const em = orm.em;
   const key = await requireSshKey(sshKeyId);
 
-  const registries = await em.find(RecipeRegistry, { sshKeyId: key.id });
+  const registries = await em.find(Registry, { sshKeyId: key.id });
   if (registries.length > 0) {
     const names = registries.map((registry) => `« ${registry.name} »`).join(', ');
     throw new HttpError(
