@@ -168,6 +168,19 @@ function ServerConsolePage() {
     ? installStatus.status !== 'installed'
     : server?.status === 'installing' || server?.status === 'install_failed';
 
+  // Why the stats cards are empty — the agent sends one frame on connect
+  // (ring replay), so a connected-but-silent WS means the agent predates
+  // the feature; an empty ring while the tree is down means it simply
+  // never ran since the agent started.
+  const statsEmptyHint =
+    stats === null
+      ? consoleMode === 'ws'
+        ? 'Aucune statistique reçue — mettez l’agent à jour.'
+        : 'Connexion à l’agent…'
+      : !isAlive && !installActive
+        ? 'Démarrez le serveur pour collecter ses ressources.'
+        : 'En attente de données…';
+
   const handleCommand = (e: FormEvent) => {
     e.preventDefault();
     if (!command.trim()) return;
@@ -250,47 +263,45 @@ function ServerConsolePage() {
         <p className="text-sm text-destructive">{action.error.message}</p>
       )}
 
-      {/* Console card + live resource cards — one grid, two placements:
-          wide viewport (xl) → the CPU/RAM/I/O cards stack in a column on
-          the RIGHT of the console; otherwise the three cards line up in a
-          row UNDER it. One render — the wrapper grid does the switching. */}
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle>Console</CardTitle>
-            <CardDescription>{consoleCaption(consoleMode, installActive, isAlive)}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <XtermConsole
-              serverId={serverId}
-              onConnection={handleConsoleConnection}
-              onStatus={(message) => handleConsoleStatus(message.status)}
-              onMode={setConsoleMode}
-              onInstallStatus={handleInstallStatus}
-              onStats={setStats}
-            />
-          </CardContent>
+      {/* Console card — full width, exactly as before; the resource cards
+          below are the only thing that makes the page taller. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Console</CardTitle>
+          <CardDescription>{consoleCaption(consoleMode, installActive, isAlive)}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <XtermConsole
+            serverId={serverId}
+            onConnection={handleConsoleConnection}
+            onStatus={(message) => handleConsoleStatus(message.status)}
+            onMode={setConsoleMode}
+            onInstallStatus={handleInstallStatus}
+            onStats={setStats}
+          />
+        </CardContent>
 
-          {/* Send commands (process stdin) — hidden during an install */}
-          {!installActive && canCommand && (
-            <CardFooter>
-              <form onSubmit={handleCommand} className="flex w-full gap-2">
-                <Input
-                  placeholder={isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  disabled={!isAlive || submitCommand.isPending}
-                />
-                <Button type="submit" disabled={!isAlive || submitCommand.isPending || !command.trim()}>
-                  <Send />
-                  Envoyer
-                </Button>
-              </form>
-            </CardFooter>
-          )}
-        </Card>
-        <ServerStatsCards stats={stats} />
-      </div>
+        {/* Send commands (process stdin) — hidden during an install */}
+        {!installActive && canCommand && (
+          <CardFooter>
+            <form onSubmit={handleCommand} className="flex w-full gap-2">
+              <Input
+                placeholder={isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                disabled={!isAlive || submitCommand.isPending}
+              />
+              <Button type="submit" disabled={!isAlive || submitCommand.isPending || !command.trim()}>
+                <Send />
+                Envoyer
+              </Button>
+            </form>
+          </CardFooter>
+        )}
+      </Card>
+
+      {/* Live resource cards (CPU / RAM / I-O) — under the console. */}
+      <ServerStatsCards stats={stats} hint={statsEmptyHint} />
       {submitCommand.isError && (
         <p className="text-sm text-destructive">{submitCommand.error.message}</p>
       )}

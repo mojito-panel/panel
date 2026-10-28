@@ -22,9 +22,8 @@ import {
  * the process tree's life), then pushes one full frame per second — the
  * page replaces its state wholesale, this component just renders it.
  *
- * Layout contract (console page): the three cards sit in a column on the
- * RIGHT of the console on wide screens, in a row UNDER it otherwise —
- * the wrapper grid handles the switch, the cards never render twice.
+ * The three cards line up in a row UNDER the console — the console
+ * keeps its full width, the page just grows taller.
  */
 
 const CPU_CONFIG = {
@@ -155,16 +154,17 @@ function StatChart({ data, config, dataKey, gradientId, domain, tickFormatter, t
   );
 }
 
-/** Placeholder while the ring is empty (server never started / stopped). */
-function EmptyChart() {
+/** Placeholder while the ring is empty — `hint` explains WHY (the
+ *  page knows whether the server runs, the agent answered at all). */
+function EmptyChart({ hint }: { hint: string }) {
   return (
-    <div className="flex h-28 items-center justify-center text-xs text-muted-foreground">
-      En attente de données…
+    <div className="flex h-28 items-center justify-center px-2 text-center text-xs text-muted-foreground">
+      {hint}
     </div>
   );
 }
 
-export function ServerStatsCards({ stats }: { stats: ServerStats | null }) {
+export function ServerStatsCards({ stats, hint }: { stats: ServerStats | null; hint: string }) {
   const samples = stats?.samples ?? EMPTY_SAMPLES;
 
   // Same flow animation as the node health charts: the series glide
@@ -193,7 +193,7 @@ export function ServerStatsCards({ stats }: { stats: ServerStats | null }) {
   const ioMax = Math.max(1024, niceCeil(peakIo * 1.25));
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-1">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">CPU</CardTitle>
@@ -205,7 +205,7 @@ export function ServerStatsCards({ stats }: { stats: ServerStats | null }) {
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
-            <EmptyChart />
+            <EmptyChart hint={hint} />
           ) : (
             <StatChart
               data={chartData}
@@ -229,7 +229,7 @@ export function ServerStatsCards({ stats }: { stats: ServerStats | null }) {
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
-            <EmptyChart />
+            <EmptyChart hint={hint} />
           ) : (
             <StatChart
               data={chartData}
@@ -253,7 +253,7 @@ export function ServerStatsCards({ stats }: { stats: ServerStats | null }) {
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
-            <EmptyChart />
+            <EmptyChart hint={hint} />
           ) : (
             <StatChart
               data={chartData}
