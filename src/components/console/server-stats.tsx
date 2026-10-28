@@ -86,6 +86,17 @@ function formatBpsTick(bytesPerSec: number): string {
   return `${(bps / 1000 ** 3).toFixed(1)}G`;
 }
 
+/**
+ * Bytes with fr-FR binary units — the Réseau card's lifetime totals
+ * ("Total ↓ 1,2 Go · ↑ 240 Mo").
+ */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${Math.round(bytes)} o`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} Ko`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} Go`;
+}
+
 /** 1 / 2 / 5 × 10^n — the Réseau card's dynamic axis ceiling. */
 function niceCeil(value: number): number {
   if (value <= 0) return 1;
@@ -265,6 +276,13 @@ export function ServerStatsCards({ stats, hint }: { stats: ServerStats | null; h
               '—'
             )}
           </CardDescription>
+          {/* Lifetime totals of the current run (server start or install
+              start) — display only, never charted. */}
+          {stats && (
+            <p className="text-xs tabular-nums text-muted-foreground">
+              Total ↓ {formatBytes(stats.totalRxBytes)} · ↑ {formatBytes(stats.totalTxBytes)}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (

@@ -168,18 +168,18 @@ function ServerConsolePage() {
     ? installStatus.status !== 'installed'
     : server?.status === 'installing' || server?.status === 'install_failed';
 
-  // Why the stats cards are empty — the agent sends one frame on connect
-  // (ring replay), so a connected-but-silent WS means the agent predates
-  // the feature; an empty ring while the tree is down means it simply
-  // never ran since the agent started.
+  // Why the stats cards are empty. The agent only sends stats frames when
+  // something runs (live tree or install) — no frame with the server
+  // stopped is its NORMAL answer, not a stale agent; no frame while the
+  // server runs (or an install is active) is the outdated-agent case.
   const statsEmptyHint =
     stats === null
-      ? consoleMode === 'ws'
-        ? 'Aucune statistique reçue — mettez l’agent à jour.'
-        : 'Connexion à l’agent…'
-      : !isAlive && !installActive
+      ? !isAlive && !installActive
         ? 'Démarrez le serveur pour collecter ses ressources.'
-        : 'En attente de données…';
+        : consoleMode === 'ws'
+          ? 'Aucune statistique reçue — mettez l’agent à jour.'
+          : 'Connexion à l’agent…'
+      : 'En attente de données…';
 
   const handleCommand = (e: FormEvent) => {
     e.preventDefault();

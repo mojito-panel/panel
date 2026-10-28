@@ -343,17 +343,25 @@ export const serverStatsSampleSchema = z.object({
 export type ServerStatsSample = z.infer<typeof serverStatsSampleSchema>;
 
 /**
- * Full stats frame pushed on the console WS: the charts' axis scales
- * plus the buffered samples of the CURRENT tree (oldest first). The
- * agent replays the whole ring on every fresh connection — a page
- * refresh shows the last minute — and a NEW tree flushes it.
+ * Full stats frame pushed on the console WS: the charts' axis scales, the
+ * current run's lifetime network totals and the buffered samples (oldest
+ * first). The agent sends it ONLY when something runs — a live tree, or
+ * the install whose steps it tracks as well; a NEW run (server start,
+ * new install) resets the ring and the totals.
  */
 export const serverStatsSchema = z.object({
   /** CPU chart axis max: allowed cores × 100 (host cores × 100 when unlimited). */
   cpuMaxPercent: z.number().positive(),
   /** Memory chart axis max: allocated MB (host total MB when unlimited). */
   memoryMaxMb: z.number().positive(),
-  /** Samples of the current tree's life, oldest first. */
+  /**
+   * Bytes sent/received since the current run began (tree start or
+   * install start) — the lifetime totals shown next to the Réseau
+   * chart, never charted.
+   */
+  totalTxBytes: z.number().int().min(0),
+  totalRxBytes: z.number().int().min(0),
+  /** Samples of the current run, oldest first. */
   samples: z.array(serverStatsSampleSchema),
 });
 

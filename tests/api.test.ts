@@ -506,6 +506,8 @@ describe('consoleServerMessageSchema', () => {
         stats: {
           cpuMaxPercent: 300,
           memoryMaxMb: 1024,
+          totalTxBytes: 4096,
+          totalRxBytes: 20480,
           samples: [
             {
               at: 1790000000000,
@@ -518,11 +520,12 @@ describe('consoleServerMessageSchema', () => {
         },
       }).success,
     ).toBe(true);
-    // Empty ring (server stopped / first second of a fresh start) is valid.
+    // Empty ring (server stopped / first second of a fresh run) is valid —
+    // the frame only arrives when something runs.
     expect(
       consoleServerMessageSchema.safeParse({
         type: 'stats',
-        stats: { cpuMaxPercent: 300, memoryMaxMb: 1024, samples: [] },
+        stats: { cpuMaxPercent: 300, memoryMaxMb: 1024, totalTxBytes: 0, totalRxBytes: 0, samples: [] },
       }).success,
     ).toBe(true);
   });
@@ -538,8 +541,22 @@ describe('consoleServerMessageSchema', () => {
       consoleServerMessageSchema.safeParse({
         type: 'stats',
         stats: {
+          cpuMaxPercent: 0,
+          memoryMaxMb: 1024,
+          totalTxBytes: 0,
+          totalRxBytes: 0,
+          samples: [],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      consoleServerMessageSchema.safeParse({
+        type: 'stats',
+        stats: {
           cpuMaxPercent: 300,
           memoryMaxMb: 1024,
+          totalTxBytes: -1,
+          totalRxBytes: 0,
           samples: [
             { at: 1790000000000, cpuPercent: -1, memoryMb: 0, rxBytesPerSec: 0, txBytesPerSec: 0 },
           ],
