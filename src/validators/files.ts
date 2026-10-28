@@ -71,6 +71,16 @@ export const uploadFileSchema = z.object({
 
 export type UploadFileDto = z.output<typeof uploadFileSchema>;
 
+// ─── Download link (short-lived JWT, browser → agent) ───────────────────────
+
+/** Requests a signed download link for one file (relative path). */
+export const fileDownloadSchema = z.object({
+  serverId: z.string().min(1),
+  path: z.string().min(1).max(1024),
+});
+
+export type FileDownloadDto = z.output<typeof fileDownloadSchema>;
+
 // ─── URL search params (?dir=...&file=... deep-linking) ────────────────────
 
 export const filesSearchSchema = z.object({

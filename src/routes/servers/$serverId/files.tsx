@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { toast } from 'sonner';
 
-import { readFileFn } from '~/server/functions/files';
+import { getFileDownloadUrlFn } from '~/server/functions/files';
 import { getServerFn } from '~/server/functions/servers';
 import { hasServerPermissions } from '~/lib/permissions';
 import { filesSearchSchema } from '~/validators/files';
@@ -21,8 +22,7 @@ function FilesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const readFile = useServerFn(readFileFn);
-
+  const getDownloadUrl = useServerFn(getFileDownloadUrlFn);
   // Shared server query (cached) — the viewer's per-server grants gate the
   // mutating controls (the server functions enforce them anyway)
   const getServer = useServerFn(getServerFn);
@@ -60,16 +60,21 @@ function FilesPage() {
       search: { dir: targetDir, ...(targetFile ? { file: targetFile } : {}) },
     });
 
-  /** Reads the content server-side then triggers a browser download (text). */
+  /**
+   * Triggers a browser download — a short-lived JWT makes the browser fetch
+   * the bytes DIRECTLY from the agent (signed per path, like backups), so
+   * binaries round-trip losslessly and the panel never proxies them.
+   */
   async function download(path: string) {
-    const data = await readFile({ data: { serverId, path } });
-    const blob = new Blob([data.content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = path.split('/').pop() ?? 'fichier';
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const { url } = await getDownloadUrl({ data: { serverId, path } });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = path.split('/').pop() ?? 'fichier';
+      a.click();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Téléchargement impossible');
+    }
   }
 
   // Editor open (?file=…) → dedicated view

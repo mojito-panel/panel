@@ -9,6 +9,9 @@ import {
   loadServerWithPermission,
 } from '../session';
 import type { PermissionRequest } from '~/lib/permissions';
+import { decryptSecret } from '../crypto';
+import { signFileDownloadToken } from '../jwt';
+import { isHttpsScheme } from '~/validators/node';
 import { AgentError } from '../agent/client';
 import {
   agentListFiles,
@@ -22,6 +25,7 @@ import {
 import {
   filesQuerySchema,
   filePathQuerySchema,
+  fileDownloadSchema,
   saveFileSchema,
   createEntrySchema,
   renameEntrySchema,
@@ -114,7 +118,7 @@ export const listFilesFn = createServerFn({ method: 'GET' })
     }
   });
 
-// ─── Read (editor / download) ───────────────────────────────────────────────
+// ─── Read (editor — UTF-8 text only, binaries refused by the agent) ─────────
 
 export const readFileFn = createServerFn({ method: 'GET' })
   .validator(filePathQuerySchema)
@@ -127,6 +131,31 @@ export const readFileFn = createServerFn({ method: 'GET' })
     } catch (err) {
       throw mapAgentError(err);
     }
+  });
+
+// ─── Download link (short-lived JWT, browser streams the file from the agent) ─
+
+export const getFileDownloadUrlFn = createServerFn({ method: 'GET' })
+  .validator(fileDownloadSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+      'server.files': ['read'],
+    });
+    const node = await em.findOne(Node, { id: server.nodeId });
+    if (!node) throw new HttpError(500, 'Node introuvable');
+
+    // The browser downloads the file DIRECTLY from the agent with a JWT
+    // scoped to this exact path (same per-node secret as the console) —
+    // binaries included, the panel never proxies the bytes.
+    const { token, expiresAt } = signFileDownloadToken(
+      { userId: user.id, serverId: server.id, path: data.path },
+      decryptSecret(node.agentToken),
+    );
+    const url = `${isHttpsScheme(node.scheme) ? 'https' : 'http'}://${node.fqdn}:${node.publicPort}/servers/${server.id}/files/download?path=${encodeURIComponent(data.path)}&token=${token}`;
+
+    return { url, expiresAt };
   });
 
 // ─── Save (editor) ──────────────────────────────────────────────────────────

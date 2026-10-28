@@ -536,7 +536,7 @@ export type ListFilesResponse = z.infer<typeof listFilesResponseSchema>;
 
 export const readFileResponseSchema = z.object({
   path: z.string().min(1),
-  /** UTF-8 text content — binary files must not be read through this route. */
+  /** UTF-8 text content — binary files are refused (NUL sniff) on this route. */
   content: z.string(),
   size: z.number().int().nonnegative(),
 });
@@ -661,6 +661,28 @@ export const backupDownloadTokenPayloadSchema = z.object({
 
 export type BackupDownloadTokenPayload = z.infer<typeof backupDownloadTokenPayloadSchema>;
 
+/** TTL of a file download JWT (browser → agent, raw byte stream) — same idea as backups. */
+export const FILE_DOWNLOAD_TOKEN_TTL_SECONDS = 120;
+
+/**
+ * Payload of the file download JWT (HS256, signed by the panel with the
+ * node's agent token). Scoped to ONE file: `serverId` AND `path` must match
+ * the download route parameters.
+ */
+export const fileDownloadTokenPayloadSchema = z.object({
+  iss: z.literal('mojito-panel'),
+  aud: z.literal('mojito-agent'),
+  sub: z.string().min(1), // user id
+  serverId: idSchema,
+  path: z.string().min(1).max(1024),
+  scope: z.literal('file-download'),
+  iat: z.number().int().nonnegative(),
+  exp: z.number().int().positive(),
+  jti: z.string().min(1),
+});
+
+export type FileDownloadTokenPayload = z.infer<typeof fileDownloadTokenPayloadSchema>;
+
 // ─── SFTP authentication (agent → panel, wings /api/sftp/auth model) ────────
 
 /**
@@ -739,6 +761,8 @@ export const AGENT_ROUTES = {
   fileRename: 'POST /servers/:serverId/files/rename',
   fileDelete: 'POST /servers/:serverId/files/delete',
   fileUpload: 'POST /servers/:serverId/files/upload',
+  /** File download — panel token OR file download JWT (browser link). */
+  fileDownload: 'GET /servers/:serverId/files/download',
   /** Backups — async archive create/restore, the panel polls the status. */
   backupCreate: 'POST /servers/:serverId/backups',
   backupStatus: 'GET /servers/:serverId/backups/:backupId',

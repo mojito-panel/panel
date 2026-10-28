@@ -3,9 +3,11 @@ import {
   ALL_PERMISSIONS,
   BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
   CONSOLE_TOKEN_TTL_SECONDS,
+  FILE_DOWNLOAD_TOKEN_TTL_SECONDS,
   HEALTH_TOKEN_TTL_SECONDS,
   backupDownloadTokenPayloadSchema,
   consoleTokenPayloadSchema,
+  fileDownloadTokenPayloadSchema,
   healthTokenPayloadSchema,
   type Permission,
 } from '~/contract';
@@ -89,6 +91,26 @@ export function signBackupDownloadToken(
     scope: 'backup-download',
     iat,
     exp: iat + BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
+    jti: nanoid(),
+  });
+  return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };
+}
+
+/** Signs a file download JWT for one file path (browser download link). */
+export function signFileDownloadToken(
+  input: { userId: string; serverId: string; path: string; now?: number },
+  secret: string,
+): { token: string; expiresAt: number } {
+  const iat = Math.floor((input.now ?? Date.now()) / 1000);
+  const payload = fileDownloadTokenPayloadSchema.parse({
+    iss: 'mojito-panel',
+    aud: 'mojito-agent',
+    sub: input.userId,
+    serverId: input.serverId,
+    path: input.path,
+    scope: 'file-download',
+    iat,
+    exp: iat + FILE_DOWNLOAD_TOKEN_TTL_SECONDS,
     jti: nanoid(),
   });
   return { token: signPayload(payload, secret), expiresAt: payload.exp * 1000 };

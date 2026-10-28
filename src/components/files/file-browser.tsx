@@ -1,9 +1,11 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useEffect, useState, type ChangeEvent } from 'react';
+import { toast } from 'sonner';
 import { ArrowUp, FilePlus, FolderPlus, Trash2, Upload } from 'lucide-react';
 
-import { MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
+import { MAX_EDITABLE_FILE_SIZE, MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
+import { isEditableFile } from '~/lib/text-files';
 import { ListTable } from '~/components/data-table/list-table';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
@@ -20,6 +22,7 @@ import {
 } from '~/server/functions/files';
 import { CreateEntryForm } from './create-entry-form';
 import { RenameEntryDialog } from './rename-entry-dialog';
+import { formatSize } from './format-size';
 import { ErrorState } from '~/components/error/error-state';
 
 /** Directory listing — toolbar + breadcrumb + the listing table inside a card. */
@@ -154,8 +157,24 @@ export function FileBrowser({
   };
 
   const open = (entry: FileObject) => {
-    if (entry.isDirectory) onNavigate(entry.path);
-    else onNavigate(dir, entry.path);
+    if (entry.isDirectory) {
+      onNavigate(entry.path);
+      return;
+    }
+    // Only whitelisted text files open in the editor (txt/ini/yml/yaml/xml/
+    // json — EDITABLE_FILE_EXTENSIONS); anything else downloads (the agent
+    // additionally refuses binary content server-side).
+    if (!isEditableFile(entry.name)) {
+      onDownload(entry.path);
+      return;
+    }
+    if (entry.size > MAX_EDITABLE_FILE_SIZE) {
+      toast.error(
+        `« ${entry.name} » dépasse la taille maximale de l'éditeur (${formatSize(MAX_EDITABLE_FILE_SIZE)})`,
+      );
+      return;
+    }
+    onNavigate(dir, entry.path);
   };
 
   const segments = dir ? dir.split('/') : [];

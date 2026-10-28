@@ -27,6 +27,18 @@ export default defineConfig({
         // non-RSC TanStack Start app — dropping them is expected, so silence them.
         moduleLevelDirective: false,
       },
+      treeshake: {
+        moduleSideEffects: (id) => {
+          // Monaco's css/html/typescript language services spawn dedicated
+          // worker chunks the panel can never use (the file editor whitelist
+          // only opens json/yaml/xml/ini/txt) — dropping their registration
+          // side effects removes ~8 MB of dead worker chunks from the deploy.
+          if (/[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]languages[\\/](features|definitions)[\\/](css|html|typescript)[\\/]/.test(id)) {
+            return false;
+          }
+          return undefined;
+        },
+      },
     },
   },
   server: {

@@ -1,5 +1,6 @@
 import { Download, File as FileIcon, Folder, Pencil, Trash2 } from 'lucide-react';
 import { formatSize } from '~/components/files/format-size';
+import { isEditableFile } from '~/lib/text-files';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
 import type { FileObject } from '~/contract';
@@ -84,7 +85,13 @@ export const filesList = defineList<FileObject, FilesContext>({
         <button
           className="flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted"
           onClick={() => context?.onOpen(entry)}
-          title={entry.isDirectory ? 'Ouvrir' : 'Éditer'}
+          title={
+            entry.isDirectory
+              ? 'Ouvrir'
+              : isEditableFile(entry.name)
+                ? 'Éditer'
+                : 'Télécharger'
+          }
         >
           {entry.isDirectory ? (
             <Folder className="size-4 shrink-0 text-muted-foreground" />
