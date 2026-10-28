@@ -30,6 +30,9 @@ export const addRegistrySchema = z.object({
     .string()
     .max(128)
     .refine((v) => GIT_REF_PATTERN.test(v), 'Nom de branche invalide'),
+  /** SSH key for a PRIVATE repository — '' = none (public https). The form
+   * always carries the field, so the schema requires it. */
+  sshKeyId: z.string().trim().max(64),
 });
 
 export type AddRegistryDto = z.infer<typeof addRegistrySchema>;
@@ -39,6 +42,20 @@ export const registryIdSchema = z.object({
 });
 
 export type RegistryIdDto = z.infer<typeof registryIdSchema>;
+
+/** Editable fields of a registry (the URL is its identity — immutable). */
+export const updateRegistrySchema = z.object({
+  registryId: z.string().min(1),
+  name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
+  branch: z
+    .string()
+    .max(128)
+    .refine((v) => GIT_REF_PATTERN.test(v), 'Nom de branche invalide'),
+  /** SSH key for a PRIVATE repository — '' = none. */
+  sshKeyId: z.string().trim().max(64),
+});
+
+export type UpdateRegistryDto = z.infer<typeof updateRegistrySchema>;
 
 export const importRegistryEntrySchema = z.object({
   registryId: z.string().min(1),

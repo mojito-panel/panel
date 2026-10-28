@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { KeyRound, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { defineList, field } from '~/lists/define';
 
@@ -32,13 +32,18 @@ export interface AdminRegistryRow {
   modifiedLocally: number;
   invalid: number;
   upstreamGone: number;
+  /** SSH key of a PRIVATE repository — the clone authenticates with it. */
+  sshKeyId: string | null;
+  sshKeyName: string | null;
 }
 
 /** Row actions of the registries list, supplied by the page. */
 export interface AdminRegistriesContext {
   syncing: boolean;
   deleting: boolean;
+  editing: boolean;
   onSync: (registry: AdminRegistryRow) => void;
+  onEdit: (registry: AdminRegistryRow) => void;
   onDelete: (registry: AdminRegistryRow) => void;
 }
 
@@ -69,6 +74,14 @@ export const adminRegistriesList = defineList<AdminRegistryRow, AdminRegistriesC
             {registry.url}
             {registry.branch ? ` · ${registry.branch}` : ''}
           </p>
+          {registry.sshKeyName && (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <KeyRound className="size-3 shrink-0" />
+              <span className="truncate" title="Clé SSH du dépôt privé">
+                {registry.sshKeyName}
+              </span>
+            </p>
+          )}
         </div>
       ),
     },
@@ -137,6 +150,16 @@ export const adminRegistriesList = defineList<AdminRegistryRow, AdminRegistriesC
           >
             <RefreshCw />
             Synchroniser
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Modifier le nom, la branche ou la clé SSH"
+            disabled={context.editing}
+            onClick={() => context.onEdit(registry)}
+          >
+            <Pencil />
+            Éditer
           </Button>
           <Button
             variant="destructive"

@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { Recipe, RecipeRegistry } from '~/db/entities';
+import { Recipe, RecipeRegistry, SshKey } from '~/db/entities';
 import { orm } from '../orm';
 import { HttpError, requirePanelPermission } from '../session';
 import { withOrmContext } from '../middleware';
@@ -17,13 +17,16 @@ import {
   enqueueRegistrySync,
   importRegistryEntry,
   updateRecipeFromSource,
+  updateRegistry,
 } from '../registries';
+import { listSshKeys } from '../ssh-keys';
 import { adminRegistriesList, type AdminRegistryRow } from '~/lists/registries';
 import {
   addRegistrySchema,
   importRegistryEntrySchema,
   registryIdSchema,
   updateRecipeSourceSchema,
+  updateRegistrySchema,
 } from '~/validators/marketplace';
 
 /**
@@ -92,6 +95,16 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
 
     const registries = await orm.em.find(RecipeRegistry, {});
     const recipes = await loadRecipeSourceRows();
+    // Attached SSH keys (private repositories) — names for the list badges.
+    const keyIds = [
+      ...new Set(
+        registries
+          .map((registry) => registry.sshKeyId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const keys = keyIds.length > 0 ? await orm.em.find(SshKey, { id: { $in: keyIds } }) : [];
+    const keyNames = new Map(keys.map((key) => [key.id, key.name]));
 
     const rows = registries
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -144,6 +157,8 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           modifiedLocally,
           invalid,
           upstreamGone,
+          sshKeyId: registry.sshKeyId ?? null,
+          sshKeyName: registry.sshKeyId ? (keyNames.get(registry.sshKeyId) ?? null) : null,
         };
       });
 
@@ -158,6 +173,18 @@ export const addRegistryFn = createServerFn({ method: 'POST' })
     await requirePanelPermission({ 'panel.recipes': ['create'] });
     const registry = await addRegistry(data);
     return { id: registry.id };
+  });
+
+/**
+ * Edits a registry (name / branch / SSH key) — a branch or key change
+ * re-enqueues a sync (the service decides), the UI polls the result.
+ */
+export const updateRegistryFn = createServerFn({ method: 'POST' })
+  .validator(updateRegistrySchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({ 'panel.recipes': ['update'] });
+    return updateRegistry(data);
   });
 
 /** Enqueues a manual sync of one registry (pg-boss job — the UI polls). */

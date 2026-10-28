@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
-import { Plus, Store } from 'lucide-react';
+import { Pencil, Plus, Store } from 'lucide-react';
 import {
   listRegistriesFn,
   addRegistryFn,
   syncRegistryFn,
   deleteRegistryFn,
+  updateRegistryFn,
 } from '~/server/functions/marketplace';
+import { listSshKeysFn } from '~/server/functions/ssh-keys';
+import { DataPicker } from '~/components/data-table/data-picker';
 import { ListTable } from '~/components/data-table/list-table';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { mergeQuery, type ListQuery } from '~/lists/define';
@@ -18,8 +21,16 @@ import {
   adminRegistriesList,
   type AdminRegistryRow,
 } from '~/lists/registries';
-import { addRegistrySchema, type AddRegistryDto } from '~/validators/marketplace';
+import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
+import {
+  addRegistrySchema,
+  updateRegistrySchema,
+  type AddRegistryDto,
+  type UpdateRegistryDto,
+} from '~/validators/marketplace';
 import { adminRecipesList } from '~/lists/recipes';
+import { useAuth } from '~/contexts/use-auth';
+import { hasPermissions } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -31,6 +42,13 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
 
 export const Route = createFileRoute('/admin/marketplace/')({
   validateSearch: (search: Record<string, unknown>): ListQuery =>
@@ -49,11 +67,19 @@ function MarketplacePage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate({ from: Route.fullPath });
   const search = Route.useSearch();
+  // Key NAMES travel in the registry rows — the private keys never do. The
+  // key PICKER below (a DataPicker) needs the panel.keys read permission;
+  // without it the field degrades to a plain-text note, like the owner
+  // picker of the admin server page.
+  const { user } = useAuth();
+  const canManageKeys = hasPermissions(user?.permissions ?? [], { 'panel.keys': ['read'] });
 
   const listRegistries = useServerFn(listRegistriesFn);
   const addRegistry = useServerFn(addRegistryFn);
+  const updateRegistry = useServerFn(updateRegistryFn);
   const syncRegistry = useServerFn(syncRegistryFn);
   const deleteRegistry = useServerFn(deleteRegistryFn);
+  const listKeys = useServerFn(listSshKeysFn);
 
   const query = useQuery({
     queryKey: ['admin-registries'],
@@ -72,7 +98,12 @@ function MarketplacePage() {
       await invalidate();
       return result;
     },
-    onSuccess: () => toast.success('Registre ajouté — première synchronisation en cours'),
+    onSuccess: () => {
+      toast.success('Registre ajouté — première synchronisation en cours');
+      // Reset the add form (its key selection included) for the next one.
+      form.reset();
+      setAddKeySelection(null);
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -111,17 +142,33 @@ function MarketplacePage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const update = useMutation({
+    mutationFn: (input: UpdateRegistryDto) => updateRegistry({ data: input }),
+    onSuccess: async (result) => {
+      await invalidate();
+      toast.success(
+        result.synced
+          ? 'Registre mis à jour — resynchronisation lancée'
+          : 'Registre mis à jour',
+      );
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
 
   const [registryToDelete, setRegistryToDelete] = useState<AdminRegistryRow | null>(null);
+  const [registryToEdit, setRegistryToEdit] = useState<AdminRegistryRow | null>(null);
+  /** Key selection of the ADD form (id in the field, name for the trigger). */
+  const [addKeySelection, setAddKeySelection] = useState<{ id: string; name: string } | null>(null);
 
   // Pelican-style layout: the add form only shows behind the header button
   const [showAdd, setShowAdd] = useState(false);
 
   const form = useForm({
     validators: { onChange: addRegistrySchema },
-    defaultValues: { name: '', url: '', branch: '' },
+    defaultValues: { name: '', url: '', branch: '', sshKeyId: '' },
     onSubmit: ({ value }) => add.mutate(value),
   });
 
@@ -155,7 +202,9 @@ function MarketplacePage() {
             rowContext={{
               syncing: sync.isPending,
               deleting: remove.isPending,
+              editing: update.isPending,
               onSync: (registry) => sync.mutate(registry.id),
+              onEdit: setRegistryToEdit,
               onDelete: setRegistryToDelete,
             }}
           />
@@ -258,6 +307,46 @@ function MarketplacePage() {
                 )}
               </form.Field>
 
+              <form.Field name="sshKeyId">
+                {() => (
+                  <div className="space-y-2">
+                    <Label>Clé SSH (dépôt privé)</Label>
+                    {canManageKeys ? (
+                      <DataPicker
+                        list={adminSshKeysList}
+                        fetchPage={(query) => listKeys({ data: query })}
+                        toSelection={(row) => ({ id: row.id, name: row.name })}
+                        renderValue={(selection) => selection.name}
+                        value={addKeySelection}
+                        onChange={(selection) => {
+                          setAddKeySelection(selection);
+                          form.setFieldValue('sshKeyId', selection?.id ?? '');
+                        }}
+                        title="Choisir une clé SSH"
+                        placeholder="Aucune clé — dépôt public"
+                      />
+                    ) : (
+                      <p className="py-2 text-sm text-muted-foreground">
+                        Dépôts publics uniquement — permission de lister les
+                        clés manquante.
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Dépôt privé en ssh ? Sélectionne la clé de déploiement à
+                      utiliser pour le clonage —{' '}
+                      <Link
+                        to="/admin/keys"
+                        search={adminSshKeysList.defaultSearch}
+                        className="underline hover:text-foreground"
+                      >
+                        gérer les clés
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                )}
+              </form.Field>
+
               <Button type="submit" className="w-full" disabled={add.isPending}>
                 <Store />
                 {add.isPending ? 'Ajout…' : 'Ajouter et synchroniser'}
@@ -288,6 +377,17 @@ function MarketplacePage() {
         pending={remove.isPending}
       />
 
+      <EditRegistryDialog
+        key={registryToEdit?.id ?? 'none'}
+        registry={registryToEdit}
+        listKeys={listKeys}
+        canManageKeys={canManageKeys}
+        update={update}
+        onOpenChange={(open) => {
+          if (!open) setRegistryToEdit(null);
+        }}
+      />
+
       <p className="text-xs text-muted-foreground">
         Les recettes importées depuis un registre apparaissent dans{' '}
         <Link
@@ -300,5 +400,157 @@ function MarketplacePage() {
         , avec leur statut de mise à jour.
       </p>
     </div>
+  );
+}
+
+/**
+ * "Éditer" dialog of one registry — name, tracked branch and the SSH key
+ * of a private repository. The URL (the registry's identity) is shown
+ * read-only. A branch or key change re-enqueues a sync (the update fn
+ * decides), so the catalog and the next clones follow immediately.
+ */
+function EditRegistryDialog({
+  registry,
+  listKeys,
+  canManageKeys,
+  update,
+  onOpenChange,
+}: {
+  registry: AdminRegistryRow | null;
+  listKeys: (args: { data: ListQuery }) => Promise<{ rows: AdminSshKeyRow[]; rowCount: number }>;
+  canManageKeys: boolean;
+  update: UseMutationResult<{ synced: boolean }, Error, UpdateRegistryDto>;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const form = useForm({
+    validators: { onChange: updateRegistrySchema },
+    // The component is keyed by registry id — it remounts per registry, so
+    // the defaults seed exactly once per edit session.
+    defaultValues: {
+      registryId: registry?.id ?? '',
+      name: registry?.name ?? '',
+      branch: registry?.branch ?? '',
+      sshKeyId: registry?.sshKeyId ?? '',
+    },
+    onSubmit: ({ value }) => update.mutate(value),
+  });
+
+  // Key selection: id in the field, name for the trigger — seeded from the
+  // registry row (the DTO carries the current key's name).
+  const [keySelection, setKeySelection] = useState<{ id: string; name: string } | null>(
+    registry?.sshKeyId ? { id: registry.sshKeyId, name: registry.sshKeyName ?? '' } : null,
+  );
+
+  return (
+    <Dialog open={registry !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Modifier « {registry?.name} »</DialogTitle>
+          <DialogDescription>
+            Le dépôt git est l’identité du registre — il ne change pas. Un
+            changement de branche ou de clé relance une synchronisation.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field name="name">
+            {(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="edit-registry-name">Nom d’affichage</Label>
+                <Input
+                  id="edit-registry-name"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">{field.state.meta.errors[0]?.message}</p>
+                )}
+              </div>
+            )}
+          </form.Field>
+
+          <div className="space-y-2">
+            <Label>Dépôt git (immuable)</Label>
+            <p className="truncate rounded-md border bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {registry?.url ?? '—'}
+            </p>
+          </div>
+
+          <form.Field name="branch">
+            {(field) => (
+              <div className="space-y-2">
+                <Label htmlFor="edit-registry-branch">Branche suivie</Label>
+                <Input
+                  id="edit-registry-branch"
+                  placeholder="main (défaut du dépôt)"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  onBlur={field.handleBlur}
+                />
+                {field.state.meta.errors.length > 0 && (
+                  <p className="text-sm text-destructive">{field.state.meta.errors[0]?.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Laissée vide, la branche par défaut du dépôt est suivie.
+                </p>
+              </div>
+            )}
+          </form.Field>
+
+          <form.Field name="sshKeyId">
+            {() => (
+              <div className="space-y-2">
+                <Label>Clé SSH (dépôt privé)</Label>
+                {canManageKeys ? (
+                  <DataPicker
+                    list={adminSshKeysList}
+                    fetchPage={(query) => listKeys({ data: query })}
+                    toSelection={(row) => ({ id: row.id, name: row.name })}
+                    renderValue={(selection) => selection.name}
+                    value={keySelection}
+                    onChange={(selection) => {
+                      setKeySelection(selection);
+                      form.setFieldValue('sshKeyId', selection?.id ?? '');
+                    }}
+                    title="Choisir une clé SSH"
+                    placeholder="Aucune clé — dépôt public"
+                  />
+                ) : (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    {registry?.sshKeyName ?? '—'} — permission de lister les
+                    clés manquante.
+                  </p>
+                )}
+              </div>
+            )}
+          </form.Field>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Annuler
+            </Button>
+            <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
+              {([canSubmit, isSubmitting]) => (
+                <Button type="submit" disabled={!canSubmit || isSubmitting || update.isPending}>
+                  <Pencil />
+                  {update.isPending ? 'Enregistrement…' : 'Enregistrer'}
+                </Button>
+              )}
+            </form.Subscribe>
+          </div>
+        </form>
+
+        {update.isError && (
+          <p className="mt-2 text-sm text-destructive">{update.error.message}</p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

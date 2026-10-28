@@ -1,7 +1,7 @@
 import '@tanstack/react-start/server-only';
 import type { Job } from 'pg-boss';
-import { Recipe, RecipeRegistry } from '~/db/entities';
-import type { IRecipe, IRecipeRegistry } from '~/db/types';
+import { Recipe, RecipeRegistry, SshKey } from '~/db/entities';
+import type { IRecipe, IRecipeRegistry, ISshKey } from '~/db/types';
 import { parseRecipeJson } from '~/contract';
 import { nanoid } from '~/lib/nanoid';
 import {
@@ -13,6 +13,8 @@ import {
 } from '~/lib/recipe-source';
 import { orm, runWithOrmContext } from './orm';
 import { HttpError } from './session';
+import { decryptSecret } from './crypto';
+import { requireSshKey } from './ssh-keys';
 import { getQueue, startQueue } from './queue';
 import { getSettingValue, writeSettings } from './settings';
 import { buildRegistryEntries, canonicalRecipeHash, sha256Text } from './registry-entries';
@@ -72,6 +74,8 @@ export async function addRegistry(input: {
   name: string;
   url: string;
   branch: string;
+  /** SSH key for a PRIVATE repository — '' / null = none (public https). */
+  sshKeyId?: string | null;
 }): Promise<IRecipeRegistry> {
   const em = orm.em;
 
@@ -87,11 +91,20 @@ export async function addRegistry(input: {
     throw new HttpError(409, 'Ce dépôt est déjà enregistré comme registre');
   }
 
+  // A key must exist when given ('' is the form's "none" sentinel).
+  const sshKeyId = input.sshKeyId ? (await requireSshKey(input.sshKeyId)).id : null;
+
   const registry = em.create(RecipeRegistry, {
     id: nanoid(),
     name: input.name,
     url,
     branch: input.branch,
+    branchName: '',
+    entries: null,
+    headSha: null,
+    lastSyncedAt: null,
+    lastError: null,
+    sshKeyId,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -100,6 +113,39 @@ export async function addRegistry(input: {
 
   await enqueueRegistrySync(registry.id);
   return registry;
+}
+
+/**
+ * Edits a registry (name, tracked branch, SSH key — the URL is the row's
+ * identity and never changes). A branch or key change invalidates the
+ * cached catalog, so a sync is re-enqueued — it also validates the new
+ * branch/key pairing immediately.
+ */
+export async function updateRegistry(input: {
+  registryId: string;
+  name: string;
+  branch: string;
+  /** SSH key for a PRIVATE repository — '' / null = none. */
+  sshKeyId?: string | null;
+}): Promise<{ synced: boolean }> {
+  const em = orm.em;
+  const registry = await em.findOne(RecipeRegistry, { id: input.registryId });
+  if (!registry) throw new HttpError(404, 'Registre introuvable');
+
+  const sshKeyId = input.sshKeyId ? (await requireSshKey(input.sshKeyId)).id : null;
+  const authChanged = registry.sshKeyId !== sshKeyId;
+  const branchChanged = registry.branch !== input.branch;
+
+  registry.name = input.name;
+  registry.branch = input.branch;
+  registry.sshKeyId = sshKeyId;
+  await em.flush();
+
+  if (branchChanged || authChanged) {
+    await enqueueRegistrySync(registry.id);
+    return { synced: true };
+  }
+  return { synced: false };
 }
 
 /**
@@ -135,7 +181,12 @@ export async function enqueueRegistrySync(registryId: string): Promise<void> {
 async function syncRegistryRow(registry: IRecipeRegistry): Promise<void> {
   const em = orm.em;
   try {
-    const { files, headSha, branch } = await cloneRecipeFiles(registry.url, registry.branch);
+    const sshKey = await sshKeyOf(registry);
+    const { files, headSha, branch } = await cloneRecipeFiles(
+      registry.url,
+      registry.branch,
+      sshKey ? decryptSecret(sshKey.privateKey) : null,
+    );
 
     const entries = buildRegistryEntries(files);
     registry.entries = entries;
@@ -151,6 +202,15 @@ async function syncRegistryRow(registry: IRecipeRegistry): Promise<void> {
     registry.lastError = (err as Error).message;
     await em.flush();
   }
+}
+
+/**
+ * The SSH key a registry clones with — null when the registry has none
+ * (public https, or the panel host's own ssh configuration).
+ */
+async function sshKeyOf(registry: IRecipeRegistry): Promise<ISshKey | null> {
+  if (!registry.sshKeyId) return null;
+  return orm.em.findOne(SshKey, { id: registry.sshKeyId });
 }
 
 /**
@@ -275,9 +335,28 @@ async function readGitRecipeFile(source: GitRecipeSource): Promise<string> {
     }
   }
 
-  const content = await readGitFile(source.repoUrl, source.branch, source.path);
+  // No cached catalog — a direct clone, authenticated with the key of the
+  // registry matching the repository (any branch of it) when there is one.
+  const sshKey = await sshKeyOfRegistryUrl(source.repoUrl);
+  const content = await readGitFile(
+    source.repoUrl,
+    source.branch,
+    source.path,
+    sshKey ? decryptSecret(sshKey.privateKey) : null,
+  );
   if (content === null) throw new HttpError(404, 'Fichier source introuvable dans le dépôt');
   return content;
+}
+
+/**
+ * The SSH key configured on ANY registry of this repository URL (any
+ * branch) — a recipe's direct clone reuses its registry's credential. Null
+ * when no registry of the repository carries a key.
+ */
+async function sshKeyOfRegistryUrl(repoUrl: string): Promise<ISshKey | null> {
+  const registry = await orm.em.findOne(RecipeRegistry, { url: repoUrl, sshKeyId: { $ne: null } });
+  if (!registry?.sshKeyId) return null;
+  return orm.em.findOne(SshKey, { id: registry.sshKeyId });
 }
 
 // ─── Scheduled sweep ──────────────────────────────────────────────────────────
@@ -370,6 +449,15 @@ async function checkUncoveredRecipeSources(): Promise<void> {
   }
   await em.flush();
 
+  // Per repository: the SSH key of ANY registry of that repository (any
+  // branch) — the private credential outlives a branch change.
+  const keyByUrl = new Map<string, string | null>();
+  for (const registry of registries) {
+    if (!registry.sshKeyId || keyByUrl.has(registry.url)) continue;
+    const key = await em.findOne(SshKey, { id: registry.sshKeyId });
+    keyByUrl.set(registry.url, key ? decryptSecret(key.privateKey) : null);
+  }
+
   for (const [key, group] of gitGroups) {
     const separator = key.indexOf('#');
     const repoUrl = key.slice(0, separator);
@@ -377,7 +465,12 @@ async function checkUncoveredRecipeSources(): Promise<void> {
 
     let files: Array<{ path: string; content: string }>;
     try {
-      ({ files } = await cloneRecipeFiles(repoUrl, branch === 'HEAD' ? '' : branch));
+      const privateKey = keyByUrl.get(repoUrl) ?? null;
+      ({ files } = await cloneRecipeFiles(
+        repoUrl,
+        branch === 'HEAD' ? '' : branch,
+        privateKey,
+      ));
     } catch {
       continue; // Clone failed — keep the previous stamps.
     }

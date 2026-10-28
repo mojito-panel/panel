@@ -25,6 +25,7 @@ import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as ServersServerIdRouteRouteImport } from './routes/servers/$serverId/route'
 import { Route as AppServersIndexRouteImport } from './routes/_app/servers/index'
+import { Route as AdminKeysIndexRouteImport } from './routes/admin/keys/index'
 import { Route as AdminMarketplaceIndexRouteImport } from './routes/admin/marketplace/index'
 import { Route as AdminNodesIndexRouteImport } from './routes/admin/nodes/index'
 import { Route as AdminNodesNodeIdRouteImport } from './routes/admin/nodes/$nodeId'
@@ -128,6 +129,11 @@ const AppServersIndexRoute = AppServersIndexRouteImport.update({
   id: '/servers/',
   path: '/servers/',
   getParentRoute: () => AppRoute,
+} as any)
+const AdminKeysIndexRoute = AdminKeysIndexRouteImport.update({
+  id: '/keys/',
+  path: '/keys/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminMarketplaceIndexRoute = AdminMarketplaceIndexRouteImport.update({
   id: '/marketplace/',
@@ -285,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers/': typeof AppServersIndexRoute
+  '/admin/keys/': typeof AdminKeysIndexRoute
   '/admin/marketplace/': typeof AdminMarketplaceIndexRoute
   '/admin/nodes/': typeof AdminNodesIndexRoute
   '/admin/recipes/': typeof AdminRecipesIndexRoute
@@ -324,6 +331,7 @@ export interface FileRoutesByTo {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/servers': typeof AppServersIndexRoute
+  '/admin/keys': typeof AdminKeysIndexRoute
   '/admin/marketplace': typeof AdminMarketplaceIndexRoute
   '/admin/nodes': typeof AdminNodesIndexRoute
   '/admin/recipes': typeof AdminRecipesIndexRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/servers/$serverId/users': typeof ServersServerIdUsersRoute
   '/servers/$serverId/variables': typeof ServersServerIdVariablesRoute
   '/_app/servers/': typeof AppServersIndexRoute
+  '/admin/keys/': typeof AdminKeysIndexRoute
   '/admin/marketplace/': typeof AdminMarketplaceIndexRoute
   '/admin/nodes/': typeof AdminNodesIndexRoute
   '/admin/recipes/': typeof AdminRecipesIndexRoute
@@ -410,6 +419,7 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/servers/'
+    | '/admin/keys/'
     | '/admin/marketplace/'
     | '/admin/nodes/'
     | '/admin/recipes/'
@@ -449,6 +459,7 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/servers'
+    | '/admin/keys'
     | '/admin/marketplace'
     | '/admin/nodes'
     | '/admin/recipes'
@@ -491,6 +502,7 @@ export interface FileRouteTypes {
     | '/servers/$serverId/users'
     | '/servers/$serverId/variables'
     | '/_app/servers/'
+    | '/admin/keys/'
     | '/admin/marketplace/'
     | '/admin/nodes/'
     | '/admin/recipes/'
@@ -629,6 +641,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/servers/'
       preLoaderRoute: typeof AppServersIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/admin/keys/': {
+      id: '/admin/keys/'
+      path: '/keys'
+      fullPath: '/admin/keys/'
+      preLoaderRoute: typeof AdminKeysIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/admin/marketplace/': {
       id: '/admin/marketplace/'
@@ -813,6 +832,7 @@ interface AdminRouteRouteChildren {
   AdminNodesNodeIdRoute: typeof AdminNodesNodeIdRoute
   AdminServersServerIdRoute: typeof AdminServersServerIdRoute
   AdminServersNewRoute: typeof AdminServersNewRoute
+  AdminKeysIndexRoute: typeof AdminKeysIndexRoute
   AdminMarketplaceIndexRoute: typeof AdminMarketplaceIndexRoute
   AdminNodesIndexRoute: typeof AdminNodesIndexRoute
   AdminRecipesIndexRoute: typeof AdminRecipesIndexRoute
@@ -834,6 +854,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminNodesNodeIdRoute: AdminNodesNodeIdRoute,
   AdminServersServerIdRoute: AdminServersServerIdRoute,
   AdminServersNewRoute: AdminServersNewRoute,
+  AdminKeysIndexRoute: AdminKeysIndexRoute,
   AdminMarketplaceIndexRoute: AdminMarketplaceIndexRoute,
   AdminNodesIndexRoute: AdminNodesIndexRoute,
   AdminRecipesIndexRoute: AdminRecipesIndexRoute,

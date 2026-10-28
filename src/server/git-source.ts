@@ -1,9 +1,10 @@
 import '@tanstack/react-start/server-only';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { isSshRemote } from '~/lib/ssh-key';
 import { MAX_RECIPE_FILE_BYTES, RECIPE_FILE_PATTERN } from './registry-entries';
 
 const execFileAsync = promisify(execFile);
@@ -59,16 +60,44 @@ const COVER_FILES: Record<string, string> = {
 /**
  * Clones a git repository (depth 1, single branch) into an ephemeral temp
  * directory and reads every recipe file it contains.
+ *
+ * `sshPrivateKey` (a PRIVATE registry's key, decrypted) authenticates the
+ * clone of a private repository: written to an ephemeral 0600 file and
+ * injected through GIT_SSH_COMMAND for every git call of this clone —
+ * IdentitiesOnly so ONLY the configured key is tried (no agent fallback),
+ * BatchMode so a bad key fails fast instead of prompting, accept-new so a
+ * first connection trusts then pins the host key (TOFU, like a fresh CI).
  */
-export async function cloneRecipeFiles(url: string, branch = ''): Promise<GitCloneResult> {
+export async function cloneRecipeFiles(
+  url: string,
+  branch = '',
+  sshPrivateKey: string | null = null,
+): Promise<GitCloneResult> {
   const dir = await mkdtemp(join(tmpdir(), 'mojito-registry-'));
+
+  let sshEnv: NodeJS.ProcessEnv | undefined;
+  let sshDir: string | null = null;
+  if (sshPrivateKey && isSshRemote(url)) {
+    sshDir = await mkdtemp(join(tmpdir(), 'mojito-ssh-key-'));
+    const keyFile = join(sshDir, 'deploy_key');
+    const material = sshPrivateKey.replace(/\r\n/g, '\n');
+    await writeFile(keyFile, material.endsWith('\n') ? material : `${material}\n`, { mode: 0o600 });
+    sshEnv = {
+      ...process.env,
+      // Single-quoted path — the command is parsed by sh; a temp path never
+      // carries a quote, and quotes defeat any `$` expansion.
+      GIT_SSH_COMMAND: `ssh -i '${keyFile}' -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new`,
+    };
+  }
+
   try {
-    const resolved = await cloneRepository(url, branch, dir);
+    const resolved = await cloneRepository(url, branch, dir, sshEnv);
     return { files: await readRecipeFiles(dir), ...resolved };
   } finally {
     // Best effort: an abandoned (timed-out) clone may still be writing — a
     // failed removal only leaks a temp directory until the OS cleans it.
     await rm(dir, { recursive: true, force: true }).catch(() => {});
+    if (sshDir) await rm(sshDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -77,21 +106,27 @@ export async function cloneRecipeFiles(url: string, branch = ''): Promise<GitClo
  * whose source repository is no longer registered): clones, returns the raw
  * content at `path`, null when the file does not exist there.
  */
-export async function readGitFile(url: string, branch: string, path: string): Promise<string | null> {
-  const { files } = await cloneRecipeFiles(url, branch === 'HEAD' ? '' : branch);
+export async function readGitFile(
+  url: string,
+  branch: string,
+  path: string,
+  sshPrivateKey: string | null = null,
+): Promise<string | null> {
+  const { files } = await cloneRecipeFiles(url, branch === 'HEAD' ? '' : branch, sshPrivateKey);
   return files.find((file) => file.path === path)?.content ?? null;
 }
 
 /** Runs `git <args>`, mapping failures to readable errors (registry.lastError). */
-async function gitExec(args: string[]): Promise<{ stdout: string; stderr: string }> {
+async function gitExec(args: string[], env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
   try {
     return await execFileAsync('git', args, {
       timeout: CLONE_TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true,
-      // The inherited environment carries GIT_SSH_COMMAND, the ssh agent,
-      // credential helpers and the panel user's ~/.ssh — nothing to
-      // configure here.
+      // Inherit the environment by default (GIT_SSH_COMMAND, the ssh agent,
+      // credential helpers, the panel user's ~/.ssh) — a private-registry
+      // key OVERRIDES GIT_SSH_COMMAND (`sshEnv`).
+      ...(env ? { env } : {}),
     });
   } catch (err) {
     const failure = err as { code?: string; stderr?: string; message?: string };
@@ -117,19 +152,23 @@ async function cloneRepository(
   url: string,
   branch: string,
   dir: string,
+  env?: NodeJS.ProcessEnv,
 ): Promise<{ headSha: string; branch: string }> {
-  await gitExec([
-    'clone',
-    '--depth', '1',
-    '--single-branch',
-    // No --branch = the repository's default branch (the remote HEAD).
-    ...(branch ? ['--branch', branch] : []),
-    url,
-    dir,
-  ]);
+  await gitExec(
+    [
+      'clone',
+      '--depth', '1',
+      '--single-branch',
+      // No --branch = the repository's default branch (the remote HEAD).
+      ...(branch ? ['--branch', branch] : []),
+      url,
+      dir,
+    ],
+    env,
+  );
 
-  const { stdout: headSha } = await gitExec(['-C', dir, 'rev-parse', 'HEAD']);
-  const { stdout: branchName } = await gitExec(['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']);
+  const { stdout: headSha } = await gitExec(['-C', dir, 'rev-parse', 'HEAD'], env);
+  const { stdout: branchName } = await gitExec(['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], env);
 
   return {
     headSha: headSha.trim(),
