@@ -29,7 +29,7 @@ interface XtermConsoleProps {
   /** Install status pushed by the agent over the WS (steps, %, error). */
   onInstallStatus?: (status: ConsoleInstallStatus) => void;
   /**
-   * Resource stats pushed by the agent over the WS (CPU/RAM/Réseau cards):
+   * Resource stats pushed by the agent over the WS (CPU/RAM cards):
    * the ring replay on connect, then one full frame per sampling tick.
    */
   onStats?: (stats: ServerStats) => void;

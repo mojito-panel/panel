@@ -17,13 +17,15 @@ import {
 } from 'recharts';
 
 /**
- * Live resource cards of a server (CPU / RAM / Réseau), fed by the console
- * WS: the agent replays its stats ring on connect (the last minute of
- * the process tree's life), then pushes one full frame per second — the
+ * Live resource cards of a server (CPU / RAM), fed by the console WS:
+ * the agent replays its stats ring on connect (the last minute of the
+ * process tree's life), then pushes one full frame per second — the
  * page replaces its state wholesale, this component just renders it.
  *
- * The three cards line up in a row UNDER the console — the console keeps
- * its full width, the page just grows taller.
+ * The two cards line up in a row UNDER the console — the console keeps
+ * its full width, the page just grows taller. (The agent also samples
+ * while an INSTALL runs — the cards follow the installer's activity
+ * the same way.)
  */
 
 const CPU_CONFIG = {
@@ -34,13 +36,8 @@ const RAM_CONFIG = {
   ram: { label: 'RAM', color: 'var(--color-red-500)' },
 } as const;
 
-const NET_CONFIG = {
-  rx: { label: '↓ Réception', color: 'var(--color-blue-500)' },
-  tx: { label: '↑ Envoi', color: 'var(--color-emerald-500)' },
-} as const;
-
 /** Numeric series the flow animation glides between two frames. */
-const FLOW_KEYS = ['cpuPercent', 'memoryMb', 'rxBytesPerSec', 'txBytesPerSec'] as const;
+const FLOW_KEYS = ['cpuPercent', 'memoryMb'] as const;
 
 const EMPTY_SAMPLES: ServerStatsSample[] = [];
 
@@ -65,47 +62,6 @@ function formatMbTick(mb: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(mb / 1024 < 10 ? 1 : 0)}G` : `${Math.round(mb)}M`;
 }
 
-/**
- * Bits per second with fr-FR units — the Réseau card's live values.
- * The agent sends bytes/s; the display converts (×8) to Kbps and up.
- */
-function formatBps(bytesPerSec: number): string {
-  const bps = bytesPerSec * 8;
-  if (bps < 1000) return `${Math.round(bps)} bps`;
-  if (bps < 1000 ** 2) return `${(bps / 1000).toFixed(1)} Kbps`;
-  if (bps < 1000 ** 3) return `${(bps / 1000 ** 2).toFixed(1)} Mbps`;
-  return `${(bps / 1000 ** 3).toFixed(1)} Gbps`;
-}
-
-/** Compact axis tick, bits per second (no unit suffix — the card header carries it). */
-function formatBpsTick(bytesPerSec: number): string {
-  const bps = bytesPerSec * 8;
-  if (bps < 1000) return `${Math.round(bps)}`;
-  if (bps < 1000 ** 2) return `${Math.round(bps / 1000)}K`;
-  if (bps < 1000 ** 3) return `${(bps / 1000 ** 2).toFixed(1)}M`;
-  return `${(bps / 1000 ** 3).toFixed(1)}G`;
-}
-
-/**
- * Bytes with fr-FR binary units — the Réseau card's lifetime totals
- * ("Total ↓ 1,2 Go · ↑ 240 Mo").
- */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${Math.round(bytes)} o`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} Ko`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
-  return `${(bytes / 1024 ** 3).toFixed(2)} Go`;
-}
-
-/** 1 / 2 / 5 × 10^n — the Réseau card's dynamic axis ceiling. */
-function niceCeil(value: number): number {
-  if (value <= 0) return 1;
-  const exponent = Math.floor(Math.log10(value));
-  const fraction = value / 10 ** exponent;
-  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
-  return niceFraction * 10 ** exponent;
-}
-
 interface StatChartProps {
   /** recharts chart data: `time` + the charted value under `dataKey`. */
   data: Array<Record<string, number | string>>;
@@ -114,7 +70,7 @@ interface StatChartProps {
   dataKey: string;
   /** SVG id of the area's gradient fill (defined inline per chart). */
   gradientId: string;
-  /** Y axis domain and tick formatter — fixed for CPU/RAM, dynamic for Réseau. */
+  /** Y axis domain and tick formatter — fixed to the allocation. */
   domain: [number, number];
   tickFormatter: (value: number) => string;
   /** Tooltip value formatting (adds the unit the raw number lacks). */
@@ -192,29 +148,18 @@ export function ServerStatsCards({ stats, hint }: { stats: ServerStats | null; h
     time: formatTime(sample.at),
     cpu: sample.cpuPercent,
     ram: sample.memoryMb,
-    rx: sample.rxBytesPerSec,
-    tx: sample.txBytesPerSec,
   }));
 
   const latest = samples.length > 0 ? samples[samples.length - 1] : null;
 
-  // CPU / RAM: the axis is FIXED to the server's allocation (a 3-core
-  // server reads 0 → 300 %, the RAM 0 → its limit) — a server with no
-  // allocation scales to the host size (the frame carries the max).
+  // The axes are FIXED to the server's allocation (a 3-core server reads
+  // 0 → 300 %, the RAM 0 → its limit) — a server with no allocation
+  // scales to the host size (the frame carries the max).
   const cpuMax = stats?.cpuMaxPercent ?? 100;
   const memoryMax = stats?.memoryMaxMb ?? 1024;
 
-  // Réseau: DYNAMIC scale — 25 % headroom over the window's peak, snapped
-  // to a 1/2/5×10^n ceiling, floored at 1 Kio/s so an idle line does not
-  // jitter the axis.
-  const peak = samples.reduce(
-    (max, sample) => Math.max(max, sample.rxBytesPerSec, sample.txBytesPerSec),
-    0,
-  );
-  const netMax = Math.max(1024, niceCeil(peak * 1.25));
-
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">CPU</CardTitle>
@@ -259,82 +204,6 @@ export function ServerStatsCards({ stats, hint }: { stats: ServerStats | null; h
               tickFormatter={formatMbTick}
               tooltipFormatter={formatMb}
             />
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Réseau</CardTitle>
-          {/* The live values with their arrows — ↓ download, ↑ upload. */}
-          <CardDescription>
-            {latest ? (
-              <span className="tabular-nums">
-                ↓ {formatBps(latest.rxBytesPerSec)} · ↑ {formatBps(latest.txBytesPerSec)}
-              </span>
-            ) : (
-              '—'
-            )}
-          </CardDescription>
-          {/* Lifetime totals of the current run (server start or install
-              start) — display only, never charted. */}
-          {stats && (
-            <p className="text-xs tabular-nums text-muted-foreground">
-              Total ↓ {formatBytes(stats.totalRxBytes)} · ↑ {formatBytes(stats.totalTxBytes)}
-            </p>
-          )}
-        </CardHeader>
-        <CardContent>
-          {chartData.length === 0 ? (
-            <EmptyChart hint={hint} />
-          ) : (
-            <ChartContainer config={NET_CONFIG} className="h-28 w-full">
-              <AreaChart data={chartData} margin={{ top: 4, bottom: 0, left: 0, right: 4 }}>
-                <Customized
-                  component={
-                    <defs>
-                      <linearGradient id="server-rx-gradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-rx)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--color-rx)" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="server-tx-gradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-tx)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--color-tx)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                  }
-                />
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis dataKey="time" hide />
-                <YAxis
-                  domain={[0, netMax]}
-                  ticks={[0, netMax / 2, netMax]}
-                  tickFormatter={formatBpsTick}
-                  tickLine={false}
-                  axisLine={false}
-                  width={36}
-                />
-                <ChartTooltip
-                  content={<ChartTooltipContent indicator="line" formatter={(value) => formatBps(Number(value))} />}
-                />
-                <Area
-                  dataKey="rx"
-                  type="monotone"
-                  stroke="var(--color-rx)"
-                  fill="url(#server-rx-gradient)"
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                />
-                <Area
-                  dataKey="tx"
-                  type="monotone"
-                  stroke="var(--color-tx)"
-                  fill="url(#server-tx-gradient)"
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ChartContainer>
           )}
         </CardContent>
       </Card>

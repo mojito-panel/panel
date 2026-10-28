@@ -506,17 +506,7 @@ describe('consoleServerMessageSchema', () => {
         stats: {
           cpuMaxPercent: 300,
           memoryMaxMb: 1024,
-          totalTxBytes: 4096,
-          totalRxBytes: 20480,
-          samples: [
-            {
-              at: 1790000000000,
-              cpuPercent: 142.5,
-              memoryMb: 512,
-              rxBytesPerSec: 20480,
-              txBytesPerSec: 4096,
-            },
-          ],
+          samples: [{ at: 1790000000000, cpuPercent: 142.5, memoryMb: 512 }],
         },
       }).success,
     ).toBe(true);
@@ -525,7 +515,7 @@ describe('consoleServerMessageSchema', () => {
     expect(
       consoleServerMessageSchema.safeParse({
         type: 'stats',
-        stats: { cpuMaxPercent: 300, memoryMaxMb: 1024, totalTxBytes: 0, totalRxBytes: 0, samples: [] },
+        stats: { cpuMaxPercent: 300, memoryMaxMb: 1024, samples: [] },
       }).success,
     ).toBe(true);
   });
@@ -541,25 +531,9 @@ describe('consoleServerMessageSchema', () => {
       consoleServerMessageSchema.safeParse({
         type: 'stats',
         stats: {
-          cpuMaxPercent: 0,
-          memoryMaxMb: 1024,
-          totalTxBytes: 0,
-          totalRxBytes: 0,
-          samples: [],
-        },
-      }).success,
-    ).toBe(false);
-    expect(
-      consoleServerMessageSchema.safeParse({
-        type: 'stats',
-        stats: {
           cpuMaxPercent: 300,
           memoryMaxMb: 1024,
-          totalTxBytes: -1,
-          totalRxBytes: 0,
-          samples: [
-            { at: 1790000000000, cpuPercent: -1, memoryMb: 0, rxBytesPerSec: 0, txBytesPerSec: 0 },
-          ],
+          samples: [{ at: 1790000000000, cpuPercent: -1, memoryMb: 0 }],
         },
       }).success,
     ).toBe(false);

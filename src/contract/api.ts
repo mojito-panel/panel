@@ -321,8 +321,8 @@ export type ConsoleError = z.infer<typeof consoleErrorSchema>;
 /**
  * One resource sample of a server's WHOLE process tree (every member of
  * its Job Object), collected by the agent's sampling loop while the tree
- * is up. CPU and network are deltas between two ticks; memory is the
- * job-wide commit charge.
+ * is up (or, while it installs, of the install step's one-shot job). CPU
+ * is a delta between two ticks; memory is the job-wide commit charge.
  */
 export const serverStatsSampleSchema = z.object({
   /** Unix ms — the sample's collection time. */
@@ -334,33 +334,21 @@ export const serverStatsSampleSchema = z.object({
   cpuPercent: z.number().min(0),
   /** Job-wide commit charge of the tree (MB) — the quantity SERVER_MEMORY caps. */
   memoryMb: z.number().min(0),
-  /** Download rate — every network receive of the tree's processes (bytes/s). */
-  rxBytesPerSec: z.number().min(0),
-  /** Upload rate — every network send of the tree's processes (bytes/s). */
-  txBytesPerSec: z.number().min(0),
 });
 
 export type ServerStatsSample = z.infer<typeof serverStatsSampleSchema>;
 
 /**
- * Full stats frame pushed on the console WS: the charts' axis scales, the
- * current run's lifetime network totals and the buffered samples (oldest
- * first). The agent sends it ONLY when something runs — a live tree, or
- * the install whose steps it tracks as well; a NEW run (server start,
- * new install) resets the ring and the totals.
+ * Full stats frame pushed on the console WS: the charts' axis scales and
+ * the buffered samples (oldest first). The agent sends it ONLY when
+ * something runs — a live tree, or the install whose steps it tracks as
+ * well; a NEW run (server start, new install) resets the ring.
  */
 export const serverStatsSchema = z.object({
   /** CPU chart axis max: allowed cores × 100 (host cores × 100 when unlimited). */
   cpuMaxPercent: z.number().positive(),
   /** Memory chart axis max: allocated MB (host total MB when unlimited). */
   memoryMaxMb: z.number().positive(),
-  /**
-   * Bytes sent/received since the current run began (tree start or
-   * install start) — the lifetime totals shown next to the Réseau
-   * chart, never charted.
-   */
-  totalTxBytes: z.number().int().min(0),
-  totalRxBytes: z.number().int().min(0),
   /** Samples of the current run, oldest first. */
   samples: z.array(serverStatsSampleSchema),
 });
