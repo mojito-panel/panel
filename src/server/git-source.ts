@@ -1,12 +1,9 @@
 import '@tanstack/react-start/server-only';
-import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import git from 'isomorphic-git';
-import http from 'isomorphic-git/http/node';
 import { MAX_RECIPE_FILE_BYTES, RECIPE_FILE_PATTERN } from './registry-entries';
 
 const execFileAsync = promisify(execFile);
@@ -14,19 +11,17 @@ const execFileAsync = promisify(execFile);
 /**
  * Git transport of the recipe marketplace (server-only). A registry is ANY
  * git repository — public https or ssh, GitHub, GitLab, Gitea, self-hosted…:
+ * the SYSTEM git binary does the cloning, for every protocol (`git clone
+ * --depth 1 --single-branch`) — the seamless path: it inherits the panel
+ * host's git/ssh configuration (keys, `~/.ssh/config`, agent, credential
+ * helpers), so private repositories work with zero auth code in the panel.
+ * Git must be installed on the panel host (Git for Windows).
  *
- *   - https URLs clone through isomorphic-git — pure JS, no system git
- *     binary needed on the panel host;
- *   - ssh URLs (`ssh://…`, and the `git@host:path` shorthand normalized at
- *     registry-add time) clone through the SYSTEM `git clone --depth 1` —
- *     the seamless path: it inherits the panel host's git/ssh configuration
- *     (keys, `~/.ssh/config`, agent), which no pure-JS transport can honor.
- *
- * Both paths clone depth 1 into an EPHEMERAL temp directory, the walker
- * reads the recipe files (and their optional covers), and the temp directory
- * is removed. Nothing persists between syncs: a temp directory is ~100 KB
- * for a recipes repo, and a clone lost mid-sync only means re-cloning on the
- * next one.
+ * The clone is depth 1 into an EPHEMERAL temp directory, the walker reads
+ * the recipe files (and their optional covers), and the temp directory is
+ * removed. Nothing persists between syncs: a temp directory is ~100 KB for a
+ * recipes repo, and a clone lost mid-sync only means re-cloning on the next
+ * one.
  */
 
 /** Result of a registry clone: the recipe files + the resolved commit. */
@@ -62,96 +57,19 @@ const COVER_FILES: Record<string, string> = {
 };
 
 /**
- * Clones a git repository (depth 1) into an ephemeral temp directory and
- * reads every recipe file it contains. https goes through isomorphic-git,
- * ssh through the system git binary (see the module header).
+ * Clones a git repository (depth 1, single branch) into an ephemeral temp
+ * directory and reads every recipe file it contains.
  */
 export async function cloneRecipeFiles(url: string, branch = ''): Promise<GitCloneResult> {
   const dir = await mkdtemp(join(tmpdir(), 'mojito-registry-'));
   try {
-    if (url.startsWith('ssh://')) {
-      const resolved = await cloneViaSystemGit(url, branch, dir);
-      return { files: await readRecipeFiles(dir), ...resolved };
-    }
-
-    await withTimeout(
-      git.clone({
-        fs,
-        http,
-        dir,
-        url,
-        depth: 1,
-        singleBranch: true,
-        // No ref = the repository's default branch (the remote HEAD).
-        ...(branch ? { ref: branch } : {}),
-      }),
-      CLONE_TIMEOUT_MS,
-    );
-
-    const headSha = await git.resolveRef({ fs, dir, ref: 'HEAD' });
-    const branchName = (await git.currentBranch({ fs, dir, fullname: false })) ?? branch ?? 'HEAD';
-
-    return { files: await readRecipeFiles(dir), headSha, branch: branchName };
+    const resolved = await cloneRepository(url, branch, dir);
+    return { files: await readRecipeFiles(dir), ...resolved };
   } finally {
     // Best effort: an abandoned (timed-out) clone may still be writing — a
     // failed removal only leaks a temp directory until the OS cleans it.
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
-}
-
-// ─── System git (ssh transports) ─────────────────────────────────────────────
-
-/** Runs `git <args>`, mapping failures to readable errors (registry.lastError). */
-async function gitExec(args: string[]): Promise<{ stdout: string; stderr: string }> {
-  try {
-    return await execFileAsync('git', args, {
-      timeout: CLONE_TIMEOUT_MS,
-      maxBuffer: 10 * 1024 * 1024,
-      windowsHide: true,
-      // The inherited environment carries GIT_SSH_COMMAND, the ssh agent
-      // and the panel user's ~/.ssh — nothing to configure here.
-    });
-  } catch (err) {
-    const failure = err as { code?: string; stderr?: string; message?: string };
-    if (failure.code === 'ENOENT') {
-      throw new Error(
-        'git n’est pas disponible sur le panel — requis pour les registres SSH ' +
-          '(installe Git for Windows, ou utilise une URL https)',
-      );
-    }
-    // A non-tty ssh never prompts: host-key or auth failures fail fast with
-    // their stderr, which is the message the marketplace surfaces.
-    const stderr = failure.stderr?.trim();
-    throw new Error(stderr ? `git ${args[0]} : ${stderr}` : (failure.message ?? 'git a échoué'));
-  }
-}
-
-/**
- * SSH clone via the system git binary — same shape as the isomorphic-git
- * path (depth 1, single branch, HEAD + branch resolved afterwards).
- */
-async function cloneViaSystemGit(
-  url: string,
-  branch: string,
-  dir: string,
-): Promise<{ headSha: string; branch: string }> {
-  await gitExec([
-    'clone',
-    '--depth', '1',
-    '--single-branch',
-    ...(branch ? ['--branch', branch] : []),
-    url,
-    dir,
-  ]);
-
-  const { stdout: headSha } = await gitExec(['-C', dir, 'rev-parse', 'HEAD']);
-  const { stdout: branchName } = await gitExec(['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']);
-
-  return {
-    headSha: headSha.trim(),
-    // 'HEAD' when the default ref is detached — the source URLs keep working.
-    branch: branchName.trim() || branch || 'HEAD',
-  };
 }
 
 /**
@@ -164,18 +82,59 @@ export async function readGitFile(url: string, branch: string, path: string): Pr
   return files.find((file) => file.path === path)?.content ?? null;
 }
 
-/** Rejects when the promise is still pending after `ms`. */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`Clonage interrompu : dépassé ${Math.round(ms / 1000)} s`)),
-        ms,
+/** Runs `git <args>`, mapping failures to readable errors (registry.lastError). */
+async function gitExec(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  try {
+    return await execFileAsync('git', args, {
+      timeout: CLONE_TIMEOUT_MS,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+      // The inherited environment carries GIT_SSH_COMMAND, the ssh agent,
+      // credential helpers and the panel user's ~/.ssh — nothing to
+      // configure here.
+    });
+  } catch (err) {
+    const failure = err as { code?: string; stderr?: string; message?: string };
+    if (failure.code === 'ENOENT') {
+      throw new Error(
+        'git n’est pas disponible sur le panel — les registres sont clonés avec la ' +
+          'commande git (installe Git for Windows)',
       );
-    }),
-  ]).finally(() => clearTimeout(timer));
+    }
+    // A non-tty ssh never prompts: host-key or auth failures fail fast with
+    // their stderr, which is the message the marketplace surfaces.
+    const stderr = failure.stderr?.trim();
+    throw new Error(stderr ? `git ${args[0]} : ${stderr}` : (failure.message ?? 'git a échoué'));
+  }
+}
+
+/**
+ * One `git clone --depth 1 --single-branch`, then HEAD and branch resolved
+ * via rev-parse (branch falls back to 'HEAD' when the default ref is
+ * detached — the source URLs keep working).
+ */
+async function cloneRepository(
+  url: string,
+  branch: string,
+  dir: string,
+): Promise<{ headSha: string; branch: string }> {
+  await gitExec([
+    'clone',
+    '--depth', '1',
+    '--single-branch',
+    // No --branch = the repository's default branch (the remote HEAD).
+    ...(branch ? ['--branch', branch] : []),
+    url,
+    dir,
+  ]);
+
+  const { stdout: headSha } = await gitExec(['-C', dir, 'rev-parse', 'HEAD']);
+  const { stdout: branchName } = await gitExec(['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']);
+
+  return {
+    headSha: headSha.trim(),
+    branch: branchName.trim() || branch || 'HEAD',
+  };
 }
 
 /** Walks a clone and reads every recipe file (POSIX paths, forward slashes). */

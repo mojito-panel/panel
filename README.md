@@ -18,6 +18,7 @@ Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **shard** (
 
 - **Node.js 24** (pinned via `.nvmrc` and `mise.toml`)
 - **npm 12** (pinned to 12.2.0 via `mise.toml`)
+- **Git** (the recipe marketplace clones its registries with `git clone`)
 - **Docker** (for Postgres in dev, optional)
 - **mise** (recommended to manage versions)
 
@@ -84,17 +85,19 @@ docs/              # Architecture documentation
 - [Panel ↔ Agent ↔ Web client communications](docs/communications.md) — detailed flows with Mermaid diagrams: authentication, live installation tracking, WS console (JWT), power actions, reinstallation, variable editing, status lifecycle.
 - **Recipe marketplace** (`/admin/marketplace`) — any git repository can be added
   as a registry: public **https** (GitHub, GitLab, Gitea, self-hosted…) or
-  **ssh** (`ssh://…` or `git@host:path` — SSH registries clone with the system
-  `git` binary, inheriting the panel host's git/ssh configuration, so private
-  repositories work through the panel user's `~/.ssh` keys; Git must be installed
-  on the panel host for SSH). Syncs are durable pg-boss jobs: a scheduled sweep
-  (interval in `/admin/settings`, default 6 h, 0 = manual) clones each registry
-  depth 1, caches the catalog (`recipe-*.json` files, their validation state
-  and optional vertical cover images as base64) and stamps the upstream hashes;
-  the "Mettre à jour" actions compare canonical content hashes
-  (formatting-independent). Recipes keep a source URL (`<repo>#<branch>:<path>`
-  for registry files, a direct URL otherwise) so update checks work whatever
-  the origin — the Pelican-style `update_url` seeds the source of legacy recipes.
+  **ssh** (`ssh://…` or `git@host:path`). Every clone goes through the system
+  `git clone --depth 1` binary — it inherits the panel host's git/ssh
+  configuration (keys, `~/.ssh/config`, agent, credential helpers), so private
+  repositories work with zero auth code in the panel; **Git must be installed
+  on the panel host** (Git for Windows). Syncs are durable pg-boss jobs: a
+  scheduled sweep (interval in `/admin/settings`, default 6 h, 0 = manual)
+  clones each registry depth 1, caches the catalog (`recipe-*.json` files,
+  their validation state and optional vertical cover images as base64) and
+  stamps the upstream hashes; the "Mettre à jour" actions compare canonical
+  content hashes (formatting-independent). Recipes keep a source URL
+  (`<repo>#<branch>:<path>` for registry files, a direct URL otherwise) so
+  update checks work whatever the origin — the Pelican-style `update_url`
+  seeds the source of legacy recipes.
 
 ## Configuration
 

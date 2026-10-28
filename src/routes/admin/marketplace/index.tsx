@@ -203,11 +203,12 @@ function MarketplacePage() {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      GitHub, GitLab, Gitea ou auto-hébergé. Une URL https doit être
-                      publique ; une URL ssh (git@hôte:chemin ou ssh://…) clone avec
-                      la configuration git/ssh du panel (clés de ~/.ssh, agent) via
-                      la commande <code>git clone</code> — Git doit être installé
-                      sur l’hôte du panel. La première synchronisation démarre dès
+                      GitHub, GitLab, Gitea ou auto-hébergé — le clonage utilise
+                      la commande <code>git clone</code> du panel (Git pour
+                      Windows requis). Dépôts publics en https ; dépôts privés
+                      en ssh (<code>git@hôte:chemin</code> ou{' '}
+                      <code>ssh://…</code>) via les clés et la configuration
+                      ssh du panel. La première synchronisation démarre dès
                       l’ajout.
                     </p>
                   </div>
