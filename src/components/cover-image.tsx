@@ -14,8 +14,13 @@ import { cn } from 'cn';
  * - a stored cover (base64 data URL) → the image, object-cover;
  * - nothing stored → a generated gradient, SEEDED by the entity id so the
  *   same card always wears the same colors (no flicker between renders)
- *   while different cards clearly differ: the seed hashes into two hues,
- *   a vivid top-left stop and a deeper bottom-right one.
+ *   while different cards still differ: the seed hashes into two adjacent
+ *   hues, a muted dark top-left stop into a deeper bottom-right one —
+ *   sober and low-contrast, never flashy.
+ *
+ * The gradient is ALWAYS painted underneath the <img>, so a cover with
+ * transparent areas (PNG without background) reads correctly in the
+ * marketplace grid instead of showing the card behind it.
  */
 
 /** Deterministic 32-bit hash of a seed string. */
@@ -27,12 +32,13 @@ function hashSeed(seed: string): number {
   return Math.abs(hash);
 }
 
-/** Slick two-stop gradient for a seed — vivid → deep, slightly tilted. */
+/** Sober two-stop gradient for a seed — dark, muted, slightly tilted. */
 function gradientFor(seed: string): string {
   const hash = hashSeed(seed);
   const hue = hash % 360;
-  const secondHue = (hue + 40 + (hash % 80)) % 360;
-  return `linear-gradient(160deg, hsl(${hue} 72% 52%), hsl(${secondHue} 68% 30%))`;
+  // Analogous hues (20-44° apart): a gentle shift, not a hard contrast.
+  const secondHue = (hue + 20 + (hash % 25)) % 360;
+  return `linear-gradient(160deg, hsl(${hue} 40% 28%), hsl(${secondHue} 36% 16%))`;
 }
 
 export function CoverImage({
@@ -57,8 +63,9 @@ export function CoverImage({
     <div
       className={cn('relative aspect-[2/3] w-full overflow-hidden bg-muted', className)}
     >
-      {/* Gradient always rendered underneath — it is the fallback of a
-          missing OR failed cover. */}
+      {/* Gradient always painted underneath — the fallback of a missing
+          OR failed cover, and the backdrop that shows through the
+          transparent areas of a loaded one. */}
       <div
         aria-hidden
         className="absolute inset-0 h-full w-full"
