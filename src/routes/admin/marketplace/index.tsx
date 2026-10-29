@@ -54,7 +54,9 @@ export const Route = createFileRoute('/admin/marketplace/')({
  * /admin/marketplace — the registries: git repositories of recipes, added
  * by URL, synced in the background (pg-boss), browsable CARD by card (one
  * click opens the catalog at /admin/marketplace/$registryId). A handful of
- * rows — no table, no filters: covers carry the page.
+ * rows — no table, no filters: covers carry the page. One card holds it
+ * all, like the catalog page: header, add form (behind the action button),
+ * registry grid.
  */
 
 /** The SSH key field of the add + edit forms (id in the form, name to show). */
@@ -181,163 +183,159 @@ function MarketplacePage() {
             </Button>
           </CardAction>
         </CardHeader>
+        <CardContent>
+          {/* ─── Add a registry (shown behind the card's action button) ─── */}
+          {showAdd && (
+            <div className="mb-6">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  form.handleSubmit();
+                }}
+                className="space-y-4"
+              >
+                <form.Field name="url">
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor="registry-url">URL du dépôt git</Label>
+                      <Input
+                        id="registry-url"
+                        autoFocus
+                        placeholder="https://github.com/mojito-panel/recipes ou git@github.com:mojito-panel/recipes.git"
+                        value={field.state.value}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          field.handleChange(value);
+                          // Prefill the display name from the repository name.
+                          const label = value.split('/').pop()?.replace(/\.git$/, '') ?? '';
+                          if (label && !form.getFieldValue('name')) {
+                            form.setFieldValue('name', label);
+                          }
+                        }}
+                        onBlur={field.handleBlur}
+                      />
+                      {field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {field.state.meta.errors[0]?.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        GitHub, GitLab, Gitea ou auto-hébergé — le clonage utilise
+                        la commande <code>git clone</code> du panel (Git pour
+                        Windows requis). Dépôts publics en https ; dépôts privés
+                        en ssh via une clé (voir{' '}
+                        <Link
+                          to="/admin/keys"
+                          search={adminSshKeysList.defaultSearch}
+                          className="underline hover:text-foreground"
+                        >
+                          Clés SSH
+                        </Link>
+                        ). La première synchronisation démarre dès l’ajout.
+                      </p>
+                    </div>
+                  )}
+                </form.Field>
+
+                <form.Field name="name">
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor="registry-name">Nom d’affichage</Label>
+                      <Input
+                        id="registry-name"
+                        placeholder="Recettes officielles"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                      />
+                      {field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {field.state.meta.errors[0]?.message}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+
+                <form.Field name="branch">
+                  {(field) => (
+                    <div className="space-y-2">
+                      <Label htmlFor="registry-branch">Branche suivie (optionnel)</Label>
+                      <Input
+                        id="registry-branch"
+                        placeholder="main (défaut du dépôt)"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                      />
+                      {field.state.meta.errors.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          {field.state.meta.errors[0]?.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Laissée vide, la branche par défaut du dépôt est suivie.
+                      </p>
+                    </div>
+                  )}
+                </form.Field>
+
+                <form.Field name="sshKeyId">
+                  {() => (
+                    <SshKeyPicker
+                      label="Clé SSH (dépôt privé)"
+                      listKeys={listKeys}
+                      value={addKeySelection}
+                      onChange={setAddKeySelection}
+                    />
+                  )}
+                </form.Field>
+
+                <Button type="submit" className="w-full" disabled={add.isPending}>
+                  <Plus />
+                  {add.isPending ? 'Ajout…' : 'Ajouter et synchroniser'}
+                </Button>
+              </form>
+
+              {add.isError && (
+                <p className="mt-2 text-sm text-destructive">{add.error.message}</p>
+              )}
+            </div>
+          )}
+
+          {/* ─── Registry cards — click one to browse its catalog ─── */}
+          {query.isPending ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="aspect-[2/3] animate-pulse rounded-lg bg-muted" />
+              ))}
+            </div>
+          ) : registries.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Aucun registre — ajoute un dépôt git de recettes (https public ou ssh).
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {registries.map((registry) => (
+                <RegistryCardView
+                  key={registry.id}
+                  registry={registry}
+                  onOpen={() =>
+                    navigate({
+                      to: '/admin/marketplace/$registryId',
+                      params: { registryId: registry.id },
+                    })
+                  }
+                  onSync={() => sync.mutate(registry.id)}
+                  onEdit={() => setRegistryToEdit(registry)}
+                  onDelete={() => setRegistryToDelete(registry)}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
       </Card>
-
-      {/* ─── Registry cards — click one to browse its catalog ─── */}
-      {query.isPending ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="aspect-[2/3] animate-pulse rounded-lg bg-muted" />
-          ))}
-        </div>
-      ) : registries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          Aucun registre — ajoute un dépôt git de recettes (https public ou ssh).
-        </p>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {registries.map((registry) => (
-            <RegistryCardView
-              key={registry.id}
-              registry={registry}
-              onOpen={() =>
-                navigate({
-                  to: '/admin/marketplace/$registryId',
-                  params: { registryId: registry.id },
-                })
-              }
-              onSync={() => sync.mutate(registry.id)}
-              onEdit={() => setRegistryToEdit(registry)}
-              onDelete={() => setRegistryToDelete(registry)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ─── Add a registry (hidden behind the list card's action button) ─── */}
-      {showAdd && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ajouter un registre</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                form.handleSubmit();
-              }}
-              className="space-y-4"
-            >
-              <form.Field name="url">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="registry-url">URL du dépôt git</Label>
-                    <Input
-                      id="registry-url"
-                      autoFocus
-                      placeholder="https://github.com/mojito-panel/recipes ou git@github.com:mojito-panel/recipes.git"
-                      value={field.state.value}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.handleChange(value);
-                        // Prefill the display name from the repository name.
-                        const label = value.split('/').pop()?.replace(/\.git$/, '') ?? '';
-                        if (label && !form.getFieldValue('name')) {
-                          form.setFieldValue('name', label);
-                        }
-                      }}
-                      onBlur={field.handleBlur}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
-                        {field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      GitHub, GitLab, Gitea ou auto-hébergé — le clonage utilise
-                      la commande <code>git clone</code> du panel (Git pour
-                      Windows requis). Dépôts publics en https ; dépôts privés
-                      en ssh via une clé (voir{' '}
-                      <Link
-                        to="/admin/keys"
-                        search={adminSshKeysList.defaultSearch}
-                        className="underline hover:text-foreground"
-                      >
-                        Clés SSH
-                      </Link>
-                      ). La première synchronisation démarre dès l’ajout.
-                    </p>
-                  </div>
-                )}
-              </form.Field>
-
-              <form.Field name="name">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="registry-name">Nom d’affichage</Label>
-                    <Input
-                      id="registry-name"
-                      placeholder="Recettes officielles"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
-                        {field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </form.Field>
-
-              <form.Field name="branch">
-                {(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor="registry-branch">Branche suivie (optionnel)</Label>
-                    <Input
-                      id="registry-branch"
-                      placeholder="main (défaut du dépôt)"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                    />
-                    {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
-                        {field.state.meta.errors[0]?.message}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Laissée vide, la branche par défaut du dépôt est suivie.
-                    </p>
-                  </div>
-                )}
-              </form.Field>
-
-              <form.Field name="sshKeyId">
-                {() => (
-                  <SshKeyPicker
-                    label="Clé SSH (dépôt privé)"
-                    listKeys={listKeys}
-                    value={addKeySelection}
-                    onChange={setAddKeySelection}
-                  />
-                )}
-              </form.Field>
-
-              <Button type="submit" className="w-full" disabled={add.isPending}>
-                <Plus />
-                {add.isPending ? 'Ajout…' : 'Ajouter et synchroniser'}
-              </Button>
-            </form>
-
-            {add.isError && (
-              <p className="mt-2 text-sm text-destructive">{add.error.message}</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <EditRegistryDialog
         key={registryToEdit?.id ?? 'none'}
