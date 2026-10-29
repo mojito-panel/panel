@@ -219,19 +219,25 @@ function RegistryCatalogPage() {
                   </a>
                 </span>
                 {(registry.branch || registry.branchName) && (
-                  <span className="inline-flex items-center gap-1">
-                    <GitBranch className="size-3.5 shrink-0" />
-                    {registry.branch || registry.branchName}
-                  </span>
+                  <>
+                    <span className="text-muted-foreground" aria-hidden>·</span>
+                    <span className="inline-flex items-center gap-1">
+                      <GitBranch className="size-3.5 shrink-0" />
+                      {registry.branch || registry.branchName}
+                    </span>
+                  </>
                 )}
                 {registry.lastSyncedAt && (
-                  <span
-                    className="inline-flex items-center gap-1"
-                    title={`Synchronisé le ${registry.lastSyncedAt.toLocaleString('fr-FR')}`}
-                  >
-                    <RefreshCw className="size-3.5 shrink-0" />
-                    {registry.lastSyncedAt.toLocaleString('fr-FR')}
-                  </span>
+                  <>
+                    <span className="text-muted-foreground" aria-hidden>·</span>
+                    <span
+                      className="inline-flex items-center gap-1"
+                      title={`Synchronisé le ${registry.lastSyncedAt.toLocaleString('fr-FR')}`}
+                    >
+                      <RefreshCw className="size-3.5 shrink-0" />
+                      {registry.lastSyncedAt.toLocaleString('fr-FR')}
+                    </span>
+                  </>
                 )}
               </span>
             ) : (
