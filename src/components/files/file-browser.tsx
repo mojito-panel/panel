@@ -161,9 +161,9 @@ export function FileBrowser({
       onNavigate(entry.path);
       return;
     }
-    // Only whitelisted text files open in the editor (txt/ini/yml/yaml/xml/
-    // json — EDITABLE_FILE_EXTENSIONS); anything else downloads (the agent
-    // additionally refuses binary content server-side).
+    // Only whitelisted text files open in the editor (txt/ini/properties/
+    // yml/yaml/xml/json — EDITABLE_FILE_EXTENSIONS); anything else downloads
+    // (the agent additionally refuses binary content server-side).
     if (!isEditableFile(entry.name)) {
       onDownload(entry.path);
       return;

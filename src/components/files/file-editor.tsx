@@ -18,9 +18,9 @@ import { formatSize } from './format-size';
 /**
  * Text file editor (?file=… deep link) — one card: header (back + name +
  * folder + size), the Monaco editor, footer (save + dirty badge + hint).
- * Only WHITELISTED text files open here (txt/ini/yml/yaml/xml/json — see
- * EDITABLE_FILE_EXTENSIONS); the agent additionally refuses binary content
- * server-side (NUL sniff).
+ * Only WHITELISTED text files open here (txt/ini/properties/yml/yaml/xml/
+ * json — see EDITABLE_FILE_EXTENSIONS); the agent additionally refuses
+ * binary content server-side (NUL sniff).
  */
 export function FileEditor({
   serverId,
@@ -187,7 +187,7 @@ function SaveFileForm({
         </form.Subscribe>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <p className="ml-auto text-xs text-muted-foreground">
-          Édition réservée aux fichiers texte (txt, ini, yml, yaml, xml, json) — max 1 Mo
+          Édition réservée aux fichiers texte (txt, ini, properties, yml, yaml, xml, json) — max 1 Mo
         </p>
       </CardFooter>
     </form>

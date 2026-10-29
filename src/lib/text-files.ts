@@ -9,7 +9,15 @@
  */
 
 /** Extensions the text editor can handle (for now). */
-export const EDITABLE_FILE_EXTENSIONS = new Set(['txt', 'ini', 'yml', 'yaml', 'xml', 'json']);
+export const EDITABLE_FILE_EXTENSIONS = new Set([
+  'txt',
+  'ini',
+  'properties',
+  'yml',
+  'yaml',
+  'xml',
+  'json',
+]);
 
 /** Extension of a path, lowercased (no dot / dotfile → ''). */
 export function extensionOf(path: string): string {

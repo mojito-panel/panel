@@ -4,9 +4,9 @@
  * small factory the React wrapper drives.
  *
  * The editor only opens WHITELISTED text files (see
- * `EDITABLE_FILE_EXTENSIONS`): json/yaml/xml/ini/txt — binaries never reach
- * it (the shard refuses them, and the file browser only offers the editor
- * for the whitelist).
+ * `EDITABLE_FILE_EXTENSIONS`): json/yaml/xml/ini/properties/txt — binaries
+ * never reach it (the shard refuses them, and the file browser only offers
+ * the editor for the whitelist).
  *
  * Validation per language:
  * - JSON: the JSON language worker (syntax; comments tolerated, no schema
@@ -78,6 +78,7 @@ function languageFor(path: string): string {
     case 'xml':
       return 'xml';
     case 'ini':
+    case 'properties':
       return 'ini';
     default:
       return 'plaintext'; // .txt — anything newly whitelisted without a language
@@ -214,6 +215,10 @@ export function createCodeEditor(
   options: CreateCodeEditorOptions,
 ): CodeEditorHandle {
   const language = languageFor(options.path);
+  // Validation keys off the EXTENSION, not the Monaco language: .properties
+  // shares the ini highlighting but is laxer (bare keys, `!` comments,
+  // multi-line continuations) — the INI structural pass would false-positive.
+  const extension = extensionOf(options.path);
   const model = monaco.editor.createModel(options.value, language);
 
   const editor = monaco.editor.create(container, {
@@ -237,9 +242,10 @@ export function createCodeEditor(
   let validationTimer: ReturnType<typeof setTimeout> | null = null;
   const validate = () => {
     validationTimer = null;
-    if (language === 'xml') validateXml(model);
-    else if (language === 'ini') validateIni(model);
-    // json is validated by its language worker; yaml/txt have none (for now).
+    if (extension === 'xml') validateXml(model);
+    else if (extension === 'ini') validateIni(model);
+    // json is validated by its language worker; yaml/txt/properties have
+    // none (for now).
   };
   validate();
 

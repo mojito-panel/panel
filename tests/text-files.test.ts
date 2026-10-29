@@ -4,12 +4,21 @@ import { EDITABLE_FILE_EXTENSIONS, extensionOf, isEditableFile } from '~/lib/tex
 
 describe('editable file whitelist', () => {
   it('exposes exactly the whitelisted extensions', () => {
-    expect([...EDITABLE_FILE_EXTENSIONS].sort()).toEqual(['ini', 'json', 'txt', 'xml', 'yaml', 'yml']);
+    expect([...EDITABLE_FILE_EXTENSIONS].sort()).toEqual([
+      'ini',
+      'json',
+      'properties',
+      'txt',
+      'xml',
+      'yaml',
+      'yml',
+    ]);
   });
 
   it('accepts every whitelisted extension (case-insensitive)', () => {
     expect(isEditableFile('server.properties.txt')).toBe(true);
     expect(isEditableFile('config.ini')).toBe(true);
+    expect(isEditableFile('server.properties')).toBe(true);
     expect(isEditableFile('docker-compose.yml')).toBe(true);
     expect(isEditableFile('paper-global.yaml')).toBe(true);
     expect(isEditableFile('plugin.xml')).toBe(true);
