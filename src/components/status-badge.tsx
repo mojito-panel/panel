@@ -139,10 +139,15 @@ export function StatusBall({
     <span className={cn('relative inline-flex size-2 shrink-0', className)}>
       {live && (
         <>
-          <span className={cn('absolute inset-0 animate-live-ring rounded-full', dot)} />
+          {/* Sonar rings — `size-full` (not `inset-0`): an absolutely
+              positioned box with both insets set is stretched around the
+              padding box, not laid out inside it, so it would not scale
+              about the dot's center. An explicit 100% size keeps the
+              transform origin on the wrapper's center. */}
+          <span className={cn('absolute size-full animate-live-ring rounded-full', dot)} />
           <span
             className={cn(
-              'absolute inset-0 animate-live-ring rounded-full [animation-delay:0.66s]',
+              'absolute size-full animate-live-ring rounded-full [animation-delay:0.66s]',
               dot,
             )}
           />
@@ -237,8 +242,8 @@ export function LiveIndicator({ live }: { live: boolean }) {
       <span className="relative inline-flex size-1.5">
         {live && (
           <>
-            <span className="absolute inset-0 animate-live-ring rounded-full bg-emerald-500" />
-            <span className="absolute inset-0 animate-live-ring rounded-full bg-emerald-500 [animation-delay:0.66s]" />
+            <span className="absolute size-full animate-live-ring rounded-full bg-emerald-500" />
+            <span className="absolute size-full animate-live-ring rounded-full bg-emerald-500 [animation-delay:0.66s]" />
           </>
         )}
         <span

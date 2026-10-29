@@ -159,30 +159,6 @@
   /* Concentric sonar rings around a live status dot (live data < 20 s). */
   --animate-live-ring: live-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 
-  @keyframes halo {
-    0% {
-      transform: scale(1);
-      opacity: 0.55;
-    }
-    70%,
-    100% {
-      transform: scale(2.6);
-      opacity: 0;
-    }
-  }
-
-  @keyframes halo {
-    0% {
-      transform: scale(1);
-      opacity: 0.55;
-    }
-    70%,
-    100% {
-      transform: scale(2.6);
-      opacity: 0;
-    }
-  }
-
   @keyframes led {
     0%,
     100% {
@@ -194,12 +170,11 @@
   }
 
   @keyframes live-ring {
-    0% {
+    from {
       transform: scale(1);
       opacity: 0.6;
     }
-    75%,
-    100% {
+    to {
       transform: scale(3);
       opacity: 0;
     }
@@ -208,7 +183,6 @@
 
 /* Decorative rings vanish entirely, the LED settles as a plain dot. */
 @media (prefers-reduced-motion: reduce) {
-  .animate-halo,
   .animate-live-ring {
     animation: none;
     visibility: hidden;
