@@ -91,8 +91,9 @@ docs/              # Architecture documentation
   repositories work with zero auth code in the panel; **Git must be installed
   on the panel host** (Git for Windows). Syncs are durable pg-boss jobs: a
   scheduled sweep (interval in `/admin/settings`, default 6 h, 0 = manual)
-  clones each registry depth 1, caches the catalog (`recipe-*.json` files,
-  their validation state and optional vertical cover images as base64) and
+  clones each registry depth 1, caches the catalog (`recipe-*.json` and
+  nested `<id>.json` files, their validation state and optional vertical
+  cover images as base64) and
   stamps the upstream hashes; the "Mettre à jour" actions compare canonical
   content hashes (formatting-independent). Recipes keep a source URL
   (`<repo>#<branch>:<path>` for registry files, a direct URL otherwise) so
