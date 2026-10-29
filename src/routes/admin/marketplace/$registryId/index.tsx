@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { ArrowLeft, FileJson, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, FileJson, FolderGit2, GitBranch, RefreshCw, Search } from 'lucide-react';
 import {
   listRegistryEntriesFn,
   syncRegistryFn,
@@ -206,24 +206,30 @@ function RegistryCatalogPage() {
           </CardTitle>
           <CardDescription>
             {registry ? (
-              <span>
-                <a
-                  href={registry.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline hover:text-foreground"
-                >
-                  {registry.url}
-                </a>
-                {(registry.branch || registry.branchName) &&
-                  ` · ${registry.branch || registry.branchName}`}
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="inline-flex items-center gap-1">
+                  <FolderGit2 className="size-3.5 shrink-0" />
+                  <a
+                    href={registry.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    {registry.url}
+                  </a>
+                </span>
+                {(registry.branch || registry.branchName) && (
+                  <span className="inline-flex items-center gap-1">
+                    <GitBranch className="size-3.5 shrink-0" />
+                    {registry.branch || registry.branchName}
+                  </span>
+                )}
                 {registry.lastSyncedAt && (
                   <span
                     className="inline-flex items-center gap-1"
                     title={`Synchronisé le ${registry.lastSyncedAt.toLocaleString('fr-FR')}`}
                   >
-                    {' · '}
-                    <RefreshCw className="size-3.5" />
+                    <RefreshCw className="size-3.5 shrink-0" />
                     {registry.lastSyncedAt.toLocaleString('fr-FR')}
                   </span>
                 )}
