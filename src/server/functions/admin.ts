@@ -23,6 +23,7 @@ import {
   findFreeAllocations,
   createAllocations,
   deleteAllocation,
+  deleteAllocations,
   assignAllocation,
   revokeAllocation,
 } from '../nodes';
@@ -51,6 +52,7 @@ import {
   createAllocationsSchema,
   allocationIdSchema,
   assignAllocationSchema,
+  deleteAllocationsSchema,
   parsePortsSpec,
   PORTS_SPEC_MESSAGE,
   isHttpsScheme,
@@ -379,6 +381,20 @@ export const deleteAllocationFn = createServerFn({ method: 'POST' })
     if (!allocation) throw new HttpError(404, 'Allocation introuvable');
     await deleteAllocation(allocation);
     return { deleted: true };
+  });
+
+/**
+ * Deletes FREE allocations in bulk (the node pool checkboxes). Assigned ones
+ * are skipped and reported — they must be revoked first, one bulk action
+ * never mixes the two. Ids that no longer exist simply match nothing.
+ */
+export const deleteAllocationsFn = createServerFn({ method: 'POST' })
+  .validator(deleteAllocationsSchema)
+  .middleware([withOrmContext])
+  .handler(async ({ data }) => {
+    await requirePanelPermission({'panel.nodes':['delete']});
+    const allocations = await orm.em.find(Allocation, { id: { $in: data.allocationIds } });
+    return deleteAllocations(allocations);
   });
 
 /**

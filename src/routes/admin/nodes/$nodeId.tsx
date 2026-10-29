@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
+import { Trash2 } from 'lucide-react';
 import {
   useQuery,
   useMutation,
@@ -10,7 +11,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { getNodeFn, getNodeHealthFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, listFreeNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
+import { getNodeFn, getNodeHealthFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, listFreeNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, deleteAllocationsFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
 import { listServerOptionsFn } from '~/server/functions/servers';
 import {
   updateNodeSchema,
@@ -449,6 +450,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
   const listFree = useServerFn(listFreeNodeAllocationsFn);
   const createAllocations = useServerFn(createNodeAllocationsFn);
   const deleteAllocation = useServerFn(deleteAllocationFn);
+  const deleteMany = useServerFn(deleteAllocationsFn);
   const assignAllocation = useServerFn(assignAllocationFn);
   const revokeAllocation = useServerFn(revokeAllocationFn);
   const listServerOptions = useServerFn(listServerOptionsFn);
@@ -483,6 +485,11 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
     await queryClient.invalidateQueries({ queryKey: ['node-allocations', nodeId] });
   };
 
+  // ─── Bulk selection (checkbox column — free allocations only) ───────────
+  /** Selected FREE allocation ids — ids, not row indexes, so a selection survives paging. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+
   const create = useMutation({
     mutationFn: async (data: CreateAllocationsDto) => {
       const result = await createAllocations({ data });
@@ -505,6 +512,25 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
       return result;
     },
     onSuccess: () => toast.success('Allocation supprimée'),
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Bulk delete of the checkbox selection — assigned ids are skipped and
+  // reported by the fn (a revoke is a different, per-row action).
+  const removeMany = useMutation({
+    mutationFn: async (allocationIds: string[]) => {
+      const result = await deleteMany({ data: { allocationIds } });
+      await invalidate();
+      return result;
+    },
+    onSuccess: (result) => {
+      setSelectedIds([]);
+      toast.success(
+        result.deleted > 0
+          ? `${result.deleted} allocation(s) supprimée(s)${result.skipped > 0 ? `, ${result.skipped} affectée(s) ignorée(s)` : ''}`
+          : 'Aucune allocation supprimée — celles sélectionnées sont affectées à un serveur ou déjà retirées',
+      );
+    },
     onError: (err) => toast.error(err.message),
   });
 
@@ -538,6 +564,24 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
   const total = totalQuery.data?.rowCount ?? 0;
   const nodeServers = serversQuery.data ?? [];
   const [allocationToDelete, setAllocationToDelete] = useState<NodeAllocationRow | null>(null);
+
+  // ─── Bulk selection derived state (checkbox column — free allocations only) ──
+  // The checkboxes cover the free rows of the CURRENT page — select-all
+  // toggles that page only, while the bar below always counts the whole set.
+  const freeRows = (query.data?.rows ?? []).filter((row) => row.serverId === null);
+  const selectedOnPage = freeRows.filter((row) => selectedIds.includes(row.id));
+  const allSelected = freeRows.length > 0 && selectedOnPage.length === freeRows.length;
+  const someSelected = selectedOnPage.length > 0;
+
+  const toggleSelected = (allocationId: string) =>
+    setSelectedIds((previous) =>
+      previous.includes(allocationId)
+        ? previous.filter((id) => id !== allocationId)
+        : [...previous, allocationId],
+    );
+
+  const toggleAll = () =>
+    setSelectedIds(allSelected ? [] : freeRows.map((row) => row.id));
 
   return (
     <div className="divide-y">
@@ -623,6 +667,29 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
       </CardSection>
 
       <CardSection title="Allocations du node">
+        {/* Bulk selection bar — bulk delete of the checked free allocations */}
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
+            <span>
+              {selectedIds.length} allocation{selectedIds.length > 1 ? 's' : ''} sélectionnée
+              {selectedIds.length > 1 ? 's' : ''}
+            </span>
+            <div className="ml-auto flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>
+                Annuler
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={removeMany.isPending}
+                onClick={() => setBulkDialogOpen(true)}
+              >
+                <Trash2 />
+                Supprimer la sélection
+              </Button>
+            </div>
+          </div>
+        )}
         <DataTable
           list={nodeAllocationsList}
           rows={query.data?.rows ?? []}
@@ -635,7 +702,14 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
           emptyMessage="Aucune allocation — crée-en ci-dessus pour pouvoir installer des serveurs sur ce node."
           rowContext={{
             servers: nodeServers,
-            busy: remove.isPending || revoke.isPending || assign.isPending,
+            busy: remove.isPending || removeMany.isPending || revoke.isPending || assign.isPending,
+            selection: {
+              selected: selectedIds,
+              allSelected,
+              someSelected,
+              onToggle: toggleSelected,
+              onToggleAll: toggleAll,
+            },
             onAssign: (allocation, serverId) =>
               assign.mutate({ allocationId: allocation.id, serverId }),
             onDelete: setAllocationToDelete,
@@ -662,6 +736,24 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
           pending={remove.isPending}
         />
       )}
+      <ConfirmDialog
+        open={bulkDialogOpen}
+        onOpenChange={setBulkDialogOpen}
+        onConfirm={async () => {
+          try {
+            await removeMany.mutateAsync(selectedIds);
+            setBulkDialogOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
+        }}
+        title={`Supprimer ${selectedIds.length} allocation${selectedIds.length > 1 ? 's' : ''} ?`}
+        description="Les allocations libres sélectionnées seront définitivement retirées du pool du node."
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        destructive
+        pending={removeMany.isPending}
+      />
     </div>
   );
 }

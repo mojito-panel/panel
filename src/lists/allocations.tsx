@@ -1,5 +1,6 @@
 import { Star, Trash2 } from 'lucide-react';
 import { Button } from '~/components/ui/button';
+import { Checkbox } from '~/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -140,9 +141,27 @@ export interface NodeAllocationsContext {
   servers: readonly { id: string; name: string }[];
   /** A row action is in flight (disables the buttons). */
   busy: boolean;
+  /** Bulk selection of FREE allocations (bulk delete) — see `select` column. */
+  selection: NodeAllocationsSelection;
   onAssign: (allocation: NodeAllocationRow, serverId: string) => void;
   onDelete: (allocation: NodeAllocationRow) => void;
   onRevoke: (allocation: NodeAllocationRow) => void;
+}
+
+/**
+ * Bulk selection state of the node pool, supplied by the page — mirrors the
+ * files browser selection. Only FREE allocations are selectable: an assigned
+ * one must be revoked before it can be deleted, so it carries no checkbox.
+ */
+export interface NodeAllocationsSelection {
+  /** Selected free allocation ids (may span pages — ids, not row indexes). */
+  selected: readonly string[];
+  /** Whether every free row of the current page is selected (header checkbox). */
+  allSelected: boolean;
+  /** Whether at least one free row of the current page is selected (indeterminate). */
+  someSelected: boolean;
+  onToggle: (allocationId: string) => void;
+  onToggleAll: () => void;
 }
 
 export const nodeAllocationsList = defineList<NodeAllocationRow, NodeAllocationsContext>({
@@ -151,6 +170,35 @@ export const nodeAllocationsList = defineList<NodeAllocationRow, NodeAllocations
   defaultSort: { column: 'port', desc: false },
   searchTargets: ['ip', 'alias'],
   columns: {
+    select: {
+      header: '',
+      pinned: true,
+      headerCell: (context) => {
+        const selection = context?.selection;
+        if (!selection) return null;
+        return (
+          <Checkbox
+            checked={selection.allSelected}
+            indeterminate={!selection.allSelected && selection.someSelected}
+            onCheckedChange={() => selection.onToggleAll()}
+            aria-label="Tout sélectionner"
+          />
+        );
+      },
+      cell: (allocation, context) => {
+        const selection = context?.selection;
+        // Only FREE rows are selectable — an assigned allocation must be
+        // revoked first (same rule as its per-row actions).
+        if (!selection || allocation.serverId !== null) return null;
+        return (
+          <Checkbox
+            checked={selection.selected.includes(allocation.id)}
+            onCheckedChange={() => selection.onToggle(allocation.id)}
+            aria-label={`Sélectionner ${allocation.ip}:${allocation.port}`}
+          />
+        );
+      },
+    },
     address: {
       header: 'Adresse',
       className: 'font-mono',

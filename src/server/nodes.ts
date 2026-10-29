@@ -151,6 +151,22 @@ export async function deleteAllocation(allocation: IAllocation): Promise<void> {
 }
 
 /**
+ * Deletes FREE allocations in bulk — assigned ones are skipped and reported
+ * (they must be revoked first; a bulk delete never mixes the two actions).
+ */
+export async function deleteAllocations(
+  allocations: IAllocation[],
+): Promise<{ deleted: number; skipped: number }> {
+  const em = orm.em;
+  const free = allocations.filter((allocation) => allocation.serverId === null);
+  for (const allocation of free) {
+    em.remove(allocation);
+  }
+  await em.flush();
+  return { deleted: free.length, skipped: allocations.length - free.length };
+}
+
+/**
  * Assigns a free allocation to a server of the same node (Pelican "assign"
  * action). A server without any primary promotes the newcomer and syncs the
  * agent cache — otherwise the primary is left untouched.

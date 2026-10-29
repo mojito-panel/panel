@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePortsSpec, createAllocationsSchema } from '~/validators/node';
+import { parsePortsSpec, createAllocationsSchema, deleteAllocationsSchema } from '~/validators/node';
 
 describe('parsePortsSpec', () => {
   it('parses a single port', () => {
@@ -69,4 +69,29 @@ describe('createAllocationsSchema', () => {
     }
   });
 
+});
+
+describe('deleteAllocationsSchema', () => {
+  it('validates a bulk payload', () => {
+    const result = deleteAllocationsSchema.safeParse({
+      allocationIds: ['alloc-1', 'alloc-2'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty selection', () => {
+    const result = deleteAllocationsSchema.safeParse({ allocationIds: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty id in the selection', () => {
+    const result = deleteAllocationsSchema.safeParse({ allocationIds: [''] });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects more ids than one page can select (cap of 100)', () => {
+    const allocationIds = Array.from({ length: 101 }, (_, index) => `alloc-${index}`);
+    const result = deleteAllocationsSchema.safeParse({ allocationIds });
+    expect(result.success).toBe(false);
+  });
 });

@@ -134,3 +134,12 @@ export const assignAllocationSchema = z.object({
 });
 
 export type AssignAllocationDto = z.infer<typeof assignAllocationSchema>;
+
+/** Bulk delete of FREE allocations — an assigned one is skipped, never revoked. */
+export const deleteAllocationsSchema = z.object({
+  // Bounded by the list page size cap (MAX_PAGE_SIZE) — a bulk action never
+  // spans more than what one page can select.
+  allocationIds: z.array(z.string().min(1)).min(1).max(100),
+});
+
+export type DeleteAllocationsDto = z.infer<typeof deleteAllocationsSchema>;
