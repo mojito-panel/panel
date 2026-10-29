@@ -22,7 +22,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { StatusBall, statusLabel, type PanelServerStatus } from '~/components/status-badge';
+import { StatusBall, statusLabel } from '~/components/status-badge';
 import { userServersList } from '~/lists/user-servers';
 import { SidebarUserMenu } from '~/components/user-menu';
 import {
@@ -34,6 +34,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
@@ -41,6 +42,7 @@ import {
 import { Skeleton } from '~/components/ui/skeleton';
 import { getBrandingFn } from '~/server/functions/settings';
 import { useAuth } from '~/contexts/use-auth';
+import { useServer } from '~/contexts/use-server';
 import {
   hasPermissions,
   hasAdminAreaAccess,
@@ -106,10 +108,14 @@ interface NavItemProps {
   icon: LucideIcon;
   soon: boolean;
   params?: Record<string, string>;
+  /** Attention dot — e.g. the recipe was updated after the server's snapshot. */
+  dot?: boolean;
+  /** Count pill — pre-formatted (e.g. "2 / 5" backups, "3" schedules). */
+  badge?: string;
 }
 
-/** One sidebar navigation entry — link + optional "à venir" roadmap dot. */
-function NavItem({ title, url, icon: Icon, soon, params }: NavItemProps) {
+/** One sidebar navigation entry — link + optional "à venir" dot / count badge. */
+function NavItem({ title, url, icon: Icon, soon, params, dot, badge }: NavItemProps) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton tooltip={title} render={<Link to={url} params={params} />}>
@@ -121,37 +127,33 @@ function NavItem({ title, url, icon: Icon, soon, params }: NavItemProps) {
             className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400 group-data-[collapsible=icon]:hidden"
           />
         )}
+        {dot && !soon && (
+          <span
+            title="Recette mise à jour — recharge-la depuis les paramètres"
+            className="relative ml-auto flex size-2 shrink-0 group-data-[collapsible=icon]:hidden"
+          >
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+            <span className="relative inline-flex size-2 shrink-0 rounded-full bg-sky-500" />
+          </span>
+        )}
       </SidebarMenuButton>
+      {/* Kit badge — absolutely positioned against the item (a SIBLING of
+          the button, per the shadcn structure); hides on icon collapse. */}
+      {badge !== undefined && (
+        <SidebarMenuBadge className="bg-sidebar-accent">{badge}</SidebarMenuBadge>
+      )}
     </SidebarMenuItem>
   );
 }
 
-/**
- * Server context of the single-server variant (name, status, permissions).
- * The flags keep the layout decoupled from the queries: `nameLoaded` /
- * `permissionsLoaded` mark the DB detail query, `statusLoaded` the live
- * runtime query — the sidebar shows skeletons for whatever is in flight.
- */
-interface ServerContext {
-  id: string;
-  name?: string;
-  /** Last-known (DB) status — shown until the live status arrives. */
-  status?: PanelServerStatus;
-  /** True while the live status data is fresh (< 20 s) — sonar rings. */
-  statusLive?: boolean;
-  /** True while the live agent status query is in flight. */
-  statusFetching?: boolean;
-  /** Viewer's per-server permissions (flat list) — sub-users see fewer tabs. */
-  permissions?: string[];
-  /** False while the DB detail query is in flight → skeleton menu. */
-  permissionsLoaded?: boolean;
+/** Count pill text — "used / limit" when a limit applies, bare count otherwise. */
+function countBadge(count: number, limit?: number): string {
+  return limit !== undefined && limit > 0 ? `${count} / ${limit}` : String(count);
 }
 
 interface AppSidebarProps {
   /** Navigation set: dashboard (default) or the Pelican-style admin area. */
   variant?: 'dashboard' | 'admin';
-  /** Present → single-server layout: server header + tabs (overrides variant). */
-  server?: ServerContext;
 }
 
 /**
@@ -160,8 +162,12 @@ interface AppSidebarProps {
  * branding (admin > Paramètres, prefetched in __root.tsx) or the server
  * name + status; the footer is ALWAYS the user menu (theme preference +
  * logout), so the account controls live in the same place everywhere.
+ *
+ * The single-server variant is detected through the ServerProvider: its
+ * presence (not the loaded data) marks the server layout, so the menu never
+ * flashes the dashboard tabs while the detail query is in flight.
  */
-export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
+export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
   const { user } = useAuth();
   const permissions = user?.permissions ?? [];
 
@@ -170,36 +176,50 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
     queryFn: () => getBrandingFn(),
   });
 
-  const inServer = server !== undefined;
-  const serverParams = server ? { serverId: server.id } : undefined;
+  const snapshot = useServer();
+  const server = snapshot?.server;
+  const serverParams = snapshot ? { serverId: snapshot.serverId } : undefined;
+
   const visibleServerItems = serverItems.filter(
-    (item) => !item.permission || hasServerPermissions(server?.permissions ?? [], item.permission),
+    (item) =>
+      !item.permission ||
+      hasServerPermissions(server?.viewer.permissions ?? [], item.permission),
   );
   const visibleAdminItems = adminItems.filter(
     (item) => hasPermissions(permissions, item.permission),
   );
+
+  // Sidebar badges — backups "used / limit" (limit 0 = disabled → bare
+  // count) and the number of cron schedules, read from the detail stats.
+  const stats = server?.stats;
+  const navBadges: Partial<Record<string, string>> = stats
+    ? {
+        '/servers/$serverId/backups': countBadge(stats.backups, stats.backupLimit),
+        '/servers/$serverId/schedules': countBadge(stats.schedules),
+      }
+    : {};
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            {server ? (
+            {snapshot ? (
               <SidebarMenuButton
                 size="lg"
-                render={<Link to="/servers/$serverId/console" params={{ serverId: server.id }} />}
+                render={<Link to="/servers/$serverId/console" params={{ serverId: snapshot.serverId }} />}
               >
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <Server className="size-4" />
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5 leading-none">
-                  <span className="truncate font-semibold">{server.name ?? '…'}</span>
-                  {server.statusFetching ? (
+                  <span className="truncate font-semibold">{server?.name ?? '…'}</span>
+                  {snapshot.statusFetching ? (
                     <Skeleton className="h-3 w-16" />
                   ) : (
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <StatusBall status={server.status ?? 'unknown'} live={server.statusLive} />
-                      {statusLabel(server.status ?? 'unknown')}
+                      <StatusBall status={server?.status ?? 'unknown'} live={snapshot.statusLive} />
+                      {statusLabel(server?.status ?? 'unknown')}
                     </span>
                   )}
                 </div>
@@ -230,7 +250,7 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
       </SidebarHeader>
 
       <SidebarContent>
-        {inServer ? (
+        {snapshot ? (
           <>
             <SidebarGroup>
               <SidebarGroupContent>
@@ -245,10 +265,10 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
               </SidebarGroupContent>
             </SidebarGroup>
             <SidebarGroup>
-              <SidebarGroupLabel>{server.name ?? 'Serveur'}</SidebarGroupLabel>
+              <SidebarGroupLabel>{server?.name ?? 'Serveur'}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {server.permissionsLoaded ? (
+                  {snapshot.isSuccess ? (
                     visibleServerItems.map((item) => (
                       <NavItem
                         key={item.title}
@@ -257,6 +277,11 @@ export function AppSidebar({ variant = 'dashboard', server }: AppSidebarProps) {
                         icon={item.icon}
                         soon={item.soon}
                         params={serverParams}
+                        dot={
+                          item.url === '/servers/$serverId/variables' &&
+                          snapshot.recipeUpdatePending
+                        }
+                        badge={navBadges[item.url]}
                       />
                     ))
                   ) : (

@@ -100,6 +100,8 @@ function ServerSchedulesPage() {
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['server-schedules', serverId] });
+    // Sidebar badge (schedule count) lives on the shared detail query
+    await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
   };
 
   const create = useMutation({

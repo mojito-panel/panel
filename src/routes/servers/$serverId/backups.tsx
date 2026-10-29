@@ -100,6 +100,8 @@ function ServerBackupsPage() {
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['server-backups', serverId] });
+    // Sidebar badge (backups used / limit) lives on the shared detail query
+    await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
   };
 
   const restore = useMutation({

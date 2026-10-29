@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { Node, Server, ServerUser, Allocation } from '~/db/entities';
+import { Node, Server, ServerUser, Allocation, Backup, Schedule } from '~/db/entities';
 import { userServersList } from '~/lists/user-servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
@@ -259,7 +259,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server, viewer } = await loadServerForViewer(data.serverId, user);
+    const { em, server, viewer } = await loadServerForViewer(data.serverId, user);
     const { node, recipe, primaryAllocation } = await loadServerContext(server);
 
     if (!node || !recipe) {
@@ -316,6 +316,13 @@ export const getServerFn = createServerFn({ method: 'GET' })
             cpuCores: Number(server.cpuCores),
           }
         : null,
+      // Sidebar badge counts — non-failed backups vs the per-server limit,
+      // and the total number of cron schedules
+      stats: {
+        backups: await em.count(Backup, { serverId: server.id, status: { $ne: 'failed' } }),
+        backupLimit: server.backupLimit,
+        schedules: await em.count(Schedule, { serverId: server.id }),
+      },
       // What the current user can do on this server (sidebar + page gating)
       viewer: {
         isOwner: viewer.isOwner,
