@@ -51,8 +51,7 @@ import {
 } from '~/lib/permissions';
 
 /**
- * Server navigation — Pelican-style tabs. `soon` marks the pages that are
- * still placeholders (roadmap view). `permission` gates the tab: it is
+ * Server navigation — Pelican-style tabs. `permission` gates the tab: it is
  * only shown when the viewer's per-server grant carries it (sub-users see
  * a restricted set, owners/admins see everything).
  */
@@ -60,53 +59,49 @@ const serverItems: Array<{
   title: string;
   url: string;
   icon: LucideIcon;
-  soon: boolean;
   permission?: PermissionRequest;
 }> = [
-  { title: 'Console', url: '/servers/$serverId/console', icon: Terminal, soon: false, permission: { 'server.console': ['read'] } },
-  { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen, soon: false, permission: { 'server.files': ['read'] } },
-  { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, soon: false, permission: { 'server.schedules': ['read'] } },
-  { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, soon: false, permission: { 'server.users': ['read'] } },
-  { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, soon: false, permission: { 'server.backups': ['read'] } },
-  { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, soon: false, permission: { 'server.network': ['read'] } },
-  { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, soon: false, permission: { 'server.variables': ['read'] } },
-  { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, soon: false, permission: { 'server.settings': ['read'] } },
-  { title: 'Activité', url: '/servers/$serverId/activity', icon: History, soon: false, permission: { 'server.activity': ['read'] } },
+  { title: 'Console', url: '/servers/$serverId/console', icon: Terminal, permission: { 'server.console': ['read'] } },
+  { title: 'Fichiers', url: '/servers/$serverId/files', icon: FolderOpen, permission: { 'server.files': ['read'] } },
+  { title: 'Planifications', url: '/servers/$serverId/schedules', icon: CalendarClock, permission: { 'server.schedules': ['read'] } },
+  { title: 'Utilisateurs', url: '/servers/$serverId/users', icon: Users, permission: { 'server.users': ['read'] } },
+  { title: 'Sauvegardes', url: '/servers/$serverId/backups', icon: Archive, permission: { 'server.backups': ['read'] } },
+  { title: 'Réseau', url: '/servers/$serverId/network', icon: Network, permission: { 'server.network': ['read'] } },
+  { title: 'Variables', url: '/servers/$serverId/variables', icon: Rocket, permission: { 'server.variables': ['read'] } },
+  { title: 'Paramètres', url: '/servers/$serverId/settings', icon: Settings, permission: { 'server.settings': ['read'] } },
+  { title: 'Activité', url: '/servers/$serverId/activity', icon: History, permission: { 'server.activity': ['read'] } },
 ];
 
 /**
- * Administration menu — Pelican admin parity. `soon` marks the pages that
- * are still placeholders (roadmap view). `permission` gates the item: it
- * is only shown when the session user's effective permissions (built-in
+ * Administration menu — Pelican admin parity. `permission` gates the item:
+ * it is only shown when the session user's effective permissions (built-in
  * or custom role) carry the matching statement.
  */
 const adminItems: Array<{
   title: string;
   url: string;
   icon: LucideIcon;
-  soon: boolean;
   permission: PermissionRequest;
 }> = [
-  { title: 'Vue d’ensemble', url: '/admin', icon: LayoutDashboard, soon: false, permission: { 'panel.overview': ['read'] } },
-  { title: 'Serveurs', url: '/admin/servers', icon: Server, soon: false, permission: { 'panel.servers': ['read'] } },
-  { title: 'Nodes', url: '/admin/nodes', icon: Network, soon: false, permission: { 'panel.nodes': ['read'] } },
-  { title: 'Recettes', url: '/admin/recipes', icon: Puzzle, soon: false, permission: { 'panel.recipes': ['read'] } },
-  { title: 'Marketplace', url: '/admin/marketplace', icon: Store, soon: false, permission: { 'panel.recipes': ['read'] } },
-  { title: 'Clés SSH', url: '/admin/keys', icon: KeySquare, soon: false, permission: { 'panel.keys': ['read'] } },
-  { title: 'Utilisateurs', url: '/admin/users', icon: Users, soon: false, permission: { user: ['list'] } },
-  { title: 'Rôles', url: '/admin/roles', icon: ShieldCheck, soon: false, permission: { 'panel.roles': ['read'] } },
-  { title: 'API', url: '/admin/api', icon: KeyRound, soon: true, permission: { 'panel.overview': ['read'] } },
-  { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: false, permission: { 'panel.settings': ['read'] } },
-  { title: 'Santé', url: '/admin/health', icon: HeartPulse, soon: false, permission: { 'panel.overview': ['read'] } },
-  { title: 'Jobs', url: '/admin/jobs', icon: ListTodo, soon: false, permission: { 'panel.overview': ['read'] } },
-  { title: 'Activité', url: '/admin/activity', icon: History, soon: false, permission: { 'panel.activity': ['read'] } },
+  { title: 'Vue d’ensemble', url: '/admin', icon: LayoutDashboard, permission: { 'panel.overview': ['read'] } },
+  { title: 'Serveurs', url: '/admin/servers', icon: Server, permission: { 'panel.servers': ['read'] } },
+  { title: 'Nodes', url: '/admin/nodes', icon: Network, permission: { 'panel.nodes': ['read'] } },
+  { title: 'Recettes', url: '/admin/recipes', icon: Puzzle, permission: { 'panel.recipes': ['read'] } },
+  { title: 'Marketplace', url: '/admin/marketplace', icon: Store, permission: { 'panel.recipes': ['read'] } },
+  { title: 'Clés SSH', url: '/admin/keys', icon: KeySquare, permission: { 'panel.keys': ['read'] } },
+  { title: 'Utilisateurs', url: '/admin/users', icon: Users, permission: { user: ['list'] } },
+  { title: 'Rôles', url: '/admin/roles', icon: ShieldCheck, permission: { 'panel.roles': ['read'] } },
+  { title: 'API', url: '/admin/api', icon: KeyRound, permission: { 'panel.overview': ['read'] } },
+  { title: 'Paramètres', url: '/admin/settings', icon: Settings, permission: { 'panel.settings': ['read'] } },
+  { title: 'Santé', url: '/admin/health', icon: HeartPulse, permission: { 'panel.overview': ['read'] } },
+  { title: 'Jobs', url: '/admin/jobs', icon: ListTodo, permission: { 'panel.overview': ['read'] } },
+  { title: 'Activité', url: '/admin/activity', icon: History, permission: { 'panel.activity': ['read'] } },
 ];
 
 interface NavItemProps {
   title: string;
   url: string;
   icon: LucideIcon;
-  soon: boolean;
   params?: Record<string, string>;
   /** Attention dot — e.g. the recipe was updated after the server's snapshot. */
   dot?: boolean;
@@ -114,26 +109,22 @@ interface NavItemProps {
   badge?: string;
 }
 
-/** One sidebar navigation entry — link + optional "à venir" dot / count badge. */
-function NavItem({ title, url, icon: Icon, soon, params, dot, badge }: NavItemProps) {
+/** One sidebar navigation entry — link + optional dot / count badge. */
+function NavItem({ title, url, icon: Icon, params, dot, badge }: NavItemProps) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton tooltip={title} render={<Link to={url} params={params} />}>
         <Icon />
         <span>{title}</span>
-        {soon && (
-          <span
-            title="À venir"
-            className="ml-auto size-1.5 shrink-0 rounded-full bg-amber-400 group-data-[collapsible=icon]:hidden"
-          />
-        )}
-        {dot && !soon && (
+        {dot && (
           <span
             title="Recette mise à jour — recharge-la depuis les paramètres"
-            className="relative ml-auto flex size-2 shrink-0 group-data-[collapsible=icon]:hidden"
+            className="relative ml-auto flex size-2 shrink-0 items-center justify-center group-data-[collapsible=icon]:hidden"
           >
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
-            <span className="relative inline-flex size-2 shrink-0 rounded-full bg-sky-500" />
+            {/* Halo kept INSIDE the button box: the menu button is
+                overflow-hidden, so a growing animate-ping gets clipped. */}
+            <span className="absolute inline-flex size-3.5 animate-pulse rounded-full bg-amber-400/40" />
+            <span className="relative inline-flex size-2 shrink-0 rounded-full bg-amber-400" />
           </span>
         )}
       </SidebarMenuButton>
@@ -259,7 +250,6 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                     title="Mes serveurs"
                     url="/servers"
                     icon={LayoutDashboard}
-                    soon={false}
                   />
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -275,10 +265,9 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                         title={item.title}
                         url={item.url}
                         icon={item.icon}
-                        soon={item.soon}
                         params={serverParams}
                         dot={
-                          item.url === '/servers/$serverId/variables' &&
+                          item.url === '/servers/$serverId/settings' &&
                           snapshot.recipeUpdatePending
                         }
                         badge={navBadges[item.url]}
@@ -302,7 +291,6 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                       title="Ouvrir dans l’admin"
                       url="/admin/servers/$serverId"
                       icon={Shield}
-                      soon={false}
                       params={serverParams}
                     />
                   </SidebarMenu>
@@ -322,7 +310,6 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                       title={item.title}
                       url={item.url}
                       icon={item.icon}
-                      soon={item.soon}
                     />
                   ))}
                 </SidebarMenu>
@@ -335,7 +322,6 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                     title="Mes serveurs"
                     url="/servers"
                     icon={LayoutDashboard}
-                    soon={false}
                   />
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -350,7 +336,6 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                     title="Mes serveurs"
                     url="/servers"
                     icon={Server}
-                    soon={false}
                   />
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -365,7 +350,6 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                       title="Administration"
                       url="/admin"
                       icon={Shield}
-                      soon={false}
                     />
                   </SidebarMenu>
                 </SidebarGroupContent>
