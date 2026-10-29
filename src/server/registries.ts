@@ -7,6 +7,7 @@ import { nanoid } from '~/lib/nanoid';
 import {
   canonicalGitUrl,
   formatGitSource,
+  isSameRegistryRecipe,
   parseRecipeSource,
   type GitRecipeSource,
 } from '~/lib/recipe-source';
@@ -282,13 +283,16 @@ async function sshKeyOf(registry: IRegistry): Promise<ISshKey | null> {
 }
 
 /**
- * Stamps the upstream hashes of every recipe imported from this registry
- * (matched by its source URL — `"<repo>#<branch>:<path>"`). The branch is
- * passed explicitly: the sync just wrote it via nativeUpdate, so the
- * in-memory row the caller holds may be stale. Only the LIGHT entry
- * columns are read (path/sha — never the cached file contents). A
- * path that disappeared upstream reads as null sha + a checked timestamp:
- * "gone".
+ * Stamps the upstream hashes of every recipe imported from this registry.
+ * The scope is the source URL prefix of the branch the sync just resolved
+ * (passed explicitly: the sync wrote it via nativeUpdate, so the in-memory
+ * row the caller holds may be stale). Matching is REGISTRY + RECIPE ID
+ * (`isSameRegistryRecipe`) — never the path: a file renamed upstream is
+ * still the same recipe, so the stamp follows it AND the recipe's source
+ * URL is re-pointed to the new path, keeping later checks and updates
+ * resolvable. Only the LIGHT entry columns are read (path/sha — never the
+ * cached file contents). A recipe no entry matches anymore (by id, or by
+ * path for an id-less file) reads as null sha + a checked timestamp: "gone".
  */
 async function stampRegistryRecipes(
   registry: IRegistry,
@@ -299,13 +303,23 @@ async function stampRegistryRecipes(
 
   const em = orm.em;
   const prefix = `${registry.url}#${branchName}:`;
+  const scope = { url: registry.url, branchName };
   const recipes = await em.find(Recipe, { sourceUrl: { $ne: null } });
-  const shaBySourceUrl = new Map(drafts.map((draft) => [`${prefix}${draft.path}`, draft.sha]));
   const now = new Date();
 
   for (const recipe of recipes) {
-    if (!recipe.sourceUrl?.startsWith(prefix)) continue;
-    recipe.remoteSha = shaBySourceUrl.get(recipe.sourceUrl) ?? null;
+    const sourceUrl = recipe.sourceUrl;
+    if (!sourceUrl?.startsWith(prefix)) continue;
+    const probe = { slug: recipe.slug, sourceUrl };
+    const draft = drafts.find((candidate) => isSameRegistryRecipe(scope, candidate, probe));
+    if (!draft) {
+      recipe.remoteSha = null; // Gone upstream — no entry of this id anymore.
+    } else {
+      recipe.remoteSha = draft.sha;
+      if (draft.path !== sourceUrl.slice(prefix.length)) {
+        recipe.sourceUrl = `${prefix}${draft.path}`;
+      }
+    }
     recipe.remoteCheckedAt = now;
   }
   await em.flush();
@@ -352,7 +366,10 @@ export interface RegistryImportReport {
  * the git-form source URL and the entry hash as its provenance stamp.
  *
  * A slug clash with a recipe from ANOTHER source is refused — overwriting
- * another origin silently is never OK.
+ * another origin silently is never OK. The same registry + branch + recipe
+ * id IS the same origin however (the file path is not part of the
+ * identity): re-importing a renamed file updates the local copy and
+ * re-points its provenance to the new path.
  */
 export async function importRegistryEntry(
   registryId: string,
@@ -403,11 +420,18 @@ export async function importRegistryEntry(
     };
 
     const existing = await em.findOne(Recipe, { slug: recipeJson.id });
-    if (existing && existing.sourceUrl !== source.url) {
-      throw new HttpError(
-        409,
-        `La recette « ${recipeJson.id} » existe déjà avec une autre source — mets-la à jour depuis sa propre source, ou renomme-la d’abord`,
-      );
+    if (existing) {
+      const existingSource = existing.sourceUrl ? parseRecipeSource(existing.sourceUrl) : null;
+      const sameOrigin =
+        existingSource?.kind === 'git' &&
+        existingSource.repoUrl === registry.url &&
+        existingSource.branch === registry.branchName;
+      if (!sameOrigin) {
+        throw new HttpError(
+          409,
+          `La recette « ${recipeJson.id} » existe déjà avec une autre source — mets-la à jour depuis sa propre source, ou renomme-la d’abord`,
+        );
+      }
     }
 
     const result = await upsertRecipe(recipeJson, source);

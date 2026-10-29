@@ -6,6 +6,7 @@ import {
   computeEntryStatus,
   computeRecipeStatus,
   formatGitSource,
+  isSameRegistryRecipe,
   parseRecipeSource,
   recipeErrorMessage,
 } from '~/lib/recipe-source';
@@ -174,6 +175,91 @@ describe('computeEntryStatus', () => {
     expect(
       computeEntryStatus({ ...entry, sha: 'bbb' }, { ...recipe, storedSha: 'zzz' }),
     ).toBe('modified_locally');
+  });
+});
+
+// ─── Registry entry ↔ recipe identity ────────────────────────────────────────
+
+describe('isSameRegistryRecipe', () => {
+  const registry = { url: 'https://github.com/o/r', branchName: 'main' };
+  const entry = (path: string, slug: string | null) => ({ path, slug });
+  const recipe = (slug: string, path: string) => ({
+    slug,
+    sourceUrl: formatGitSource(registry.url, registry.branchName, path),
+  });
+
+  it('matches by recipe id — a file renamed upstream stays the same recipe', () => {
+    expect(
+      isSameRegistryRecipe(
+        registry,
+        entry('runtimes/java/java.json', 'java'),
+        recipe('java', 'runtimes/java/recipe-java.json'),
+      ),
+    ).toBe(true);
+  });
+
+  it('matches the recipe imported from the very same path', () => {
+    expect(
+      isSameRegistryRecipe(
+        registry,
+        entry('steamcmd/x/recipe-x.json', 'x'),
+        recipe('x', 'steamcmd/x/recipe-x.json'),
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses a different id sitting at the old path (file replaced by another recipe)', () => {
+    expect(
+      isSameRegistryRecipe(
+        registry,
+        entry('steamcmd/x/recipe-x.json', 'other'),
+        recipe('x', 'steamcmd/x/recipe-x.json'),
+      ),
+    ).toBe(false);
+  });
+
+  it('falls back to the exact path for an entry that does not validate (no id)', () => {
+    expect(
+      isSameRegistryRecipe(
+        registry,
+        entry('steamcmd/x/recipe-x.json', null),
+        recipe('x', 'steamcmd/x/recipe-x.json'),
+      ),
+    ).toBe(true);
+    expect(
+      isSameRegistryRecipe(
+        registry,
+        entry('steamcmd/x/recipe-x.json', null),
+        recipe('x', 'steamcmd/x/x.json'),
+      ),
+    ).toBe(false);
+  });
+
+  it('stays scoped to the registry repository and branch', () => {
+    const otherRepo = {
+      slug: 'x',
+      sourceUrl: formatGitSource('https://github.com/o/other', 'main', 'steamcmd/x/recipe-x.json'),
+    };
+    const otherBranch = {
+      slug: 'x',
+      sourceUrl: formatGitSource(registry.url, 'dev', 'steamcmd/x/recipe-x.json'),
+    };
+    expect(isSameRegistryRecipe(registry, entry('steamcmd/x/recipe-x.json', 'x'), otherRepo)).toBe(
+      false,
+    );
+    expect(
+      isSameRegistryRecipe(registry, entry('steamcmd/x/recipe-x.json', 'x'), otherBranch),
+    ).toBe(false);
+  });
+
+  it('never matches before the first sync (no resolved branch)', () => {
+    expect(
+      isSameRegistryRecipe(
+        { url: registry.url, branchName: '' },
+        entry('steamcmd/x/recipe-x.json', 'x'),
+        recipe('x', 'steamcmd/x/recipe-x.json'),
+      ),
+    ).toBe(false);
   });
 });
 

@@ -7,7 +7,7 @@ import { logActivity } from '../activity';
 import { canonicalRecipeHash } from '../registry-entries';
 import {
   computeEntryStatus,
-  formatGitSource,
+  isSameRegistryRecipe,
   type RegistryCatalogEntry,
   type RegistryEntryRecipeRef,
   type RegistryEntryStatus,
@@ -90,20 +90,24 @@ async function loadRecipeSourceRows(): Promise<RecipeSourceRow[]> {
   }));
 }
 
-/** Finds the recipe imported from one catalog entry (by its source URL). */
+/**
+ * Finds the recipe imported from one catalog entry — the identity is the
+ * registry + the recipe id (`isSameRegistryRecipe`), NOT the path: a file
+ * renamed upstream stays matched to its local copy instead of orphaning it.
+ */
 function findEntryRecipe(
   recipes: RecipeSourceRow[],
   registry: { url: string; branchName: string },
-  path: string,
+  entry: { path: string; slug?: string | null },
 ): RecipeSourceRow | null {
-  const sourceUrl = formatGitSource(registry.url, registry.branchName, path);
-  return recipes.find((recipe) => recipe.sourceUrl === sourceUrl) ?? null;
+  return recipes.find((recipe) => isSameRegistryRecipe(registry, entry, recipe)) ?? null;
 }
 
 /** Light columns of a catalog entry — all the status counts need. */
 interface RegistryEntryLight {
   registryId: string;
   path: string;
+  slug: string | null;
   sha: string;
   error: string | null;
 }
@@ -150,12 +154,13 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           { registryId: { $in: registryIds } },
           // Light columns only — the cached file contents (and covers) stay
           // out of the registry list however big the catalogs grow.
-          { fields: ['registryId', 'path', 'sha', 'error'] },
+          { fields: ['registryId', 'path', 'slug', 'sha', 'error'] },
         )
       : [];
     const entries: RegistryEntryLight[] = entryRows.map((entry) => ({
       registryId: entry.registryId,
       path: entry.path,
+      slug: entry.slug ?? null,
       sha: entry.sha,
       error: entry.error ?? null,
     }));
@@ -189,9 +194,7 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
         let invalid = 0;
 
         for (const entry of entries) {
-          const recipe = registry.branchName
-            ? findEntryRecipe(recipes, registry, entry.path)
-            : null;
+          const recipe = findEntryRecipe(recipes, registry, entry);
           const { status } = toStatusInput(entry, recipe);
           if (status === 'not_imported') notImported++;
           else if (status === 'up_to_date') upToDate++;
@@ -200,16 +203,14 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           else invalid++;
         }
 
-        // Recipes imported from this registry whose file disappeared upstream.
+        // Recipes imported from this registry whose file disappeared upstream
+        // (no catalog entry matches them anymore — by id, or by path for an
+        // id-less file).
         const upstreamGone = registry.branchName
           ? recipes.filter(
               (recipe) =>
                 recipe.sourceUrl.startsWith(`${registry.url}#${registry.branchName}:`) &&
-                !entries.some(
-                  (entry) =>
-                    recipe.sourceUrl ===
-                    formatGitSource(registry.url, registry.branchName, entry.path),
-                ),
+                !entries.some((entry) => isSameRegistryRecipe(registry, entry, recipe)),
             ).length
           : 0;
 
@@ -311,9 +312,7 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
     );
 
     const rows: RegistryCatalogEntry[] = entries.map((entry): RegistryCatalogEntry => {
-      const recipe = registry.branchName
-        ? findEntryRecipe(recipes, registry, entry.path)
-        : null;
+      const recipe = findEntryRecipe(recipes, registry, entry);
       const { status } = toStatusInput(
         { error: entry.error ?? null, sha: entry.sha },
         recipe,
@@ -338,8 +337,8 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
       const prefix = `${registry.url}#${registry.branchName}:`;
       for (const recipe of recipes) {
         if (!recipe.sourceUrl.startsWith(prefix)) continue;
+        if (entries.some((entry) => isSameRegistryRecipe(registry, entry, recipe))) continue;
         const path = recipe.sourceUrl.slice(prefix.length);
-        if (entries.some((entry) => entry.path === path)) continue;
         rows.push({
           path,
           name: recipe.name,

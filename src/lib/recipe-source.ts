@@ -233,6 +233,24 @@ export function computeEntryStatus(
   return 'up_to_date';
 }
 
+/**
+ * Whether a catalog entry and an imported recipe are THE SAME recipe. The
+ * identity is the registry + the recipe id (the slug) — NOT the file path:
+ * a file renamed upstream is still the same recipe, and the sync re-points
+ * the recipe's source URL to its new path. Only an entry that does not
+ * validate (no id to match) falls back to the exact path it sits at.
+ */
+export function isSameRegistryRecipe(
+  registry: { url: string; branchName: string },
+  entry: { path: string; slug?: string | null },
+  recipe: { slug: string; sourceUrl: string },
+): boolean {
+  if (!registry.branchName) return false;
+  if (!recipe.sourceUrl.startsWith(`${registry.url}#${registry.branchName}:`)) return false;
+  if (entry.slug) return entry.slug === recipe.slug;
+  return recipe.sourceUrl === formatGitSource(registry.url, registry.branchName, entry.path);
+}
+
 // ─── Error formatting ─────────────────────────────────────────────────────────
 
 /** Readable error message (ZodError → list of fields in error). */
