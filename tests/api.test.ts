@@ -26,6 +26,7 @@ import {
   backupOperationStatusSchema,
   backupDownloadTokenPayloadSchema,
   BACKUP_DOWNLOAD_TOKEN_TTL_SECONDS,
+  agentStatusReportSchema,
 } from '../src/contract/api';
 
 describe('healthResponseSchema', () => {
@@ -757,4 +758,44 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
     expect(result.success).toBe(false);
   });
 
+});
+
+describe('agentStatusReportSchema (agent → panel status push)', () => {
+  it('validates a changed-statuses report', () => {
+    const result = agentStatusReportSchema.safeParse({
+      statuses: [
+        { serverId: 'V1StGXR8_Z5jdHi6B-myT', status: 'running' },
+        { serverId: '123e4567-e89b-12d3-a456-426614174000', status: 'crashed' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an empty report — the agent never pushes a no-op diff', () => {
+    const result = agentStatusReportSchema.safeParse({ statuses: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an unknown status (install_failed is panel-only)', () => {
+    const result = agentStatusReportSchema.safeParse({
+      statuses: [{ serverId: 'server-1', status: 'install_failed' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty serverId', () => {
+    const result = agentStatusReportSchema.safeParse({
+      statuses: [{ serverId: '', status: 'stopped' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('caps the report — one node cannot hold more than 500 servers', () => {
+    const statuses = Array.from({ length: 501 }, (_, i) => ({
+      serverId: `server-${i}`,
+      status: 'stopped',
+    }));
+    const result = agentStatusReportSchema.safeParse({ statuses });
+    expect(result.success).toBe(false);
+  });
 });

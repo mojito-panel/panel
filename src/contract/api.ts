@@ -733,6 +733,28 @@ export const sftpAuthResponseSchema = z.object({
 
 export type SftpAuthResponse = z.infer<typeof sftpAuthResponseSchema>;
 
+// ─── Status push (agent → panel) ──────────────────────────────────────────────
+
+/** One server status entry of the agent's status report. */
+export const agentStatusEntrySchema = z.object({
+  serverId: idSchema,
+  status: serverStatusSchema,
+});
+
+export type AgentStatusEntry = z.infer<typeof agentStatusEntrySchema>;
+
+/**
+ * POST /api/agent/status — the agent reports the servers whose status
+ * CHANGED since its last accepted report (push-on-change; the panel's
+ * browser-facing polls stay the only UI read path). Idempotent: the panel
+ * writes the statuses and moves on.
+ */
+export const agentStatusReportSchema = z.object({
+  statuses: z.array(agentStatusEntrySchema).min(1).max(500),
+});
+
+export type AgentStatusReport = z.infer<typeof agentStatusReportSchema>;
+
 // ─── HTTP routes (reference) ──────────────────────────────────────────────────
 
 /**
@@ -776,12 +798,14 @@ export const AGENT_ROUTES = {
 } as const;
 
 /**
- * Route the AGENT calls on the PANEL (the only agent → panel call): SFTP
- * credential validation, authenticated with `Authorization: Bearer <agent
- * token>` of the calling node. See sftpAuthRequestSchema/sftpAuthResponseSchema.
+ * Routes the AGENT calls on the PANEL. All are authenticated with
+ * `Authorization: Bearer <agent token>` of the calling node — the SAME
+ * shared per-node secret the panel uses to call the agent.
  */
 export const PANEL_ROUTES = {
   sftpAuth: 'POST /api/sftp/auth',
   /** Agent boot GC: the ids of the servers the panel still knows on the calling node. */
   agentServers: 'GET /api/agent/servers',
+  /** Status push: the servers whose status changed on the calling node. */
+  agentStatus: 'POST /api/agent/status',
 } as const;
