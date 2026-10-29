@@ -279,7 +279,7 @@ function RegistryCatalogPage() {
 
           {/* ─── Catalog — vertical cover cards ─── */}
           {query.isPending ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {Array.from({ length: 5 }).map((_, index) => (
                 <div key={index} className="aspect-[2/3] animate-pulse rounded-md bg-muted" />
               ))}
@@ -293,7 +293,7 @@ function RegistryCatalogPage() {
                   : 'Aucune recette ne correspond au filtre.'}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {visible.map((row) => (
                 <div
                   key={row.path}
@@ -402,7 +402,9 @@ function RegistryCatalogPage() {
           if (!open) setRowToView(null);
         }}
       >
-        <DialogContent className="max-w-3xl">
+        {/* sm: variant required — DialogContent's sm:max-w-md would beat a
+            bare max-w-* and cap the dialog at 448px. */}
+        <DialogContent className="sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle className="font-mono text-sm">{rowToView?.path}</DialogTitle>
             <DialogDescription>
