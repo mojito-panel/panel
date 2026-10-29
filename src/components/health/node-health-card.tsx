@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { useNodeStatsStream } from '~/components/health/use-node-stats-stream';
 import { useFlowSamples } from '~/components/health/use-flow-samples';
 import { Skeleton } from '~/components/ui/skeleton';
+import { isHttpsScheme } from '~/validators/node';
 import {
   ChartContainer,
   ChartTooltip,
@@ -28,6 +29,7 @@ export interface NodeHealthDto {
   id: string;
   name: string;
   fqdn: string;
+  scheme: string;
   publicPort: number;
   status: 'online' | 'offline' | 'unknown';
   lastSeenAt: Date | string | null;
@@ -117,8 +119,10 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
             <CardTitle className="text-base">{node.name}</CardTitle>
             {online && <LiveIndicator live={connection === 'live'} />}
           </div>
-          <span className="text-xs text-muted-foreground">
-            {node.fqdn}:{node.publicPort}
+          <span className="font-mono text-xs text-muted-foreground">
+            {node.fqdn}
+            {node.publicPort !== (isHttpsScheme(node.scheme) ? 443 : 80) &&
+              `:${node.publicPort}`}
           </span>
         </div>
       </CardHeader>

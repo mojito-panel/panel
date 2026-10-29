@@ -730,6 +730,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' })
       id: node.id,
       name: node.name,
       fqdn: node.fqdn,
+      scheme: node.scheme,
       publicPort: node.publicPort,
       status: node.status,
       lastSeenAt: node.lastSeenAt,
@@ -810,6 +811,7 @@ export const getHealthNodesFn = createServerFn({ method: 'GET' })
       id: node.id,
       name: node.name,
       fqdn: node.fqdn,
+      scheme: node.scheme,
       publicPort: node.publicPort,
       // Just set above by the ping — typed for the health page's DTO
       status: node.status as 'online' | 'offline' | 'unknown',

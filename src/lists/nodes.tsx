@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import { defineList, field } from '~/lists/define';
+import { isHttpsScheme } from '~/validators/node';
 
 /**
  * /admin/nodes — every machine hosting a Mojito agent (Pelican admin ListNodes).
@@ -55,7 +56,7 @@ export const adminNodesList = defineList<AdminNodeRow, AdminNodesContext>({
         <Link
           to="/admin/nodes/$nodeId"
           params={{ nodeId: node.id }}
-          className="font-medium hover:underline"
+          className="block truncate font-medium hover:underline"
         >
           {node.name}
         </Link>
@@ -64,16 +65,28 @@ export const adminNodesList = defineList<AdminNodeRow, AdminNodesContext>({
     address: {
       header: 'Adresse',
       sort: field('fqdn'),
-      cell: (node) => (
-        <span className="text-muted-foreground">
-          {node.scheme}://{node.fqdn}:{node.publicPort}
-        </span>
-      ),
+      cell: (node) => {
+        // The stored scheme is a routing detail (`https-behind-proxy`), not
+        // an address: every TLS node is simply reached over https, and the
+        // default port is implied by the protocol.
+        const protocol = isHttpsScheme(node.scheme) ? 'https' : 'http';
+        const port =
+          node.publicPort === (protocol === 'https' ? 443 : 80) ? '' : `:${node.publicPort}`;
+        return (
+          <span className="font-mono text-xs text-muted-foreground">
+            {protocol}://{node.fqdn}{port}
+          </span>
+        );
+      },
     },
     status: {
       header: 'Statut',
       sort: field('status'),
-      cell: (node) => <StatusBadge status={node.status} />,
+      cell: (node) => (
+        // No live flag: the list is a DB snapshot — the sonar rings only
+        // appear where a fresh ping actually backs the badge.
+        <StatusBadge status={node.status} />
+      ),
       filter: { control: 'choice', target: field('status'), options: STATUS_OPTIONS },
     },
     createdAt: {

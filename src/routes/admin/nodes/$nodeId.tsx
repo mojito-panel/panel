@@ -19,7 +19,7 @@ import {
 } from '~/validators/node';
 import { buildAgentConfig, buildAgentConfigWithoutToken } from '~/lib/agent-config';
 import { NodeSchemeField } from '~/components/node-scheme-field';
-import type { NodeScheme } from '~/validators/node';
+import { isHttpsScheme, type NodeScheme } from '~/validators/node';
 import { DataTable } from '~/components/data-table/data-table';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { nodeAllocationsList, type NodeAllocationRow } from '~/lists/allocations';
@@ -116,8 +116,9 @@ function AdminNodeEditPage() {
           <StatusBadge status={liveStatus} live={isLiveData(healthQuery)} />
         )}
       </div>
-      <p className="text-muted-foreground">
-        {node.scheme}://{node.fqdn}:{node.publicPort}
+      <p className="mt-1 font-mono text-sm text-muted-foreground">
+        {isHttpsScheme(node.scheme) ? 'https' : 'http'}://{node.fqdn}
+        {node.publicPort === (isHttpsScheme(node.scheme) ? 443 : 80) ? '' : `:${node.publicPort}`}
       </p>
 
       {/* ─── Tabs (Pelican detailTabs: overview / basic settings / allocations / config) ── */}

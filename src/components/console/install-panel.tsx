@@ -38,7 +38,7 @@ export function InstallNotice({ status, onRetry, retryPending, retryError }: Ins
   }
   return (
     <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-      <InProgressBadge label="Installation en cours" tone="blue" />
+      <InProgressBadge label="Installation en cours" tone="active" />
       <span>— suivez la progression ci-dessous.</span>
     </p>
   );

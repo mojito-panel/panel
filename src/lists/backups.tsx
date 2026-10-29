@@ -44,20 +44,20 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as BackupStatus[]).map((value
 
 /**
  * Small status chip — in-progress jobs (pending/running/restoring) share
- * the glass LED pill of the status badges; terminal states keep their
+ * the breathing amber chip of the status badges; terminal states keep their
  * own tint (backups have their own lifecycle, not StatusBadge).
  */
 function BackupStatusChip({ status }: { status: BackupStatus }) {
   if (status === 'completed') {
     return (
-      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex h-6 items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
         {STATUS_LABELS.completed}
       </span>
     );
   }
   if (status === 'failed') {
     return (
-      <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+      <span className="inline-flex h-6 items-center rounded-full border border-red-500/25 bg-red-500/10 px-2.5 text-xs font-medium text-red-700 dark:text-red-300">
         {STATUS_LABELS.failed}
       </span>
     );

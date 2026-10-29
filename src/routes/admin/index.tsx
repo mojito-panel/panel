@@ -5,6 +5,7 @@ import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
 import { getAdminOverviewFn, getAdminOverviewHealthFn } from '~/server/functions/admin';
 import { adminNodesList } from '~/lists/nodes';
 import { StatusBadge, isLiveData } from '~/components/status-badge';
+import { isHttpsScheme } from '~/validators/node';
 import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
 import {
@@ -127,9 +128,17 @@ function AdminOverviewPage() {
               return (
                 <div key={node.id} className="flex items-center justify-between gap-4 py-2.5">
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{node.name}</p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {node.fqdn}:{node.publicPort}
+                    <Link
+                      to="/admin/nodes/$nodeId"
+                      params={{ nodeId: node.id }}
+                      className="block truncate font-medium hover:underline"
+                    >
+                      {node.name}
+                    </Link>
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {node.fqdn}
+                      {node.publicPort !== (isHttpsScheme(node.scheme) ? 443 : 80) &&
+                        `:${node.publicPort}`}
                       {health?.lastSeenAt &&
                         ` · vu ${new Date(health.lastSeenAt).toLocaleString('fr-FR')}`}
                     </p>

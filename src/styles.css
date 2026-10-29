@@ -154,12 +154,22 @@
 
 /* ─── Status indicator animations (components/status-badge.tsx) ────────────── */
 @theme {
-  /* Soft aura expanding around an active status dot (beacon). */
-  --animate-halo: halo 2.4s ease-out infinite;
   /* Breathing glow of an in-progress LED indicator. */
   --animate-led: led 1.6s ease-in-out infinite;
   /* Concentric sonar rings around a live status dot (live data < 20 s). */
   --animate-live-ring: live-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+  @keyframes halo {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    70%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
 
   @keyframes halo {
     0% {
