@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
 import {
   useQuery,
   useMutation,
@@ -29,6 +30,7 @@ import { Label } from '~/components/ui/label';
 import { CardSection, TabsCard } from '~/components/tabs-card';
 import { Skeleton } from '~/components/ui/skeleton';
 import { StatusBadge, isLiveData } from '~/components/status-badge';
+import { TimeAgo } from '~/components/time-ago';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
@@ -134,20 +136,11 @@ function AdminNodeEditPage() {
               <CardSection title="Informations du node">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <InfoEntry
-                    label="Dernier contact"
-                    value={
-                      health?.lastSeenAt
-                        ? new Date(health.lastSeenAt).toLocaleString('fr-FR')
-                        : node.lastSeenAt
-                          ? new Date(node.lastSeenAt).toLocaleString('fr-FR')
-                          : 'jamais'
-                    }
+                    label="Last contact"
+                    value={<TimeAgo date={health?.lastSeenAt ?? node.lastSeenAt} />}
                     muted={!(health?.status === 'online')}
                   />
-                  <InfoEntry
-                    label="Créé le"
-                    value={new Date(node.createdAt).toLocaleString('fr-FR')}
-                  />
+                  <InfoEntry label="Created" value={<TimeAgo date={node.createdAt} />} />
                 </div>
               </CardSection>
             ),
@@ -246,7 +239,15 @@ function AdminNodeEditPage() {
 }
 
 /** One info entry of the Overview tab (Filament TextEntry equivalent). */
-function InfoEntry({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
+function InfoEntry({
+  label,
+  value,
+  muted,
+}: {
+  label: string;
+  value: ReactNode;
+  muted?: boolean;
+}) {
   return (
     <div>
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>

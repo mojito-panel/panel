@@ -14,6 +14,7 @@ import {
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { CoverImage } from '~/components/cover-image';
 import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
+import { TimeAgo } from '~/components/time-ago';
 import { ErrorState } from '~/components/error/error-state';
 import { useAuth } from '~/contexts/use-auth';
 import { hasPermissions } from '~/lib/permissions';
@@ -230,13 +231,10 @@ function RegistryCatalogPage() {
                 {registry.lastSyncedAt && (
                   <>
                     <span className="text-muted-foreground" aria-hidden>·</span>
-                    <span
-                      className="inline-flex items-center gap-1"
-                      title={`Synchronisé le ${registry.lastSyncedAt.toLocaleString('fr-FR')}`}
-                    >
-                      <RefreshCw className="size-3.5 shrink-0" />
-                      {registry.lastSyncedAt.toLocaleString('fr-FR')}
-                    </span>
+                    <TimeAgo
+                      date={registry.lastSyncedAt}
+                      prefix={<RefreshCw className="size-3.5 shrink-0" />}
+                    />
                   </>
                 )}
               </span>

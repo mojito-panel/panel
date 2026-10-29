@@ -5,6 +5,7 @@ import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
 import { getAdminOverviewFn, getAdminOverviewHealthFn } from '~/server/functions/admin';
 import { adminNodesList } from '~/lists/nodes';
 import { StatusBadge, isLiveData } from '~/components/status-badge';
+import { TimeAgo } from '~/components/time-ago';
 import { isHttpsScheme } from '~/validators/node';
 import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
@@ -139,8 +140,12 @@ function AdminOverviewPage() {
                       {node.fqdn}
                       {node.publicPort !== (isHttpsScheme(node.scheme) ? 443 : 80) &&
                         `:${node.publicPort}`}
-                      {health?.lastSeenAt &&
-                        ` · vu ${new Date(health.lastSeenAt).toLocaleString('fr-FR')}`}
+                      {health?.lastSeenAt && (
+                        <>
+                          {' · '}
+                          <TimeAgo date={health.lastSeenAt} prefix="seen" />
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
