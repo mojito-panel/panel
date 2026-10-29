@@ -4,6 +4,12 @@ import { cn } from 'cn';
  * Cover artwork of a marketplace card (a recipe of a registry, or the
  * registry itself) — one render for both.
  *
+ * SELF-CONTAINED: the component owns its box (`relative aspect-[2/3]
+ * overflow-hidden`), so it can drop anywhere in a card without its callers
+ * remembering a positioned wrapper — an absolute fill placed directly in a
+ * non-relative parent would size to the nearest positioned ancestor, i.e.
+ * the whole page.
+ *
  * - a stored cover (base64 data URL) → the image, object-cover;
  * - nothing stored → a generated gradient, SEEDED by the entity id so the
  *   same card always wears the same colors (no flicker between renders)
@@ -37,23 +43,27 @@ export function CoverImage({
   cover: string | null | undefined;
   /** Stable seed of the gradient (the entity id). */
   seed: string;
+  /** Rounded corners / borders where the card meets the cover. */
   className?: string;
 }) {
-  if (cover) {
-    return (
-      <img
-        src={cover}
-        alt=""
-        loading="lazy"
-        className={cn('absolute inset-0 h-full w-full object-cover', className)}
-      />
-    );
-  }
   return (
     <div
-      aria-hidden
-      className={cn('absolute inset-0 h-full w-full', className)}
-      style={{ backgroundImage: gradientFor(seed) }}
-    />
+      className={cn('relative aspect-[2/3] w-full overflow-hidden bg-muted', className)}
+    >
+      {cover ? (
+        <img
+          src={cover}
+          alt=""
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden
+          className="absolute inset-0 h-full w-full"
+          style={{ backgroundImage: gradientFor(seed) }}
+        />
+      )}
+    </div>
   );
 }

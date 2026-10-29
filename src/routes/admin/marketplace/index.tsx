@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@
 import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
-import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import {
   listRegistriesFn,
   addRegistryFn,
@@ -410,18 +410,6 @@ function RegistryCardView({
         >
           {registry.name}
         </button>
-        <p className="truncate text-xs text-muted-foreground" title={registry.url}>
-          {registry.url}
-          {registry.branch ? ` · ${registry.branch}` : ''}
-        </p>
-        {registry.sshKeyName && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
-            <KeyRound className="size-3 shrink-0" />
-            <span className="truncate" title="Clé SSH du dépôt privé">
-              {registry.sshKeyName}
-            </span>
-          </p>
-        )}
         {registry.lastError && (
           <p className="line-clamp-2 text-xs text-destructive" title={registry.lastError}>
             {registry.lastError}
