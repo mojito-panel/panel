@@ -436,33 +436,26 @@ function RegistryCardView({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-1 pt-1">
-          <span className="truncate text-xs text-muted-foreground">
-            {registry.neverSynced
-              ? 'Jamais synchronisé'
-              : registry.lastSyncedAt?.toLocaleString('fr-FR')}
-          </span>
-          <div className="flex shrink-0 gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Synchroniser maintenant"
-              onClick={onSync}
-            >
-              <RefreshCw />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Modifier le nom, la branche ou la clé SSH"
-              onClick={onEdit}
-            >
-              <Pencil />
-            </Button>
-            <Button variant="ghost" size="icon-sm" title="Supprimer" onClick={onDelete}>
-              <Trash2 />
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-1 pt-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Synchroniser maintenant"
+            onClick={onSync}
+          >
+            <RefreshCw />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Modifier le nom, la branche ou la clé SSH"
+            onClick={onEdit}
+          >
+            <Pencil />
+          </Button>
+          <Button variant="ghost" size="icon-sm" title="Supprimer" onClick={onDelete}>
+            <Trash2 />
+          </Button>
         </div>
       </CardContent>
     </Card>

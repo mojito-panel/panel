@@ -207,8 +207,16 @@ function RegistryCatalogPage() {
                 </a>
                 {(registry.branch || registry.branchName) &&
                   ` · ${registry.branch || registry.branchName}`}
-                {registry.lastSyncedAt &&
-                  ` · synchronisé ${registry.lastSyncedAt.toLocaleString('fr-FR')}`}
+                {registry.lastSyncedAt && (
+                  <span
+                    className="inline-flex items-center gap-1"
+                    title={`Synchronisé le ${registry.lastSyncedAt.toLocaleString('fr-FR')}`}
+                  >
+                    {' · '}
+                    <RefreshCw className="size-3.5" />
+                    {registry.lastSyncedAt.toLocaleString('fr-FR')}
+                  </span>
+                )}
               </span>
             ) : (
               'Catalogue du registre'
