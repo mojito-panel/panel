@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { isSshRemote } from '~/lib/ssh-key';
+import { manifestCoverPath } from '~/lib/registry-manifest';
 import { MAX_RECIPE_FILE_BYTES, RECIPE_FILE_PATTERN } from './registry-entries';
 
 const execFileAsync = promisify(execFile);
@@ -33,10 +34,17 @@ export interface GitCloneResult {
   /** Branch name the clone resolved (registry default, or the tracked ref). */
   branch: string;
   /**
-   * Cover artwork of the repository itself (base64 data URL) — the repo-root
-   * `cover.png|jpg|jpeg|webp`. Null when the repo ships none.
+   * Cover artwork of the repository itself (base64 data URL) — the
+   * registry.json `cover` path when the manifest declares one, else the
+   * repo-root `cover.png|jpg|jpeg|webp`. Null when the repo ships neither.
    */
   cover: string | null;
+  /**
+   * Raw root `registry.json` — the registry marker + its metadata. Null
+   * when the repository ships none (the sync then fails: not a registry).
+   * Raw on purpose: the clone only reads bytes, the sync layer validates.
+   */
+  manifest: string | null;
 }
 
 /** One recipe file of a clone, with its optional vertical cover (data URL). */
@@ -101,12 +109,64 @@ export async function cloneRecipeFiles(
 
   try {
     const resolved = await cloneRepository(url, branch, dir, sshEnv);
-    return { files: await readRecipeFiles(dir), cover: await readRootCover(dir), ...resolved };
+    const manifest = await readRootManifest(dir);
+    return {
+      files: await readRecipeFiles(dir),
+      // The manifest's cover path wins; the root cover.* convention is the
+      // fallback (also when the declared file is missing or too large).
+      cover: (await readCoverFile(dir, manifestCoverPath(manifest))) ?? (await readRootCover(dir)),
+      manifest,
+      ...resolved,
+    };
   } finally {
     // Best effort: an abandoned (timed-out) clone may still be writing — a
     // failed removal only leaks a temp directory until the OS cleans it.
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     if (sshDir) await rm(sshDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Reads the REPO-ROOT registry.json (the registry marker) — raw text,
+ * capped like a recipe file (a manifest is config, never megabytes).
+ * Null when the repository ships none.
+ */
+async function readRootManifest(root: string): Promise<string | null> {
+  try {
+    return await readFile(join(root, 'registry.json'), { encoding: 'utf8', flag: 'r' }).then(
+      (text) => (text.length > MAX_RECIPE_FILE_BYTES ? null : text),
+    );
+  } catch {
+    return null; // no manifest — the sync layer decides what that means
+  }
+}
+
+/** Mime by cover file extension — the data URL of a cached artwork. */
+const COVER_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+};
+
+/**
+ * Reads one cover file at a repo-relative path (the registry.json `cover`
+ * override): base64 data URL, null when absent, unsupported or too
+ * large. `path` null = no declared cover.
+ */
+async function readCoverFile(root: string, path: string | null): Promise<string | null> {
+  if (path == null) return null;
+  // Defense in depth: the sync layer validates the path, but this read
+  // happens before it — a `..` segment never leaves the clone.
+  if (path.split(/[/\\]/).includes('..')) return null;
+  const mime = COVER_MIME[extname(path).toLowerCase()];
+  if (mime == null) return null;
+  try {
+    const buffer = await readFile(join(root, path));
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_COVER_BYTES) return null;
+    return `data:${mime};base64,${buffer.toString('base64')}`;
+  } catch {
+    return null; // declared but missing — the caller falls back to cover.*
   }
 }
 

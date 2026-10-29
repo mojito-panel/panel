@@ -50,6 +50,10 @@ export interface RegistryCardRow {
   branchName: string;
   /** Repo-root cover (base64 data URL) — null = generated gradient. */
   cover: string | null;
+  /** registry.json manifest metadata, stamped at every sync. */
+  description: string | null;
+  author: string | null;
+  license: string | null;
   /** True until the first sync lands — the page polls meanwhile. */
   neverSynced: boolean;
   lastSyncedAt: Date | null;
@@ -221,6 +225,9 @@ export const listRegistriesFn = createServerFn({ method: 'GET' })
           branch: registry.branch,
           branchName: registry.branchName,
           cover: registry.cover ?? null,
+          description: registry.description ?? null,
+          author: registry.author ?? null,
+          license: registry.license ?? null,
           neverSynced: registry.lastSyncedAt === null || registry.lastSyncedAt === undefined,
           lastSyncedAt: registry.lastSyncedAt ?? null,
           lastError: registry.lastError ?? null,
@@ -372,6 +379,9 @@ export const listRegistryEntriesFn = createServerFn({ method: 'POST' })
         branch: registry.branch,
         branchName: registry.branchName,
         cover: registry.cover ?? null,
+        description: registry.description ?? null,
+        author: registry.author ?? null,
+        license: registry.license ?? null,
         neverSynced: registry.lastSyncedAt === null || registry.lastSyncedAt === undefined,
         lastSyncedAt: registry.lastSyncedAt ?? null,
         lastError: registry.lastError ?? null,

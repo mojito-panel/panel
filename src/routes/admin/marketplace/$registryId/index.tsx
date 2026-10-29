@@ -207,37 +207,52 @@ function RegistryCatalogPage() {
           </CardTitle>
           <CardDescription>
             {registry ? (
-              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="inline-flex items-center gap-1">
-                  <FolderGit2 className="size-3.5 shrink-0" />
-                  <a
-                    href={registry.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    {registry.url}
-                  </a>
+              <>
+                {registry.description && (
+                  <span className="mb-1 block">{registry.description}</span>
+                )}
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="inline-flex items-center gap-1">
+                    <FolderGit2 className="size-3.5 shrink-0" />
+                    <a
+                      href={registry.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      {registry.url}
+                    </a>
+                  </span>
+                  {(registry.branch || registry.branchName) && (
+                    <>
+                      <span className="text-muted-foreground" aria-hidden>·</span>
+                      <span className="inline-flex items-center gap-1">
+                        <GitBranch className="size-3.5 shrink-0" />
+                        {registry.branch || registry.branchName}
+                      </span>
+                    </>
+                  )}
+                  {(registry.author || registry.license) && (
+                    <>
+                      <span className="text-muted-foreground" aria-hidden>·</span>
+                      {registry.author && <span>{registry.author}</span>}
+                      {registry.author && registry.license && (
+                        <span className="text-muted-foreground" aria-hidden>·</span>
+                      )}
+                      {registry.license && <Badge variant="outline">{registry.license}</Badge>}
+                    </>
+                  )}
+                  {registry.lastSyncedAt && (
+                    <>
+                      <span className="text-muted-foreground" aria-hidden>·</span>
+                      <TimeAgo
+                        date={registry.lastSyncedAt}
+                        prefix={<RefreshCw className="size-3.5 shrink-0" />}
+                      />
+                    </>
+                  )}
                 </span>
-                {(registry.branch || registry.branchName) && (
-                  <>
-                    <span className="text-muted-foreground" aria-hidden>·</span>
-                    <span className="inline-flex items-center gap-1">
-                      <GitBranch className="size-3.5 shrink-0" />
-                      {registry.branch || registry.branchName}
-                    </span>
-                  </>
-                )}
-                {registry.lastSyncedAt && (
-                  <>
-                    <span className="text-muted-foreground" aria-hidden>·</span>
-                    <TimeAgo
-                      date={registry.lastSyncedAt}
-                      prefix={<RefreshCw className="size-3.5 shrink-0" />}
-                    />
-                  </>
-                )}
-              </span>
+              </>
             ) : (
               'Catalogue du registre'
             )}

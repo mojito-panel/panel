@@ -29,6 +29,7 @@ import {
 } from '~/validators/marketplace';
 import type { ListQuery, ListResult } from '~/lists/define';
 import { Button } from '~/components/ui/button';
+import { Badge } from '~/components/ui/badge';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import {
@@ -424,6 +425,18 @@ function RegistryCardView({
         >
           {registry.name}
         </button>
+        {registry.description && (
+          <p className="line-clamp-2 text-xs text-muted-foreground" title={registry.description}>
+            {registry.description}
+          </p>
+        )}
+        {(registry.author || registry.license) && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {registry.author && <span className="truncate">{registry.author}</span>}
+            {registry.author && registry.license && <span aria-hidden>·</span>}
+            {registry.license && <Badge variant="outline">{registry.license}</Badge>}
+          </div>
+        )}
         {registry.lastError && (
           <p className="line-clamp-2 text-xs text-destructive" title={registry.lastError}>
             {registry.lastError}

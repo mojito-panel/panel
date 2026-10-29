@@ -158,11 +158,21 @@ export const Registry = defineEntity({
      */
     sshKeyId: p.string().fieldName('ssh_key_id').nullable(),
     /**
-     * Cover artwork of the repository (base64 data URL) — the repo-root
-     * `cover.png|jpg|jpeg|webp`, read at sync time. Null = the UI renders a
-     * generated gradient seeded by the registry id.
+     * Cover artwork of the repository (base64 data URL) — the registry.json
+     * `cover` path when the manifest declares one, else the repo-root
+     * `cover.png|jpg|jpeg|webp`, read at sync time. Null = the UI renders
+     * a generated gradient seeded by the registry id.
      */
     cover: p.text().nullable(),
+    /**
+     * Manifest metadata (root registry.json), stamped at every sync — the
+     * repository is the source of truth, a field the manifest drops reads
+     * as null again. Description is required by the manifest schema; the
+     * author and license are optional and simply stop displaying.
+     */
+    description: p.text().nullable(),
+    author: p.string().length(256).nullable(),
+    license: p.string().length(128).nullable(),
     createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
     updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
   },

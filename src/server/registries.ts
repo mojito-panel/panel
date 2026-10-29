@@ -4,6 +4,7 @@ import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
 import type { IRecipe, IRegistry, IRegistryEntry, ISshKey } from '~/db/types';
 import { parseRecipeJson } from '~/contract';
 import { nanoid } from '~/lib/nanoid';
+import { parseRegistryManifest } from '~/lib/registry-manifest';
 import {
   canonicalGitUrl,
   formatGitSource,
@@ -116,6 +117,9 @@ export async function addRegistry(input: {
     lastError: null,
     sshKeyId,
     cover: null,
+    description: null,
+    author: null,
+    license: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -199,11 +203,19 @@ async function syncRegistryRow(registry: IRegistry): Promise<void> {
   const em = orm.em;
   try {
     const sshKey = await sshKeyOf(registry);
-    const { files, headSha, branch, cover } = await cloneRecipeFiles(
+    const { files, headSha, branch, cover, manifest } = await cloneRecipeFiles(
       registry.url,
       registry.branch,
       sshKey ? decryptSecret(sshKey.privateKey) : null,
     );
+
+    // The root registry.json is the registry MARKER: a repository without
+    // one (or with an invalid one) is not a registry — the sync fails, the
+    // previous catalog stays and lastError names the fix.
+    if (manifest == null) {
+      throw new Error('not a Mojito registry: registry.json is missing at the repository root');
+    }
+    const parsedManifest = parseRegistryManifest(manifest);
 
     const drafts = buildRegistryEntries(files);
 
@@ -215,6 +227,11 @@ async function syncRegistryRow(registry: IRegistry): Promise<void> {
     await em.transactional(async (tem) => {
       await tem.nativeUpdate(Registry, { id: registry.id }, {
         cover,
+        // Manifest metadata — stamped at every sync, the repo is the source
+        // of truth (a field the manifest drops reads as null again).
+        description: parsedManifest.description,
+        author: parsedManifest.author ?? null,
+        license: parsedManifest.license ?? null,
         headSha,
         branchName: branch,
         lastSyncedAt: now,
