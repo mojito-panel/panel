@@ -39,27 +39,36 @@ export function isLiveData(query: { dataUpdatedAt: number }): boolean {
   return Date.now() - query.dataUpdatedAt < LIVE_MAX_AGE_MS;
 }
 
-/** Tones of the status palette (chip tint + dot tint). */
+/**
+ * Tones of the status palette (chip tint + dot tint). `glow` is the dot's
+ * own color fed to the breathing animation — a box-shadow cannot inherit a
+ * background color, and `currentColor` would pick up the surrounding text.
+ */
 const TONES = {
   positive: {
     chip: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     dot: 'bg-emerald-500',
+    glow: '[--led-glow:var(--color-emerald-500)]',
   },
   progress: {
     chip: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
     dot: 'bg-amber-500',
+    glow: '[--led-glow:var(--color-amber-500)]',
   },
   active: {
     chip: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
     dot: 'bg-sky-500',
+    glow: '[--led-glow:var(--color-sky-500)]',
   },
   negative: {
     chip: 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300',
     dot: 'bg-red-500',
+    glow: '[--led-glow:var(--color-red-500)]',
   },
   neutral: {
     chip: 'border-border bg-muted/60 text-muted-foreground',
     dot: 'bg-muted-foreground/70',
+    glow: '[--led-glow:var(--color-muted-foreground)]',
   },
 } as const;
 
@@ -134,7 +143,7 @@ export function StatusBall({
   live?: boolean;
   className?: string;
 }) {
-  const dot = TONES[statusTone(status)].dot;
+  const t = TONES[statusTone(status)];
   return (
     <span className={cn('relative inline-flex size-2 shrink-0', className)}>
       {live && (
@@ -144,11 +153,11 @@ export function StatusBall({
               padding box, not laid out inside it, so it would not scale
               about the dot's center. An explicit 100% size keeps the
               transform origin on the wrapper's center. */}
-          <span className={cn('absolute size-full animate-live-ring rounded-full', dot)} />
+          <span className={cn('absolute size-full animate-live-ring rounded-full', t.dot)} />
           <span
             className={cn(
               'absolute size-full animate-live-ring rounded-full [animation-delay:0.66s]',
-              dot,
+              t.dot,
             )}
           />
         </>
@@ -156,8 +165,9 @@ export function StatusBall({
       <span
         className={cn(
           'relative inline-flex size-2 rounded-full',
-          dot,
-          IN_PROGRESS.has(status as BadgeStatus) && 'animate-led',
+          t.dot,
+          // The breathing glow takes the dot's own color (see --animate-led).
+          IN_PROGRESS.has(status as BadgeStatus) && cn('animate-led', t.glow),
         )}
       />
     </span>
@@ -193,7 +203,7 @@ function StatusChip({
           className={cn(
             'inline-flex size-2 shrink-0 rounded-full',
             t.dot,
-            breathing && 'animate-led',
+            breathing && cn('animate-led', t.glow),
           )}
         />
       )}

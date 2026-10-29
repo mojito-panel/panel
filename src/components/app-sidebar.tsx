@@ -209,8 +209,8 @@ export function AppSidebar({ variant = 'dashboard' }: AppSidebarProps) {
                     <Skeleton className="h-3 w-16" />
                   ) : (
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <StatusBall status={server?.status ?? 'unknown'} live={snapshot.statusLive} />
-                      {statusLabel(server?.status ?? 'unknown')}
+                      <StatusBall status={snapshot.status} live={snapshot.statusLive} />
+                      {statusLabel(snapshot.status)}
                     </span>
                   )}
                 </div>

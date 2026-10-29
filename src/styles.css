@@ -154,7 +154,10 @@
 
 /* ─── Status indicator animations (components/status-badge.tsx) ────────────── */
 @theme {
-  /* Breathing glow of an in-progress LED indicator. */
+  /* Breathing glow of an in-progress LED indicator. The glow is the DOT's
+     own color, passed as a custom property by the component (`--led-glow`):
+     `currentColor` would resolve to the inherited text color (the muted
+     sidebar label), not the dot's background. */
   --animate-led: led 1.6s ease-in-out infinite;
   /* Concentric sonar rings around a live status dot (live data < 20 s). */
   --animate-live-ring: live-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
@@ -162,10 +165,10 @@
   @keyframes led {
     0%,
     100% {
-      box-shadow: 0 0 2px 0 currentColor;
+      box-shadow: 0 0 2px 0 var(--led-glow, currentColor);
     }
     50% {
-      box-shadow: 0 0 7px 1.5px currentColor;
+      box-shadow: 0 0 7px 1.5px var(--led-glow, currentColor);
     }
   }
 

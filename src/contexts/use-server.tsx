@@ -1,6 +1,6 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { isLiveData } from '~/components/status-badge';
+import { LIVE_MAX_AGE_MS, isLiveData } from '~/components/status-badge';
 import { getServerFn, getServerRuntimeFn } from '~/server/functions/servers';
 
 /**
@@ -16,6 +16,13 @@ export interface ServerSnapshot {
   server?: Awaited<ReturnType<typeof getServerFn>>;
   /** Live agent answer (getServerRuntimeFn) — polled every 5 s. */
   runtime?: Awaited<ReturnType<typeof getServerRuntimeFn>>;
+  /**
+   * Status to DISPLAY: the live agent answer when it has one, the DB row
+   * otherwise (agent unreachable, or before the first poll). The DB status is
+   * only a writeback of the last successful poll — reading it alone leaves
+   * the UI stale between polls.
+   */
+  status: string;
   /** The live runtime answer is fresh (< 20 s) — sonar rings in the UI. */
   statusLive: boolean;
   /** The live agent query is in flight. */
@@ -42,6 +49,14 @@ export function ServerProvider({ serverId, children }: { serverId: string; child
     refetchInterval: 5000,
   });
 
+  // Freshness is time-based, not data-based: re-render on the live threshold
+  // so the sonar rings fade out even when polling stalls (hidden tab, error).
+  const [, forceTick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    const timer = setInterval(forceTick, LIVE_MAX_AGE_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   const server = detail.data;
   // The recipe row changed after the server's snapshot was synced — the
   // Variables tab pings (same signal as the settings page reload button).
@@ -56,7 +71,8 @@ export function ServerProvider({ serverId, children }: { serverId: string; child
         serverId,
         server,
         runtime: runtime.data,
-        statusLive: runtime.data?.status !== undefined && isLiveData(runtime),
+        status: runtime.data?.status ?? server?.status ?? 'unknown',
+        statusLive: runtime.data?.status != null && isLiveData(runtime),
         statusFetching: runtime.isPending,
         recipeUpdatePending,
         isPending: detail.isPending,
