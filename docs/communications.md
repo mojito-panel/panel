@@ -10,7 +10,7 @@
 |---|---|
 | **Web client** (browser) | React 19 + TanStack Router/Query. NEVER talks to game servers directly: it calls TanStack Start *server functions* (SSR-aware), or the agent directly for the console (short-lived JWT). |
 | **Panel** (this repo) | TanStack Start (Node SSR). Sole owner of the DB (Postgres/MikroORM) and of sessions (better-auth). Talks to the agent over HTTP `Bearer <node token>` (token encrypted AES-256-GCM at rest). |
-| **Agent** (external, one per machine) | Fastify, 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB. |
+| **Agent** (**shard**, external, one per machine) | Go daemon (`net/http`), 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB. |
 
 ```mermaid
 graph LR
@@ -25,7 +25,7 @@ graph LR
         JWT[Console JWT signing<br/>HS256 = node token]
     end
     subgraph "Game machine (node)"
-        AG[Fastify agent]
+        AG[shard agent (Go)]
         RUN[Installation runner]
         PROC[Game server process]
         REG[(Installation registry)]
@@ -67,7 +67,7 @@ sequenceDiagram
 ```
 
 - Login/register/signOut → `queryClient.invalidateQueries({ queryKey: ['auth'] })`.
-- Access guards: `_app` (logged in), `admin/route.tsx` (admin role), `servers/$serverId/route.tsx` (logged in) — server ownership is verified on the **server function** side (`loadOwnedServer`), not in the router.
+- Access guards: `_app` (logged in), `admin/route.tsx` (admin-area permission), `servers/$serverId/route.tsx` (logged in) — server ownership is verified on the **server function** side (`loadServerWithPermission`), not in the router.
 
 ---
 
@@ -146,9 +146,11 @@ sequenceDiagram
     A-->>N: { type: "status", status } (running/stopped/crashed)
     A-->>N: { type: "install-status", ... } (current install state, once)
 
-    Note over N,A: Commands and power actions in real time
+    Note over N,A: Console commands in real time
     N->>A: { type: "command", command: "stop" } (process stdin)
-    N->>A: { type: "power", action: "restart" }
+
+    Note over N,A: Power actions go through the PANEL path (§4) — the
+    browser↔agent WS only carries "auth" and "command" messages
 
     Note over N,A: Installation = same socket, same stream
     A-->>N: { type: "install-status", status, step, percent, error } (banner)
@@ -171,7 +173,7 @@ sequenceDiagram
 
 ## 4. Power actions & commands (panel path)
 
-When direct WS is not active, actions go through server functions (same owner validation on the panel side, same Bearer on the agent side):
+Power actions always go through the panel server functions (the browser↔agent WS carries only `auth` and `command`); same owner validation on the panel side, same Bearer on the agent side:
 
 ```mermaid
 sequenceDiagram
@@ -203,7 +205,7 @@ sequenceDiagram
     participant A as Agent
     participant R as Runner + Registry
 
-    N->>N: confirm() (« fichiers peuvent être supprimés… »)
+    N->>N: ConfirmDialog (« fichiers peuvent être supprimés… »)
     N->>P: POST reinstallServerFn(serverId)
     P->>D: SELECT server, recipe (up-to-date JSON), variables
     P->>A: POST /servers/:serverId/reinstall { recipe, variables }
@@ -294,7 +296,7 @@ The SFTP subsystem is the ONE flow where the agent calls the panel (wings
 model): shard hosts the SFTP server (`crypto/ssh` + `pkg/sftp`, default
 port 2022, opt-in via `sftp.enabled` in shard.yml — the panel generates the
 section), but never stores a credential itself. The SFTP username is
-`{email}.{serverId}` and the password is the user's PANEL account password
+`{username}.{serverId}` and the password is the user's PANEL account password
 (Pelican reuses the account password the same way).
 
 ```mermaid
@@ -302,7 +304,7 @@ sequenceDiagram
     participant C as SFTP client (FileZilla…)
     participant A as shard :2022
     participant P as Panel
-    C->>A: SSH handshake, user `{email}.{serverId}` + panel password
+    C->>A: SSH handshake, user `{username}.{serverId}` + panel password
     A->>A: username format gate (regex, anti bot flood)
     A->>P: POST /api/sftp/auth (Bearer = agent token)
     P->>P: node by token (constant-time compare of the decrypted tokens)
@@ -333,7 +335,8 @@ sequenceDiagram
 
 | Route | Usage |
 |---|---|
-| `GET /health` | Public — healthcheck (version, uptime) || `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
+| `GET /health` | Public — healthcheck (version, uptime) |
+| `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
 | `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
 | `GET /servers/:serverId/install` | Installation status (end-of-install DB sync) |
 | `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
@@ -343,23 +346,43 @@ sequenceDiagram
 | `POST /servers/:serverId/action` | start / stop / restart / kill |
 | `POST /servers/:serverId/command` | stdin command |
 | `DELETE /servers/:serverId` | Deletion (refused if an install or a process is active) |
-| `GET /servers/:serverId/ws` | Browser console — console JWT (see §3) |
+| `GET /servers/:serverId/logs` | Incremental runtime logs (legacy cursor — the console is WS-only, the panel does not use it) |
+| `GET /servers/:serverId/files` | File browser listing (paths relative to the installDir — see §8's sandbox) |
+| `GET /servers/:serverId/files/content` | Read a file (UTF-8 text — binary refused) |
+| `POST /servers/:serverId/files/content` | Write a file |
+| `POST /servers/:serverId/files/create` | Create a file/directory |
+| `POST /servers/:serverId/files/rename` | Rename an entry |
+| `POST /servers/:serverId/files/delete` | Delete entries (bulk) |
+| `POST /servers/:serverId/files/upload` | Upload (base64) |
+| `GET /servers/:serverId/files/download` | File download — panel token OR file-download JWT (browser link) |
+| `POST /servers/:serverId/backups` | Create a backup (async archive, 202) |
+| `GET /servers/:serverId/backups/:backupId` | Backup operation status (polled by the list) |
+| `GET /servers/:serverId/backups/:backupId/download` | Archive download — panel token OR backup-download JWT (browser link) |
+| `DELETE /servers/:serverId/backups/:backupId` | Delete an archive |
+| `POST /servers/:serverId/backups/:backupId/restore` | Restore (merge or truncate) |
+| `GET /servers/:serverId/ws` | Browser console WS — console JWT sent as the first `auth` message (see §3) |
+| `GET /stats` | Node system snapshot (panel token) |
+| `GET /health/ws` | Browser node-health WS — health JWT sent as the first `auth` message |
 
 ### Agent → Panel (node Bearer token — `PANEL_ROUTES`)
 
 | Route | Usage |
 |---|---|
-| `POST /api/sftp/auth` | SFTP credential validation (see §8) — the only agent → panel call |
+| `POST /api/sftp/auth` | SFTP credential validation (see §8) |
+| `GET /api/agent/servers` | Agent boot GC — the ids of the servers the panel still knows on the calling node |
 
-### Browser ↔ Agent (WS console, JWT)
+### Browser ↔ Agent (WS, JWT — console and health sockets)
+
+The browser→agent messages are only `auth` (the JWT handshake, re-sent to refresh) and `command` (console stdin) — power actions go through the panel path (§4).
 
 | Message (→ agent) | Message (← agent) |
 |---|---|
 | `{ type: "auth", token }` | `{ type: "auth-ok" }` |
 | `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime AND install output — one chronological stream) |
-| `{ type: "power", action }` | `{ type: "status", status }` |
+| | `{ type: "status", status }` |
 | | `{ type: "install-status", status, step, totalSteps, percent, message, error }` |
 | | `{ type: "event", code, params, at }` — coded lines: power/watchdog AND install (start, steps, done/failed); `at` = original emission time (replay) |
+| | `{ type: "stats", stats }` — console socket: CPU/RAM frame, ring replay on connect then one per sampling tick |
 | | `{ type: "error", code }` |
 
 ### Server functions exposed to the browser (`src/server/functions/`)

@@ -352,9 +352,13 @@ function AdminNodesPage() {
         <ConfirmDialog
           open
           onOpenChange={(open) => !open && setNodeToDelete(null)}
-          onConfirm={() => {
-            remove.mutate(nodeToDelete);
-            setNodeToDelete(null);
+          onConfirm={async () => {
+            try {
+              await remove.mutateAsync(nodeToDelete);
+              setNodeToDelete(null);
+            } catch {
+              // Toasted by the mutation — keep the dialog open.
+            }
           }}
           title={`Supprimer le node « ${nodeToDelete.name} » ?`}
           confirmLabel="Supprimer"

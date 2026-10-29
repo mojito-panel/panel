@@ -4,6 +4,8 @@ import type {
   InstallStatus,
   NodeStats,
   ServerAction,
+  ServerInfo,
+  ServerStatus,
   FileObject,
   BackupOperationStatus,
 } from '~/contract';
@@ -12,6 +14,7 @@ import {
   healthResponseSchema,
   installStatusSchema,
   nodeStatsSchema,
+  serverInfoSchema,
 } from '~/contract';
 import { z } from 'zod';
 import { decryptSecret } from '../crypto';
@@ -35,8 +38,9 @@ interface AgentCallOptions<T = unknown> {
   /**
    * Contract schema the response must satisfy — defense against a buggy
    * or hostile agent feeding unvalidated data into panel DB rows.
-   * Optional: endpoints whose Zod schema is known-stale relative to the
-   * agent (server info) stay unvalidated for now.
+   * Every endpoint whose response shape the contract documents SHOULD
+   * carry one; unvalidated responses are only acceptable while the
+   * contract has no schema for them yet.
    */
   schema?: z.ZodType<T>;
 }
@@ -90,18 +94,11 @@ export interface AgentInstallResponse {
   message: string;
 }
 
-export interface AgentServerInfo {
-  serverId: string;
-  name: string;
-  status: 'installing' | 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed';
-  runtimeState?: string;
-  logs?: string[];
-}
-
 export interface AgentActionResponse {
   serverId: string;
   action: ServerAction;
-  status: string;
+  /** Panel status the agent transitioned to (contract union — no install_failed). */
+  status: ServerStatus;
 }
 
 // ─── Calls ───────────────────────────────────────────────────────────────────
@@ -144,8 +141,16 @@ export async function agentInstallServer(
   return agentCall(node, '/servers/install', { method: 'POST', body });
 }
 
-export async function agentGetServer(node: INode, serverId: string): Promise<AgentServerInfo> {
-  return agentCall(node, `/servers/${serverId}`);
+/**
+ * Server info — validated against the contract (the agent's answer feeds
+ * panel DB rows; an unvalidated response is untrusted input).
+ */
+export async function agentGetServer(
+  node: INode,
+  serverId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<ServerInfo> {
+  return agentCall(node, `/servers/${serverId}`, { ...options, schema: serverInfoSchema });
 }
 
 /** Live (re)install status + step logs (poll while status === 'installing'). */
@@ -232,10 +237,12 @@ export async function agentServerAction(
   node: INode,
   serverId: string,
   action: ServerAction,
+  options: { signal?: AbortSignal } = {},
 ): Promise<AgentActionResponse> {
   return agentCall(node, `/servers/${serverId}/action`, {
     method: 'POST',
     body: { action },
+    ...options,
   });
 }
 
@@ -243,10 +250,12 @@ export async function agentSendCommand(
   node: INode,
   serverId: string,
   command: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<{ serverId: string; sent: boolean }> {
   return agentCall(node, `/servers/${serverId}/command`, {
     method: 'POST',
     body: { command },
+    ...options,
   });
 }
 

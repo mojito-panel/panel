@@ -61,7 +61,14 @@ export function CreateEntryForm({
             onValueChange={(v) => field.handleChange(v as 'file' | 'directory')}
           >
             <SelectTrigger id="new-entry-type" className="w-full" onBlur={field.handleBlur}>
-              <SelectValue />
+              {/* base-ui only resolves an item's LABEL once its popup opened —
+                  a closed trigger would show the raw 'file'/'directory' wire
+                  value, so the label is resolved here. */}
+              <SelectValue>
+                {(current: string | null) =>
+                  current === 'file' ? 'Fichier' : current === 'directory' ? 'Dossier' : 'Type'
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="file">Fichier</SelectItem>

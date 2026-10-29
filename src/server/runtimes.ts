@@ -8,8 +8,8 @@
  * SERVICE module (`src/server/runtimes.ts`): pure business logic consumed
  * by the services and the thin server functions of `src/server/functions/`.
  */
-import type { EntityManager } from '@mikro-orm/core';
 import { Recipe } from '~/db/entities';
+import { orm } from './orm';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 
 export class RuntimeResolutionError extends Error {}
@@ -21,9 +21,9 @@ export class RuntimeResolutionError extends Error {}
  * validates the closure — the panel stays dumb about ordering).
  */
 export async function resolveRuntimeRecipes(
-  em: EntityManager,
   recipeJson: Record<string, unknown> | null | undefined,
 ): Promise<unknown[]> {
+  const em = orm.em;
   const resolved: unknown[] = [];
   const seen = new Set<string>();
   // COPY, never alias: for a v4 recipe `recipeJson` IS the live entity's

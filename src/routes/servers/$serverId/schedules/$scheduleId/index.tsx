@@ -219,9 +219,13 @@ function ServerScheduleDetailPage() {
         cancelLabel="Annuler"
         destructive
         pending={remove.isPending}
-        onConfirm={() => {
-          remove.mutate();
-          setDeleteOpen(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync();
+            setDeleteOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
       />
 

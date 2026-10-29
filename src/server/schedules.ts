@@ -41,8 +41,19 @@ const SCHEDULE_TASK_QUEUE = 'schedule-task';
 /** How often due schedules are scanned (Pelican: every minute; a tighter window catches up faster). */
 const TICK_INTERVAL_MS = 30_000;
 
-/** Longest a legitimate chain can run: 10 tasks × 900 s of offsets + executions. */
+/**
+ * Longest a legitimate chain can run: 10 tasks × (900 s of offset + the
+ * 30 s bound on each agent call) = 9300 s ≈ 2.6 h — the 3 h bound stays
+ * above it, so the sweeper only releases DEAD claims.
+ */
 const STUCK_CHAIN_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Bound on every agent call the runner makes (online gate, power actions,
+ * console commands) — a hung agent connection must never stall a task job
+ * past its `expireInSeconds` window without a clean failure.
+ */
+const AGENT_CALL_TIMEOUT_MS = 30_000;
 
 /**
  * Task job options — Pelican semantics: no retries (a failed task ends or
@@ -200,7 +211,9 @@ async function completeRun(scheduleId: string): Promise<void> {
 async function isServerOnline(node: INode | null, server: IServer): Promise<boolean> {
   if (!node) return false;
   try {
-    const info = await agentGetServer(node, server.id);
+    const info = await agentGetServer(node, server.id, {
+      signal: AbortSignal.timeout(AGENT_CALL_TIMEOUT_MS),
+    });
     return info.status === 'running' || info.status === 'starting';
   } catch {
     // Agent unreachable — Pelican skips the run too (a schedule must never
@@ -274,6 +287,14 @@ export async function runScheduleNow(schedule: ISchedule, server: IServer): Prom
     const node = await orm.em.findOne(Node, { id: server.nodeId });
     if (!(await isServerOnline(node, server))) {
       await completeRun(schedule.id);
+      // The occurrence is consumed — log the skip BEFORE the 409 so the
+      // activity trail explains the missing run.
+      await logActivity({
+        event: 'schedule:run',
+        description: `Planification « ${schedule.name} » ignorée : « ${server.name} » est hors ligne`,
+        server: { id: server.id, name: server.name },
+        properties: { scheduleId: schedule.id, status: 'skipped' },
+      });
       throw new HttpError(409, `« ${server.name} » est hors ligne`);
     }
   }
@@ -363,11 +384,26 @@ async function runScheduleTask(data: ScheduleTaskJobData): Promise<void> {
   const server = await em.findOne(Server, { id: schedule.serverId });
   if (!server) return;
 
-  // Deactivated or suspended between two tasks: end the chain cleanly
-  // (Pelican's RunTaskJob does the same on both conditions).
-  if (!schedule.isActive || server.suspended) {
+  // Deactivated, suspended or reinstalling between two tasks: end the
+  // chain cleanly (Pelican's RunTaskJob does the same on the first two
+  // conditions). A (re)install wipes the install dir — firing a power
+  // action or a console command into it must never happen.
+  const reinstalling =
+    server.status === 'installing' || server.status === 'install_failed';
+  if (!schedule.isActive || server.suspended || reinstalling) {
     await completeRun(schedule.id);
-    await logScheduleRun(schedule, server, 'failed', { reason: !schedule.isActive ? 'deactivated' : 'suspended' });
+    await logScheduleRun(
+      schedule,
+      server,
+      'failed',
+      {
+        reason: !schedule.isActive
+          ? 'deactivated'
+          : server.suspended
+            ? 'suspended'
+            : 'reinstalling',
+      },
+    );
     return;
   }
 
@@ -387,10 +423,14 @@ async function runScheduleTask(data: ScheduleTaskJobData): Promise<void> {
     if (task.action === 'power') {
       // The shared power service: suspended guard, limits sync, agent
       // call, status writeback + its own 'server:power' activity log.
-      await executeServerAction(server, task.payload as ServerAction);
+      await executeServerAction(server, task.payload as ServerAction, {
+        signal: AbortSignal.timeout(AGENT_CALL_TIMEOUT_MS),
+      });
     } else {
       const node = await requireNodeOf(server);
-      await agentSendCommand(node, server.id, task.payload);
+      await agentSendCommand(node, server.id, task.payload, {
+        signal: AbortSignal.timeout(AGENT_CALL_TIMEOUT_MS),
+      });
     }
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
@@ -472,6 +512,16 @@ export function startScheduleRunner(): void {
     // still queued in pg-boss resume on their own (the handler does not
     // read the claim flag), and `next_run_at` was already advanced at
     // claim time, so no occurrence can double-fire.
+    //
+    // SINGLE-INSTANCE assumption: this sweep (and the claim/`is_processing`
+    // semantics in general) presumes ONE panel process owns the runner —
+    // two live instances would each release the other's claims and
+    // double-fire chains. Dev reloads are covered by the global guard
+    // above; production is a single process (see src/server.ts). The
+    // warning below makes a mistaken multi-instance deployment visible.
+    console.warn(
+      '[schedules] single-instance assumption: the runner must be the only panel process',
+    );
     await runWithOrmContext(() =>
       orm.em.nativeUpdate(Schedule, { isProcessing: true }, { isProcessing: false }),
     );

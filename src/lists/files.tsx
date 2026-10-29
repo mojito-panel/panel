@@ -80,6 +80,12 @@ export const filesList = defineList<FileObject, FilesContext>({
       header: 'Nom',
       sort: true,
       sortFn: 'text',
+      // NOTE: the filter target is INERT in client mode — TanStack filters
+      // on the column id (row value), never on the target. The declaration
+      // type still requires one because the same `ListFilter` shape feeds
+      // the server-side mapping (`server/list/query.ts`); making it
+      // mode-optional would ripple into the server query builder. The
+      // path mirrors the row key, kept for declaration symmetry.
       filter: { control: 'text', target: field('name') },
       cell: (entry, context) => (
         <button

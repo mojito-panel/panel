@@ -17,6 +17,7 @@ import { listSshKeysFn } from '~/server/functions/ssh-keys';
 import { DataPicker } from '~/components/data-table/data-picker';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { CoverImage } from '~/components/cover-image';
+import { ErrorState } from '~/components/error/error-state';
 import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
 import { useAuth } from '~/contexts/use-auth';
 import { hasPermissions } from '~/lib/permissions';
@@ -59,17 +60,20 @@ export const Route = createFileRoute('/admin/marketplace/')({
  * registry grid.
  */
 
-/** The SSH key field of the add + edit forms (id in the form, name to show). */
+/** DataPicker selection of the SSH key field (id in the form, name for the trigger). */
 type KeySelection = { id: string; name: string } | null;
 
 function MarketplacePage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate({ from: Route.fullPath });
-  // Key NAMES travel in the card rows — the private keys never do. The key
-  // PICKER (a DataPicker) needs the panel.keys read permission; without it
-  // the field degrades to a plain-text note.
   const { user } = useAuth();
-  const canManageKeys = hasPermissions(user?.permissions ?? [], { 'panel.keys': ['read'] });
+  const permissions = user?.permissions ?? [];
+
+  // Panel-level grants — the server functions enforce the same ones
+  // (add / sync / update / delete)
+  const canCreate = hasPermissions(permissions, { 'panel.recipes': ['create'] });
+  const canUpdate = hasPermissions(permissions, { 'panel.recipes': ['update'] });
+  const canDelete = hasPermissions(permissions, { 'panel.recipes': ['delete'] });
 
   const listRegistries = useServerFn(listRegistriesFn);
   const addRegistry = useServerFn(addRegistryFn);
@@ -98,7 +102,6 @@ function MarketplacePage() {
     onSuccess: () => {
       toast.success('Registre ajouté — première synchronisation en cours');
       form.reset();
-      setAddKeySelection(null);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -153,8 +156,6 @@ function MarketplacePage() {
 
   const [registryToDelete, setRegistryToDelete] = useState<RegistryCardRow | null>(null);
   const [registryToEdit, setRegistryToEdit] = useState<RegistryCardRow | null>(null);
-  /** Key selection of the ADD form (id in the form, name for the trigger). */
-  const [addKeySelection, setAddKeySelection] = useState<KeySelection>(null);
 
   // Pelican-style layout: the add form only shows behind the header button
   const [showAdd, setShowAdd] = useState(false);
@@ -177,10 +178,12 @@ function MarketplacePage() {
             clic, mises à jour détectées par hachage du contenu.
           </CardDescription>
           <CardAction>
-            <Button variant="outline" onClick={() => setShowAdd((v) => !v)}>
-              <Plus />
-              {showAdd ? 'Fermer' : 'Ajouter un registre'}
-            </Button>
+            {canCreate && (
+              <Button variant="outline" onClick={() => setShowAdd((v) => !v)}>
+                <Plus />
+                {showAdd ? 'Fermer' : 'Ajouter un registre'}
+              </Button>
+            )}
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -282,12 +285,12 @@ function MarketplacePage() {
                 </form.Field>
 
                 <form.Field name="sshKeyId">
-                  {() => (
+                  {(field) => (
                     <SshKeyPicker
                       label="Clé SSH (dépôt privé)"
                       listKeys={listKeys}
-                      value={addKeySelection}
-                      onChange={setAddKeySelection}
+                      value={field.state.value}
+                      onChange={(sshKeyId) => field.handleChange(sshKeyId)}
                     />
                   )}
                 </form.Field>
@@ -311,6 +314,9 @@ function MarketplacePage() {
                 <div key={index} className="aspect-[2/3] animate-pulse rounded-lg bg-muted" />
               ))}
             </div>
+          ) : query.isError ? (
+            // A failed load is NEVER an empty list — offer the retry.
+            <ErrorState message={query.error.message} onRetry={() => query.refetch()} bare />
           ) : registries.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Aucun registre — ajoute un dépôt git de recettes (https public ou ssh).
@@ -321,6 +327,8 @@ function MarketplacePage() {
                 <RegistryCardView
                   key={registry.id}
                   registry={registry}
+                  canUpdate={canUpdate}
+                  canDelete={canDelete}
                   onOpen={() =>
                     navigate({
                       to: '/admin/marketplace/$registryId',
@@ -340,7 +348,6 @@ function MarketplacePage() {
       <EditRegistryDialog
         key={registryToEdit?.id ?? 'none'}
         registry={registryToEdit}
-        canManageKeys={canManageKeys}
         listKeys={listKeys}
         update={update}
         onOpenChange={(open) => {
@@ -353,9 +360,14 @@ function MarketplacePage() {
         onOpenChange={(open) => {
           if (!open) setRegistryToDelete(null);
         }}
-        onConfirm={() => {
-          if (registryToDelete) remove.mutate(registryToDelete.id);
-          setRegistryToDelete(null);
+        onConfirm={async () => {
+          if (!registryToDelete) return;
+          try {
+            await remove.mutateAsync(registryToDelete.id);
+            setRegistryToDelete(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer le registre « ${registryToDelete?.name} » ?`}
         description="Les recettes déjà importées restent installées et vérifiables — seule la vue catalogue disparaît."
@@ -371,12 +383,16 @@ function MarketplacePage() {
 /** One registry card of the grid — cover (or gradient), counts, actions. */
 function RegistryCardView({
   registry,
+  canUpdate,
+  canDelete,
   onOpen,
   onSync,
   onEdit,
   onDelete,
 }: {
   registry: RegistryCardRow;
+  canUpdate: boolean;
+  canDelete: boolean;
   onOpen: () => void;
   onSync: () => void;
   onEdit: () => void;
@@ -435,25 +451,31 @@ function RegistryCardView({
         </div>
 
         <div className="flex items-center justify-end gap-1 pt-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Synchroniser maintenant"
-            onClick={onSync}
-          >
-            <RefreshCw />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title="Modifier le nom, la branche ou la clé SSH"
-            onClick={onEdit}
-          >
-            <Pencil />
-          </Button>
-          <Button variant="ghost" size="icon-sm" title="Supprimer" onClick={onDelete}>
-            <Trash2 />
-          </Button>
+          {canUpdate && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Synchroniser maintenant"
+                onClick={onSync}
+              >
+                <RefreshCw />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Modifier le nom, la branche ou la clé SSH"
+                onClick={onEdit}
+              >
+                <Pencil />
+              </Button>
+            </>
+          )}
+          {canDelete && (
+            <Button variant="ghost" size="icon-sm" title="Supprimer" onClick={onDelete}>
+              <Trash2 />
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -462,29 +484,48 @@ function RegistryCardView({
 
 /**
  * The SSH key field of a registry form — a DataPicker over the keys list
- * (the same server-paginated query as the /admin/keys page). Without the
- * panel.keys read permission the field degrades to a plain-text note.
+ * (the same server-paginated query as the /admin/keys page). The FORM
+ * carries the key id; the closed trigger's label is resolved from a
+ * {id → name} map of that same keys list (the id alone is not a label).
+ * Without the panel.keys read permission the field degrades to a
+ * plain-text note.
  */
 function SshKeyPicker({
   label,
   listKeys,
   value,
+  knownName,
   onChange,
 }: {
   label: string;
   listKeys: (args: { data: ListQuery }) => Promise<ListResult<AdminSshKeyRow>>;
-  value: KeySelection;
-  onChange: (selection: KeySelection) => void;
+  /** The form's `sshKeyId` — '' = no key (public repository). */
+  value: string;
+  /** Name carried by the caller's row (the edit dialog's DTO) — label fallback. */
+  knownName?: string | null;
+  onChange: (sshKeyId: string) => void;
 }) {
   const { user } = useAuth();
   const canManageKeys = hasPermissions(user?.permissions ?? [], { 'panel.keys': ['read'] });
+
+  // Name lookup for the closed trigger — one page of the same keys list
+  // the picker paginates (the panel holds a handful of keys, 100 max).
+  const namesQuery = useQuery({
+    queryKey: ['admin-ssh-keys', 'names'],
+    queryFn: () => listKeys({ data: { ...adminSshKeysList.defaultSearch, size: 100 } }),
+    enabled: canManageKeys,
+  });
+  const nameById = new Map((namesQuery.data?.rows ?? []).map((row) => [row.id, row.name]));
+  const selection: KeySelection = value
+    ? { id: value, name: nameById.get(value) ?? knownName ?? '…' }
+    : null;
 
   if (!canManageKeys) {
     return (
       <div className="space-y-2">
         <Label>Clé SSH (dépôt privé)</Label>
         <p className="py-2 text-sm text-muted-foreground">
-          {value?.name ?? '—'} — permission de lister les clés manquante.
+          {selection?.name ?? '—'} — permission de lister les clés manquante.
         </p>
       </div>
     );
@@ -497,9 +538,9 @@ function SshKeyPicker({
         list={adminSshKeysList}
         fetchPage={(query) => listKeys({ data: query })}
         toSelection={(row) => ({ id: row.id, name: row.name })}
-        renderValue={(selection) => selection.name}
-        value={value}
-        onChange={onChange}
+        renderValue={(picked) => picked.name}
+        value={selection}
+        onChange={(picked) => onChange(picked?.id ?? '')}
         title="Choisir une clé SSH"
         placeholder="Aucune — dépôt public"
       />
@@ -527,13 +568,11 @@ function SshKeyPicker({
  */
 function EditRegistryDialog({
   registry,
-  canManageKeys,
   listKeys,
   update,
   onOpenChange,
 }: {
   registry: RegistryCardRow | null;
-  canManageKeys: boolean;
   listKeys: (args: { data: ListQuery }) => Promise<ListResult<AdminSshKeyRow>>;
   update: UseMutationResult<{ synced: boolean }, Error, UpdateRegistryDto>;
   onOpenChange: (open: boolean) => void;
@@ -541,7 +580,9 @@ function EditRegistryDialog({
   const form = useForm({
     validators: { onChange: updateRegistrySchema },
     // The dialog is keyed by registry id (remount per registry) — the
-    // defaults seed exactly once per edit session.
+    // defaults seed exactly once per edit session. The key id travels in
+    // the form; its NAME for the trigger comes from the DTO (knownName)
+    // or the keys list lookup.
     defaultValues: {
       registryId: registry?.id ?? '',
       name: registry?.name ?? '',
@@ -550,12 +591,6 @@ function EditRegistryDialog({
     },
     onSubmit: ({ value }) => update.mutate(value),
   });
-
-  // Key selection: id in the form, name for the trigger — seeded from the
-  // card row (the DTO carries the current key's name).
-  const [keySelection, setKeySelection] = useState<KeySelection>(
-    registry?.sshKeyId ? { id: registry.sshKeyId, name: registry.sshKeyName ?? '' } : null,
-  );
 
   return (
     <Dialog open={registry !== null} onOpenChange={onOpenChange}>
@@ -625,15 +660,13 @@ function EditRegistryDialog({
           </form.Field>
 
           <form.Field name="sshKeyId">
-            {() => (
+            {(field) => (
               <SshKeyPicker
                 label="Clé SSH (dépôt privé)"
                 listKeys={listKeys}
-                value={keySelection}
-                onChange={(selection) => {
-                  setKeySelection(selection);
-                  form.setFieldValue('sshKeyId', selection?.id ?? '');
-                }}
+                value={field.state.value}
+                knownName={registry?.sshKeyName ?? null}
+                onChange={(sshKeyId) => field.handleChange(sshKeyId)}
               />
             )}
           </form.Field>

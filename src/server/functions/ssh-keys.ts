@@ -9,6 +9,7 @@ import {
   generateSshKey,
   importSshKey,
 } from '../ssh-keys';
+import { logActivity } from '../activity';
 import { createSshKeySchema, sshKeyIdSchema } from '~/validators/ssh-keys';
 import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
 
@@ -63,17 +64,20 @@ export const createSshKeyFn = createServerFn({ method: 'POST' })
   .validator(createSshKeySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.keys': ['create'] });
+    const user = await requirePanelPermission({ 'panel.keys': ['create'] });
 
+    // In import mode the superRefine above guarantees a non-empty private key
+    // (the type just cannot express it).
     const created =
       data.mode === 'generate'
         ? await generateSshKey({ name: data.name, comment: data.comment || null })
         : await importSshKey({
             name: data.name,
-            privateKey: data.privateKey,
+            privateKey: data.privateKey ?? '',
             publicKey: data.publicKey || null,
           });
 
+    await logActivity({ event: 'sshkey:create', description: `Clé SSH « ${data.name} » créée (${data.mode === 'generate' ? 'générée' : 'importée'})`, actor: { id: user.id, name: user.name, email: user.email }, properties: { keyId: created.id } });
     return created;
   });
 
@@ -81,7 +85,8 @@ export const deleteSshKeyFn = createServerFn({ method: 'POST' })
   .validator(sshKeyIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.keys': ['delete'] });
+    const user = await requirePanelPermission({ 'panel.keys': ['delete'] });
     await deleteSshKey(data.sshKeyId);
+    await logActivity({ event: 'sshkey:delete', description: `Clé SSH ${data.sshKeyId} supprimée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { keyId: data.sshKeyId } });
     return { deleted: true };
   });

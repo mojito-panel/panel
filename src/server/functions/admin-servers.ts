@@ -1,6 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
 import { withOrmContext } from '../middleware';
-import type { EntityManager } from '@mikro-orm/core';
 import { orm } from '../orm';
 import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db/entities';
 import { adminServersList } from '~/lists/servers';
@@ -10,14 +9,22 @@ import {
   requirePanelPermission,
   HttpError,
 } from '../session';
+import { logActivity } from '../activity';
 import {
   agentGetServer,
   agentServerAction,
-  agentInstallServer,
-  agentUpdateResources,
-  AgentError,
 } from '../agent/client';
-import { deleteServer, reinstallServerFromPanel, refreshServerRecipeSnapshot, secondaryPorts } from '../servers';
+import {
+  deleteServer,
+  reinstallServerFromPanel,
+  refreshServerRecipeSnapshot,
+  pushServerResources,
+} from '../servers';
+import {
+  claimServerAllocation,
+  releaseServerAllocation,
+  promoteServerAllocation,
+} from '../nodes';
 import { recipeGraphUpdatedAt } from '../recipe-snapshot';
 import {
   adminServerIdSchema,
@@ -138,7 +145,6 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
         // Reload-recipe gating: latest edit of the WHOLE recipe graph
         // (app + required runtimes) vs the server's snapshot date
         updatedAt: await recipeGraphUpdatedAt(
-          em,
           recipe.json as Record<string, unknown>,
           recipe.updatedAt,
         ),
@@ -172,6 +178,8 @@ export const getAdminServerStatusFn = createServerFn({ method: 'GET' })
     let status = server.status;
     let live = false;
     try {
+      // Validated against the contract — the parsed status is the only
+      // thing trusted into the panel row.
       const info = await agentGetServer(node, server.id);
       status = info.status;
       live = true;
@@ -193,7 +201,7 @@ export const updateAdminServerFn = createServerFn({ method: 'POST' })
   .validator(updateAdminServerSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
 
     // Owner transfer: the target user must exist (Pelican owner select)
@@ -215,10 +223,12 @@ export const updateAdminServerFn = createServerFn({ method: 'POST' })
     // them running under the OLD limits. Best-effort: the DB is the
     // source of truth and the power start/restart flow re-pushes anyway.
     try {
-      await pushServerResources(em, server);
+      await pushServerResources(server);
     } catch {
       // Agent unreachable — tolerated, the next start re-syncs.
     }
+
+    await logActivity({ event: 'server:update', description: `Serveur « ${server.name} » mis à jour (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { ownerId: server.ownerId, memoryMb: server.memoryMb, cpuCores: Number(server.cpuCores), backupLimit: server.backupLimit } });
 
     // NOTE: memory/CPU are enforced by the agent through its stored
     // allocation — the power start/restart flow pushes the current
@@ -233,7 +243,7 @@ export const setAdminServerSuspendedFn = createServerFn({ method: 'POST' })
   .validator(setAdminServerSuspendedSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
     const { em, server } = await loadServer(data.serverId);
 
     if (data.suspended === server.suspended) {
@@ -260,6 +270,8 @@ export const setAdminServerSuspendedFn = createServerFn({ method: 'POST' })
     }
 
     await em.flush();
+    await logActivity({ event: 'server:suspend', description: data.suspended ? `Serveur « ${server.name} » suspendu` : `Serveur « ${server.name} » réactivé`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { suspended: data.suspended } });
+
     return { id: server.id, suspended: server.suspended };
   });
 
@@ -269,7 +281,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
   .validator(adminServerIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
     const { server } = await loadServer(data.serverId);
 
     // The STORED snapshot is re-run — a recipe updated in the panel never
@@ -278,6 +290,7 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
     const result = await reinstallServerFromPanel(server);
     server.status = 'installing';
     await orm.em.flush();
+    await logActivity({ event: 'server:reinstall', description: `Réinstallation de « ${server.name} » lancée (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { admin: true } });
     return { id: server.id, status: 'installing', message: result.message };
   });
 
@@ -294,10 +307,11 @@ export const reloadAdminServerRecipeFn = createServerFn({ method: 'POST' })
   .validator(adminServerIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
     const { server } = await loadServer(data.serverId);
 
     await refreshServerRecipeSnapshot(server);
+    await logActivity({ event: 'server:reload_recipe', description: `Recette de « ${server.name} » rechargée (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { admin: true } });
     return {
       id: server.id,
       status: server.status,
@@ -315,7 +329,7 @@ export const changeAdminServerRecipeFn = createServerFn({ method: 'POST' })
   .validator(adminChangeServerRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
     const { server } = await loadServer(data.serverId);
 
     const result = await reinstallServerFromPanel(server, {
@@ -324,6 +338,7 @@ export const changeAdminServerRecipeFn = createServerFn({ method: 'POST' })
     });
     server.status = 'installing';
     await orm.em.flush();
+    await logActivity({ event: 'server:change_recipe', description: `Recette de « ${server.name} » changée puis réinstallation lancée`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { recipeId: data.recipeId } });
     return { id: server.id, status: 'installing', message: result.message };
   });
 
@@ -333,48 +348,14 @@ export const deleteAdminServerFn = createServerFn({ method: 'POST' })
   .validator(adminDeleteServerSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['delete'] });
+    const user = await requirePanelPermission({ 'panel.servers': ['delete'] });
     const { server } = await loadServer(data.serverId);
     await deleteServer(server, { force: data.force });
+    await logActivity({ event: 'server:delete', description: `Serveur « ${server.name} » supprimé (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { force: data.force ?? false } });
     return { deleted: true };
   });
 
 // ─── Allocations (Pelican AllocationsRelationManager) ────────────────────────
-
-/**
- * Pushes the server's full allocation to the agent's cache — primary
- * port/ip plus the current memory/cpu limits, one complete record. A 404
- * (agent out of sync) is tolerated: the panel DB remains the source of
- * truth. Same semantics as the Network page's sync in servers.ts.
- */
-async function pushServerResources(
-  em: EntityManager,
-  server: { id: string; nodeId: string; memoryMb: number | string; cpuCores: number | string },
-): Promise<void> {
-  const node = await em.findOne(Node, { id: server.nodeId });
-  if (!node) return;
-  const assigned = await em.find(Allocation, { serverId: server.id });
-  const primary = assigned.find((a) => a.primary);
-  if (!primary) return;
-  try {
-    await agentUpdateResources(node, server.id, {
-      port: primary.port,
-      ip: primary.ip,
-      memoryMb: Number(server.memoryMb),
-      cpuCores: Number(server.cpuCores),
-      ports: secondaryPorts(assigned),
-    });
-  } catch (err) {
-    if (err instanceof AgentError && err.statusCode === 404) {
-      // tolerated — agent out of sync, DB remains the source of truth
-    } else {
-      if (err instanceof AgentError) {
-        throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
-      }
-      throw err;
-    }
-  }
-}
 
 /** Serializable allocation DTO of the server detail payload. */
 function allocationDto(allocation: {
@@ -460,28 +441,11 @@ export const addAdminServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(adminServerAllocationActionSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
-    const { em, server } = await loadServer(data.serverId);
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { server } = await loadServer(data.serverId);
 
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
-    if (allocation.serverId !== null) {
-      throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
-    }
-    if (allocation.nodeId !== server.nodeId) {
-      throw new HttpError(422, 'Cette allocation n’appartient pas au node du serveur');
-    }
-
-    // A server without any primary (legacy data) promotes the newcomer and
-    // syncs the agent — otherwise the primary is left untouched
-    const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
-      (a) => a.primary,
-    );
-    allocation.serverId = server.id;
-    allocation.primary = !hadPrimary;
-    await em.flush();
-
-    if (!hadPrimary) await pushServerResources(em, server);
+    const allocation = await claimServerAllocation(server, data.allocationId);
+    await logActivity({ event: 'server:allocation_add', description: `Allocation ${allocation.ip}:${allocation.port} ajoutée à « ${server.name} » (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });
 
@@ -493,21 +457,11 @@ export const removeAdminServerAllocationFn = createServerFn({ method: 'POST' })
   .validator(adminServerAllocationActionSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
-    const { em, server } = await loadServer(data.serverId);
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { server } = await loadServer(data.serverId);
 
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation || allocation.serverId !== server.id) {
-      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
-    }
-    if (allocation.primary) {
-      throw new HttpError(409, 'Définis une autre allocation principale avant de retirer celle-ci');
-    }
-
-    allocation.serverId = null;
-    allocation.primary = false;
-    await em.flush();
-
+    const allocation = await releaseServerAllocation(server, data.allocationId);
+    await logActivity({ event: 'server:allocation_remove', description: `Allocation ${allocation.ip}:${allocation.port} retirée de « ${server.name} » (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });
 
@@ -519,20 +473,10 @@ export const setPrimaryAdminServerAllocationFn = createServerFn({ method: 'POST'
   .validator(adminServerAllocationActionSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['update'] });
-    const { em, server } = await loadServer(data.serverId);
+    const user = await requirePanelPermission({ 'panel.servers': ['update'] });
+    const { server } = await loadServer(data.serverId);
 
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation || allocation.serverId !== server.id) {
-      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
-    }
-
-    const assigned = await em.find(Allocation, { serverId: server.id });
-    for (const entry of assigned) {
-      entry.primary = entry.id === allocation.id;
-    }
-    await em.flush();
-
-    await pushServerResources(em, server);
+    const allocation = await promoteServerAllocation(server, data.allocationId);
+    await logActivity({ event: 'server:allocation_primary', description: `Allocation ${allocation.ip}:${allocation.port} définie principale sur « ${server.name} » (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });

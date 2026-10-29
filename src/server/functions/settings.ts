@@ -1,6 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
 import { withOrmContext } from '../middleware';
-import { orm } from '../orm';
 import {
   SETTING_KEYS,
   formatSettingBool,
@@ -11,6 +10,7 @@ import {
   type SettingKey,
 } from '~/lib/settings';
 import { requirePanelPermission, HttpError } from '../session';
+import { logActivity } from '../activity';
 import {
   resolveSettings,
   getBranding,
@@ -54,7 +54,7 @@ export const getBrandingFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(
   async (): Promise<BrandingSettings> => {
-    return getBranding(orm.em);
+    return getBranding();
   },
 );
 
@@ -70,7 +70,7 @@ export const getSettingsFn = createServerFn({ method: 'GET' })
     forced: ForcedSettings;
   }> => {
     await requirePanelPermission({ 'panel.settings': ['read'] });
-    const { values, forced } = await resolveSettings(orm.em);
+    const { values, forced } = await resolveSettings();
 
     return {
       general: {
@@ -103,7 +103,7 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
   .validator(updateGeneralSettingsSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.settings': ['update'] });
+    const user = await requirePanelPermission({ 'panel.settings': ['update'] });
     const keys: SettingKey[] = [
       SETTING_KEYS.appName,
       SETTING_KEYS.appFavicon,
@@ -113,13 +113,14 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
     ];
     assertNotForced(keys);
 
-    await writeSettings(orm.em, {
+    await writeSettings({
       'app:name': data.appName,
       'app:favicon': data.favicon,
       'app:gravatar': formatSettingBool(data.gravatar),
       'app:registration_enabled': formatSettingBool(data.registrationEnabled),
       'marketplace:sync_interval': String(data.marketplaceSyncInterval),
     });
+    await logActivity({ event: 'settings:update', description: 'Paramètres généraux mis à jour', actor: { id: user.id, name: user.name, email: user.email }, properties: { keys } });
 
     return { updated: true };
   });
@@ -128,7 +129,7 @@ export const updateMailSettingsFn = createServerFn({ method: 'POST' })
   .validator(updateMailSettingsSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.settings': ['update'] });
+    const user = await requirePanelPermission({ 'panel.settings': ['update'] });
     const keys: SettingKey[] = [
       SETTING_KEYS.mailDriver,
       SETTING_KEYS.mailHost,
@@ -142,7 +143,7 @@ export const updateMailSettingsFn = createServerFn({ method: 'POST' })
     if (data.password !== '') keys.push(SETTING_KEYS.mailPassword);
     assertNotForced(keys);
 
-    await writeSettings(orm.em, {
+    await writeSettings({
       'mail:driver': data.driver,
       'mail:smtp:host': data.host,
       'mail:smtp:port': String(data.port),
@@ -154,6 +155,7 @@ export const updateMailSettingsFn = createServerFn({ method: 'POST' })
         ? { 'mail:smtp:password': data.password }
         : {}),
     });
+    await logActivity({ event: 'settings:update', description: 'Paramètres de messagerie mis à jour', actor: { id: user.id, name: user.name, email: user.email }, properties: { keys } });
 
     return { updated: true };
   });

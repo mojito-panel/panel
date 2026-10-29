@@ -303,9 +303,14 @@ function ServerUsersPage() {
       <ConfirmDialog
         open={toRemove !== null}
         onOpenChange={(open) => !open && setToRemove(null)}
-        onConfirm={() => {
-          if (toRemove) remove.mutate({ userId: toRemove.userId });
-          setToRemove(null);
+        onConfirm={async () => {
+          if (!toRemove) return;
+          try {
+            await remove.mutateAsync({ userId: toRemove.userId });
+            setToRemove(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={toRemove ? `Retirer l’accès de « ${toRemove.email} » à ce serveur ?` : ''}
         confirmLabel="Retirer"

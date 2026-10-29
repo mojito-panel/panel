@@ -19,20 +19,33 @@ const nameSchema = z
  *   to be authorized on the forge);
  * - import: an existing private key (textarea) + optional public key —
  *   derived with `ssh-keygen -y` when absent, and CROSS-CHECKED when given.
+ *
+ * The mode-invariant fields (privateKey/publicKey) are OPTIONAL so the
+ * generate mode never has to carry empty strings — the superRefine below
+ * requires the private key only in import mode (no z.default: TanStack
+ * Form's Standard Schema typing rejects it).
  */
 export const createSshKeySchema = z
   .object({
     mode: z.enum(['generate', 'import']),
     name: nameSchema,
-    /** Generate only — key comment (e.g. "deploy@panel"), optional. */
-    comment: z.string().trim().max(128),
+    /**
+     * Generate only — key comment (e.g. "deploy@panel"), optional. Printable
+     * ASCII on ONE line: the comment is interpolated into the public key
+     * line, and a newline would fabricate a second (unverified) key entry.
+     */
+    comment: z
+      .string()
+      .trim()
+      .max(128)
+      .regex(/^[\x20-\x7E]{0,128}$/, 'Le commentaire doit être une seule ligne en ASCII imprimable'),
     /** Import only — the private key in OpenSSH or PEM form. */
-    privateKey: z.string().max(16_384),
+    privateKey: z.string().max(16_384).optional(),
     /** Import only — when absent, derived from the private key. */
-    publicKey: z.string().trim().max(4_096),
+    publicKey: z.string().trim().max(4_096).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.mode === 'import' && value.privateKey.trim().length === 0) {
+    if (value.mode === 'import' && !(value.privateKey ?? '').trim()) {
       ctx.addIssue({ code: 'custom', path: ['privateKey'], message: 'Clé privée requise' });
     }
   });

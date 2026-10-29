@@ -51,6 +51,10 @@ export const statement = {
   'panel.roles': ['read', 'create', 'update', 'delete'],
   'panel.servers': ['read', 'create', 'update', 'delete'],
   'panel.settings': ['read', 'update'],
+  // Panel-wide activity log (/admin/activity) — admins only by design:
+  // it aggregates EVERY server's events, so unlike per-server
+  // `server.activity` (sub-user grantable) it is never delegated.
+  'panel.activity': ['read'],
 
   // Per-server (Pelican "server permissions", granted to sub-users)
   'server.console': ['read', 'command'],
@@ -114,6 +118,7 @@ export const adminRole = ac.newRole({
   'panel.roles': [...statement['panel.roles']],
   'panel.servers': [...statement['panel.servers']],
   'panel.settings': [...statement['panel.settings']],
+  'panel.activity': [...statement['panel.activity']],
   ...allServerStatements(),
 });
 
@@ -126,6 +131,8 @@ export const moderatorRole = ac.newRole({
   'panel.recipes': ['read'],
   'panel.roles': ['read'],
   'panel.servers': ['read'],
+  // NO panel.activity: the panel-wide log aggregates every server's
+  // events — a moderator does not see them (Pelican parity).
 });
 
 /** Plain user: no panel-level permission — only their own (or shared) servers. */
@@ -218,6 +225,7 @@ export function hasAdminAreaAccess(permissions: string[]): boolean {
       'panel.roles': ['read'],
       'panel.servers': ['read'],
       'panel.settings': ['read'],
+      'panel.activity': ['read'],
       user: ['list'],
     },
     'OR',
@@ -414,6 +422,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   'panel.roles': 'Rôles',
   'panel.servers': 'Serveurs',
   'panel.settings': 'Paramètres',
+  'panel.activity': 'Journal d’activité (panel)',
   user: 'Comptes utilisateurs',
   session: 'Sessions',
 };

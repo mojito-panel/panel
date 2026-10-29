@@ -56,6 +56,10 @@ describe('panel roles', () => {
     expect(can(moderatorRole, { 'panel.servers': ['create'] })).toBe(false);
     expect(can(moderatorRole, { user: ['set-role'] })).toBe(false);
     expect(can(moderatorRole, { user: ['ban'] })).toBe(false);
+    // The panel-wide activity log aggregates every server's events —
+    // moderator does NOT see it (Pelican parity), admin does.
+    expect(can(moderatorRole, { 'panel.activity': ['read'] })).toBe(false);
+    expect(can(adminRole, { 'panel.activity': ['read'] })).toBe(true);
     // No per-server permissions via the panel role
     expect(can(moderatorRole, { 'server.files': ['read'] })).toBe(false);
   });
@@ -264,6 +268,12 @@ describe('rolePermissionsSchema (custom panel roles)', () => {
   it('accepts panel-level statements', () => {
     const valid = { 'panel.nodes': ['read', 'create'], user: ['list'] };
     expect(rolePermissionsSchema.parse(valid)).toEqual(valid);
+  });
+
+  it('accepts the panel-wide activity statement (custom roles may be granted it)', () => {
+    expect(rolePermissionsSchema.parse({ 'panel.activity': ['read'] })).toEqual({
+      'panel.activity': ['read'],
+    });
   });
 
   it('rejects per-server permissions — those are sub-user grants, never roles', () => {

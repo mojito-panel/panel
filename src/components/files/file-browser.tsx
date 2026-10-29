@@ -340,9 +340,15 @@ export function FileBrowser({
       <ConfirmDialog
         open={toDelete !== null}
         onOpenChange={(open) => !open && setToDelete(null)}
-        onConfirm={() => {
-          if (toDelete) remove.mutate([toDelete.path]);
-          setToDelete(null);
+        onConfirm={async () => {
+          if (!toDelete) return;
+          try {
+            await remove.mutateAsync([toDelete.path]);
+            setToDelete(null);
+          } catch {
+            // Shown inline by the mutation's onError (setError) — the
+            // dialog stays open for the retry.
+          }
         }}
         title={toDelete ? `Supprimer « ${toDelete.name} »${toDelete.isDirectory ? ' et son contenu' : ''} ?` : ''}
         confirmLabel="Supprimer"
@@ -353,9 +359,14 @@ export function FileBrowser({
       <ConfirmDialog
         open={confirmBulk}
         onOpenChange={(open) => !open && setConfirmBulk(false)}
-        onConfirm={() => {
-          remove.mutate([...selected]);
-          setConfirmBulk(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync([...selected]);
+            setConfirmBulk(false);
+          } catch {
+            // Shown inline by the mutation's onError (setError) — the
+            // dialog stays open for the retry.
+          }
         }}
         title={`Supprimer ${selected.length} élément${selected.length > 1 ? 's' : ''} ?`}
         description="Les dossiers sélectionnés seront supprimés avec tout leur contenu. Cette action est irréversible."

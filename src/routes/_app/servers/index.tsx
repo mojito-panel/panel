@@ -9,6 +9,7 @@ import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { useAuth } from '~/contexts/use-auth';
+import { hasAdminAreaAccess, hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { userServersList, type UserServerRow } from '~/lists/user-servers';
 import { adminNodesList } from '~/lists/nodes';
@@ -32,9 +33,15 @@ export const Route = createFileRoute('/_app/servers/')({
 
 function ServersPage() {
   const { user } = useAuth();
+  const permissions = user?.permissions ?? [];
   const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
   const search = Route.useSearch();
+
+  // Permission-gated shortcuts (the admin sidebar items) — the session's
+  // effective permissions decide, not the built-in role name.
+  const canViewNodes = hasPermissions(permissions, { 'panel.nodes': ['read'] });
+  const canViewRecipes = hasPermissions(permissions, { 'panel.recipes': ['read'] });
 
   const listServers = useServerFn(listServersFn);
   const deleteServer = useServerFn(deleteServerFn);
@@ -75,27 +82,27 @@ function ServersPage() {
         <CardHeader>
           <CardTitle>Mes serveurs</CardTitle>
           <CardDescription>
-            {user?.role === 'admin'
+            {hasAdminAreaAccess(permissions)
               ? 'Vue administrateur — tous les serveurs'
               : 'Tes serveurs de jeu'}
           </CardDescription>
           <CardAction>
             <div className="flex gap-2">
-              {user?.role === 'admin' && (
-                <>
-                  <Button
-                    variant="outline"
-                    render={<Link to="/admin/nodes" search={adminNodesList.defaultSearch} />}
-                  >
-                    Nodes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    render={<Link to="/admin/recipes" search={adminRecipesList.defaultSearch} />}
-                  >
-                    Recettes
-                  </Button>
-                </>
+              {canViewNodes && (
+                <Button
+                  variant="outline"
+                  render={<Link to="/admin/nodes" search={adminNodesList.defaultSearch} />}
+                >
+                  Nodes
+                </Button>
+              )}
+              {canViewRecipes && (
+                <Button
+                  variant="outline"
+                  render={<Link to="/admin/recipes" search={adminRecipesList.defaultSearch} />}
+                >
+                  Recettes
+                </Button>
               )}
             </div>
           </CardAction>
@@ -123,9 +130,16 @@ function ServersPage() {
       <ConfirmDialog
         open={toDelete !== null}
         onOpenChange={(open) => !open && setToDelete(null)}
-        onConfirm={() => {
-          if (toDelete) remove.mutate({ server: toDelete });
-          setToDelete(null);
+        onConfirm={async () => {
+          if (!toDelete) return;
+          try {
+            await remove.mutateAsync({ server: toDelete });
+            setToDelete(null);
+          } catch {
+            // Toasted by the mutation — an unreachable agent opens the force
+            // dialog (the mutation's onError), so this one closes either way.
+            setToDelete(null);
+          }
         }}
         title={toDelete ? `Supprimer « ${toDelete.name} » ?` : ''}
         description="Le dossier sera effacé."
@@ -137,9 +151,14 @@ function ServersPage() {
       <ConfirmDialog
         open={forceTarget !== null}
         onOpenChange={(open) => !open && setForceTarget(null)}
-        onConfirm={() => {
-          if (forceTarget) remove.mutate({ server: forceTarget, force: true });
-          setForceTarget(null);
+        onConfirm={async () => {
+          if (!forceTarget) return;
+          try {
+            await remove.mutateAsync({ server: forceTarget, force: true });
+            setForceTarget(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={forceTarget ? `Supprimer « ${forceTarget.name} » sans l’agent ?` : ''}
         description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."

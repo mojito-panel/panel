@@ -1,5 +1,7 @@
 import { useForm, type ReactFormExtendedApi } from '@tanstack/react-form';
+import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { nanoid } from '~/lib/nanoid';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -110,10 +112,13 @@ function TaskRow({
   form,
   index,
   canRemove,
+  onRemove,
 }: {
   form: ScheduleEditFormApi;
   index: number;
   canRemove: boolean;
+  /** Removes this row (the task AND its parallel stable key). */
+  onRemove: () => void;
 }) {
   // Typed as a template literal so the derived field names below resolve to
   // TanStack Form's `tasks[${number}].payload` name union (not plain string).
@@ -194,19 +199,15 @@ function TaskRow({
               </form.Field>
             </div>
             {canRemove && (
-              <form.Field name="tasks">
-                {(field) => (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive"
-                    onClick={() => field.removeValue(index)}
-                  >
-                    <Trash2 />
-                  </Button>
-                )}
-              </form.Field>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={onRemove}
+              >
+                <Trash2 />
+              </Button>
             )}
           </div>
           <div className="flex items-end gap-6 pl-9">
@@ -255,6 +256,17 @@ export function ScheduleFormFields({
   /** Detail page only — the create form has no active toggle. */
   canDeactivate?: boolean;
 }) {
+  // Stable identity of the task rows: the task objects carry no id (the
+  // wire schema has none), so a PARALLEL array of keys is maintained — one
+  // key per row, generated when the row appears and spliced away with it.
+  // UI-only state, never form data: `key={index}` would reshuffle a row's
+  // internal state (open selects, focus) onto its neighbour after a
+  // mid-chain removal. A `form.reset()` only ever SHRINKS the task list,
+  // so the array can never run out of keys.
+  const [rowKeys, setRowKeys] = useState<string[]>(() =>
+    Array.from({ length: form.getFieldValue('tasks').length }, () => nanoid()),
+  );
+
   return (
     <div className="space-y-6">
       {/* ─── Identity + cron ─── */}
@@ -373,10 +385,14 @@ export function ScheduleFormFields({
             <div className="space-y-3">
               {field.state.value.map((_, index) => (
                 <TaskRow
-                  key={index}
+                  key={rowKeys[index]}
                   form={form}
                   index={index}
                   canRemove={field.state.value.length > 1}
+                  onRemove={() => {
+                    field.removeValue(index);
+                    setRowKeys((keys) => keys.filter((_, i) => i !== index));
+                  }}
                 />
               ))}
               <Button
@@ -384,14 +400,15 @@ export function ScheduleFormFields({
                 variant="outline"
                 size="sm"
                 disabled={field.state.value.length >= 10}
-                onClick={() =>
+                onClick={() => {
                   field.pushValue({
                     action: 'power',
                     payload: 'restart',
                     timeOffset: 0,
                     continueOnFailure: false,
-                  })
-                }
+                  });
+                  setRowKeys((keys) => [...keys, nanoid()]);
+                }}
               >
                 <Plus />
                 Ajouter une tâche

@@ -18,6 +18,7 @@ import {
   deleteUser,
 } from '../users';
 import { auth } from '~/lib/auth';
+import { logActivity } from '../activity';
 import { usernameSchema } from '~/validators/auth';
 
 /**
@@ -110,7 +111,7 @@ export const createUserFn = createServerFn({ method: 'POST' })
   )
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({
+    const actor = await requirePanelPermission({
       user: ['create', ...(data.role !== 'user' ? (['set-role'] as const) : [])],
     });
     await assertRoleExists(data.role);
@@ -144,6 +145,8 @@ export const createUserFn = createServerFn({ method: 'POST' })
     target.role = data.role;
     await em.flush();
 
+    await logActivity({ event: 'user:create', description: `Compte « ${data.email} » créé (rôle « ${data.role} »)`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id, role: data.role } });
+
     return { id: user.id, email: user.email, role: data.role };
   });
 
@@ -162,6 +165,7 @@ export const setUserRoleFn = createServerFn({ method: 'POST' })
 
     target.role = data.role;
     await orm.em.flush();
+    await logActivity({ event: 'user:set_role', description: `Rôle de « ${target.email} » changé en « ${data.role} »`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id, role: data.role } });
 
     return { userId: data.userId, role: data.role };
   });
@@ -183,6 +187,7 @@ export const banUserFn = createServerFn({ method: 'POST' })
     const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
     await banUser(target, data.banReason);
+    await logActivity({ event: 'user:ban', description: `Compte « ${target.email} » suspendu`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id, banReason: data.banReason ?? null } });
 
     return { userId: target.id, banned: true };
   });
@@ -191,9 +196,10 @@ export const unbanUserFn = createServerFn({ method: 'POST' })
   .validator(z.object({ userId: z.string().min(1) }))
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ user: ['ban'] });
+    const actor = await requirePanelPermission({ user: ['ban'] });
     const target = await requireUserById(data.userId);
     await unbanUser(target);
+    await logActivity({ event: 'user:unban', description: `Compte « ${target.email} » réactivé`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id } });
     return { userId: target.id, banned: false };
   });
 
@@ -210,6 +216,7 @@ export const deleteUserFn = createServerFn({ method: 'POST' })
     const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
     await deleteUser(target);
+    await logActivity({ event: 'user:delete', description: `Compte « ${target.email} » supprimé`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id } });
 
     return { deleted: true };
   });

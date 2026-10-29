@@ -59,12 +59,12 @@ export const listServerActivityFn = createServerFn({ method: 'POST' })
     return { rowCount, rows: rows.map(toDto) };
   });
 
-/** Panel-wide activity — admins only (panel.servers read). */
+/** Panel-wide activity — `panel.activity` read (admin by design: the log aggregates every server's events). */
 export const listAllActivityFn = createServerFn({ method: 'POST' })
   .validator(activityList.querySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.servers': ['read'] });
+    await requirePanelPermission({ 'panel.activity': ['read'] });
 
     const qb = listQueryBuilder(orm.em, ActivityLog, activityList);
     const { rows, rowCount } = await runListQuery(qb, activityList.spec, data);

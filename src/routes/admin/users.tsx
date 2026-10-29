@@ -20,6 +20,8 @@ import { useAuth } from '~/contexts/use-auth';
 import { hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminUsersList, type AdminUserRow, type AdminUsersContext } from '~/lists/users';
+import type { RoleDto } from '~/lists/roles';
+import { z } from 'zod';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { Input } from '~/components/ui/input';
@@ -48,7 +50,7 @@ import {
 } from '~/components/ui/select';
 
 /**
- * /admin/users — comptes du panel : rôles, suspension, suppression.
+ * /admin/users — the panel accounts: roles, suspension, deletion.
  * Filtering, sorting and pagination run in the database; the list definition
  * (`~/lists/users`) holds the columns AND the query it accepts, the state
  * lives in the URL search params.
@@ -62,19 +64,17 @@ export const Route = createFileRoute('/admin/users')({
   component: AdminUsersPage,
 });
 
-/** One entry of the role picker (built-ins + custom roles from listRolesFn). */
-interface RoleDto {
-  id: string;
-  name: string;
-  description: string | null;
-  permissions: string[];
-  userCount: number;
-  builtIn: boolean;
-}
+/**
+ * Ban reason of the suspend dialog — a tiny local schema: the dialog lives
+ * entirely on this page and the wire only carries an optional string, so
+ * a `validators/` module would be overkill.
+ */
+const banReasonSchema = z.object({
+  banReason: z.string().trim().max(255),
+});
 
 function AdminUsersPage() {
   const [banTarget, setBanTarget] = useState<AdminUserRow | null>(null);
-  const [banReason, setBanReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const { user } = useAuth();
@@ -133,6 +133,8 @@ function AdminUsersPage() {
       toast.success('Compte suspendu', {
         description: 'Ses sessions ont été révoquées.',
       });
+      setBanTarget(null);
+      banForm.reset();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -155,9 +157,22 @@ function AdminUsersPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  // The ban reason is a FORM field (never useState) — a tiny TanStack Form
+  // scoped to the suspend dialog; the dialog's confirm button submits it
+  // (banForm.handleSubmit), and the dialog closes on the mutation's
+  // success only.
+  const banForm = useForm({
+    validators: { onChange: banReasonSchema },
+    defaultValues: { banReason: '' },
+    onSubmit: ({ value }) => {
+      if (!banTarget) return;
+      ban.mutate({ userId: banTarget.id, banReason: value.banReason.trim() || undefined });
+    },
+  });
+
   const confirmBan = (target: AdminUserRow) => {
     setBanTarget(target);
-    setBanReason('');
+    banForm.reset();
   };
 
   const confirmDelete = (target: AdminUserRow) => {
@@ -241,24 +256,32 @@ function AdminUsersPage() {
         onOpenChange={(open) => {
           if (!open) setBanTarget(null);
         }}
-        onConfirm={() => {
-          if (banTarget) {
-            ban.mutate({ userId: banTarget.id, banReason: banReason || undefined });
-          }
-          setBanTarget(null);
-          setBanReason('');
-        }}
+        onConfirm={() => void banForm.handleSubmit()}
         title={`Suspendre « ${banTarget?.email ?? ''} » ?`}
         description="Il ne pourra plus se connecter. Ses sessions actives seront révoquées."
         confirmLabel="Suspendre"
         destructive
         pending={ban.isPending}
       >
-        <Input
-          placeholder="Raison de la suspension (optionnelle)"
-          value={banReason}
-          onChange={(e) => setBanReason(e.target.value)}
-        />
+        {/* The reason is a TanStack Form field (schema above) — never useState. */}
+        <banForm.Field name="banReason">
+          {(field) => (
+            <div className="space-y-1">
+              <Input
+                placeholder="Raison de la suspension (optionnelle)"
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+                disabled={ban.isPending}
+              />
+              {field.state.meta.errors.length > 0 && (
+                <p className="text-sm text-destructive">
+                  {field.state.meta.errors[0]?.message}
+                </p>
+              )}
+            </div>
+          )}
+        </banForm.Field>
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -266,11 +289,14 @@ function AdminUsersPage() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        onConfirm={() => {
-          if (deleteTarget) {
-            remove.mutate({ userId: deleteTarget.id });
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await remove.mutateAsync({ userId: deleteTarget.id });
+            setDeleteTarget(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
           }
-          setDeleteTarget(null);
         }}
         title={`Supprimer définitivement « ${deleteTarget?.email ?? ''} » ?`}
         description="Cette action est irréversible."

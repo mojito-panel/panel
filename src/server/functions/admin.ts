@@ -8,9 +8,11 @@ import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, requirePanelPermission, HttpError } from '../session';
 import { withOrmContext } from '../middleware';
+import { logActivity } from '../activity';
 import { orm } from '../orm';
 import { decryptSecret } from '../crypto';
-import { agentHealth, agentGetStats, AgentError } from '../agent/client';
+import { agentHealth, agentGetStats } from '../agent/client';
+import { isPublicAddress } from '../assert-public-host';
 import { signHealthToken } from '../jwt';
 import {
   createNode,
@@ -62,18 +64,20 @@ import {
   deleteRecipeSchema,
 } from '~/validators/recipe';
 import { importEgg } from '~/contract/egg-import';
-import { parseRecipeJson, type RecipeVariable } from '~/contract';
+import { type RecipeVariable } from '~/contract';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
 /**
- * Node list — accessible to any signed-in user (node
- * selection when creating a server). The token is NEVER exposed here.
+ * Node list — the unpaginated picker helper (node selection when creating
+ * a server, /admin/servers/new). Gated on `panel.nodes` read: every caller
+ * lives in the admin area, and the node list (FQDNs, ports) is admin-only
+ * data. The token is NEVER exposed here.
  */
 export const listNodesFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async () => {
-    await requireUser();
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
     const nodes = await orm.em.find(Node, {});
     return nodes.map((node) => ({
       id: node.id,
@@ -123,8 +127,11 @@ export const createNodeFn = createServerFn({ method: 'POST' })
   .validator(createNodeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['create']});
+    const user = await requirePanelPermission({'panel.nodes':['create']});
     const { id, agentToken } = await createNode(data);
+
+    // Audit trail before the row goes any further.
+    await logActivity({ event: 'node:create', description: `Node « ${data.name} » créé (${data.fqdn})`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: id } });
 
     // The token is returned ONCE — the admin copies the generated shard.yml
     // (below) onto the node and it will never be replayable in clear again.
@@ -155,7 +162,10 @@ export const resolveNodeFqdnFn = createServerFn({ method: 'GET' })
     await requirePanelPermission({ 'panel.nodes': ['read'] });
     try {
       const result = await lookup(data.fqdn);
-      return { ip: result.address };
+      // The resolved address runs through the same SSRF policy as the
+      // panel's own outbound fetches: a node "reachable" through a
+      // loopback/link-local record is not an answer the panel will use.
+      return { ip: isPublicAddress(result.address) ? result.address : null };
     } catch {
       return { ip: null };
     }
@@ -165,8 +175,10 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['delete']});
-    await deleteNode(await requireNode(data.nodeId));
+    const user = await requirePanelPermission({'panel.nodes':['delete']});
+    const node = await requireNode(data.nodeId);
+    await deleteNode(node);
+    await logActivity({ event: 'node:delete', description: `Node « ${node.name} » supprimé`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: node.id } });
     return { deleted: true };
   });
 
@@ -238,7 +250,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
   .validator(updateNodeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({'panel.nodes':['update']});
     const node = await requireNode(data.nodeId);
 
     node.name = data.name;
@@ -248,6 +260,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
     node.scheme = data.scheme;
     node.sftpPort = data.sftpPort;
     await orm.em.flush();
+    await logActivity({ event: 'node:update', description: `Node « ${node.name} » mis à jour`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: node.id } });
 
     return { updated: true };
   });
@@ -261,9 +274,10 @@ export const resetNodeTokenFn = createServerFn({ method: 'POST' })
   .validator(nodeIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({'panel.nodes':['update']});
     const node = await requireNode(data.nodeId);
     const agentToken = await resetNodeToken(node);
+    await logActivity({ event: 'node:reset_token', description: `Token du node « ${node.name} » régénéré`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: node.id } });
 
     return {
       agentToken,
@@ -274,14 +288,15 @@ export const resetNodeTokenFn = createServerFn({ method: 'POST' })
 // ─── Allocations (admin node pool — Pelican NodeResource "Allocations") ──────
 
 /**
- * Free allocations of a node — available to any signed-in user (the server
- * creation form picks from this pool, like Pelican's deployment form).
+ * Free allocations of a node — the unpaginated picker of the server
+ * creation form (admin-only: /admin/servers/new). Gated on `panel.nodes`
+ * read like the node list it belongs to.
  */
 export const listFreeNodeAllocationsFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requireUser();
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
     const free = await findFreeAllocations(data.nodeId);
     return free.map((allocation) => ({
       id: allocation.id,
@@ -375,7 +390,7 @@ export const assignAllocationFn = createServerFn({ method: 'POST' })
   .validator(assignAllocationSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({'panel.nodes':['update']});
     const em = orm.em;
 
     const allocation = await em.findOne(Allocation, { id: data.allocationId });
@@ -384,6 +399,7 @@ export const assignAllocationFn = createServerFn({ method: 'POST' })
     if (!server) throw new HttpError(404, 'Serveur introuvable');
 
     await assignAllocation(allocation, server);
+    await logActivity({ event: 'allocation:assign', description: `Allocation ${allocation.ip}:${allocation.port} affectée à « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });
 
@@ -397,13 +413,15 @@ export const revokeAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({'panel.nodes':['update']});
     const allocation = await orm.em.findOne(Allocation, { id: data.allocationId });
     if (!allocation || allocation.serverId === null) {
       throw new HttpError(404, 'Allocation libre introuvable');
     }
+    const serverId = allocation.serverId;
 
     await revokeAllocation(allocation);
+    await logActivity({ event: 'allocation:revoke', description: `Allocation ${allocation.ip}:${allocation.port} révoquée (retour au pool libre)`, actor: { id: user.id, name: user.name, email: user.email }, properties: { allocationId: allocation.id, serverId } });
     return { id: allocation.id };
   });
 
@@ -492,7 +510,7 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
   .validator(importRecipesSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.recipes':['create']});
+    const user = await requirePanelPermission({'panel.recipes':['create']});
 
     const imported: Array<{ slug: string; name: string; created: boolean; source: string }> = [];
     const failed: Array<{ source: string; error: string }> = [];
@@ -507,13 +525,15 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
       try {
         const raw = source.url ? await fetchRecipeJsonFromUrl(source.url) : source.raw;
         if (!raw) throw new HttpError(400, 'JSON vide');
-        const recipeJson = parseRecipeJson(raw);
+        const recipeJson = assertValidRecipeJson(raw);
         const saved = await upsertRecipe(recipeJson, recipeSourceStamp(recipeJson, source.url));
         imported.push({ ...saved, source: label });
       } catch (err) {
         failed.push({ source: label, error: recipeErrorMessage(err) });
       }
     }
+
+    await logActivity({ event: 'recipe:import', description: `${imported.length} recette(s) importée(s), ${failed.length} échec(s)`, actor: { id: user.id, name: user.name, email: user.email }, properties: { imported: imported.map((r) => r.slug), failed: failed.map((f) => f.source) } });
 
     return { imported, failed };
   });
@@ -547,7 +567,7 @@ export const importEggFn = createServerFn({ method: 'POST' })
   .validator(importEggSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['create'] });
+    const user = await requirePanelPermission({ 'panel.recipes': ['create'] });
 
     let parsed: unknown;
     try {
@@ -566,6 +586,7 @@ export const importEggFn = createServerFn({ method: 'POST' })
 
     // The mapped egg keeps its update_url — it becomes the recipe's source.
     const saved = await upsertRecipe(recipeJson, recipeSourceStamp(recipeJson));
+    await logActivity({ event: 'recipe:import_egg', description: `Œuf importé : recette « ${saved.slug} »`, actor: { id: user.id, name: user.name, email: user.email }, properties: { warnings: warnings.length } });
     return { ...saved, warnings };
   });
 
@@ -595,8 +616,10 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
   .validator(createRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.recipes':['create']});
-    return createRecipe(assertValidRecipeJson(data.json));
+    const user = await requirePanelPermission({'panel.recipes':['create']});
+    const recipe = await createRecipe(assertValidRecipeJson(data.json));
+    await logActivity({ event: 'recipe:create', description: `Recette « ${recipe.slug} » créée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: recipe.id } });
+    return recipe;
   });
 
 /**
@@ -607,16 +630,20 @@ export const updateRecipeFn = createServerFn({ method: 'POST' })
   .validator(updateRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.recipes':['update']});
-    return updateRecipe(data.recipeId, assertValidRecipeJson(data.json));
+    const user = await requirePanelPermission({'panel.recipes':['update']});
+    const recipe = await updateRecipe(data.recipeId, assertValidRecipeJson(data.json));
+    await logActivity({ event: 'recipe:update', description: `Recette « ${recipe.slug} » modifiée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: recipe.id } });
+    return recipe;
   });
 
 export const deleteRecipeFn = createServerFn({ method: 'POST' })
   .validator(deleteRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.recipes':['delete']});
-    await deleteRecipe(data.recipeId);
+    const user = await requirePanelPermission({'panel.recipes':['delete']});
+    const recipe = await requireRecipe(data.recipeId);
+    await deleteRecipe(recipe.id);
+    await logActivity({ event: 'recipe:delete', description: `Recette « ${recipe.name} » supprimée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: recipe.id } });
     return { deleted: true };
   });
 
@@ -626,17 +653,16 @@ export const deleteRecipeFn = createServerFn({ method: 'POST' })
 const AGENT_PING_TIMEOUT_MS = 2500;
 
 /**
- * Applies ping results onto the node rows and persists the outcome.
- * Shared by the overview and the health page.
+ * Applies ping outcomes onto the node rows and persists them — shared by
+ * the overview poll and the health page (both ping, then stamp the rows).
  */
-async function pingNodes(nodes: Parameters<typeof agentHealth>[0][]) {
-  const pings = await Promise.allSettled(
-    nodes.map((node) => agentHealth(node, { signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS) })),
-  );
+async function applyPingResults(
+  nodes: Parameters<typeof agentHealth>[0][],
+  pings: PromiseSettledResult<unknown>[],
+): Promise<void> {
   const now = new Date();
   nodes.forEach((node, index) => {
-    const ping = pings[index];
-    if (ping.status === 'fulfilled') {
+    if (pings[index].status === 'fulfilled') {
       node.status = 'online';
       node.lastSeenAt = now;
     } else {
@@ -644,14 +670,24 @@ async function pingNodes(nodes: Parameters<typeof agentHealth>[0][]) {
     }
   });
   if (nodes.length > 0) await orm.em.flush();
+}
+
+/** Pings every node in parallel and stamps the outcomes on the rows. */
+async function pingNodes(nodes: Parameters<typeof agentHealth>[0][]) {
+  const pings = await Promise.allSettled(
+    nodes.map((node) => agentHealth(node, { signal: AbortSignal.timeout(AGENT_PING_TIMEOUT_MS) })),
+  );
+  await applyPingResults(nodes, pings);
   return pings;
 }
 
 /**
  * Admin dashboard data: global counters and the 5 most recent servers —
- * DB ONLY, always fast. The LIVE node health pings are a separate
- * best-effort query (`getAdminOverviewHealthFn`, polled by the page), so
- * offline agents never block the dashboard.
+ * DB ONLY, always fast (counts via `em.count`, recent rows via a bounded
+ * `limit` query; only the referenced recipes/owners of those rows are
+ * loaded). The LIVE node health pings are a separate best-effort query
+ * (`getAdminOverviewHealthFn`, polled by the page), so offline agents
+ * never block the dashboard.
  */
 export const getAdminOverviewFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
@@ -659,46 +695,56 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' })
     await requirePanelPermission({'panel.overview':['read']});
     const em = orm.em;
 
-    const [serverCount, nodeCount, userCount, recipeCount] = await Promise.all([
-      em.count(Server),
-      em.count(Node),
-      em.count(User),
-      em.count(Recipe),
-    ]);
+    const [serverCount, runningCount, installingCount, nodeCount, userCount, recipeCount] =
+      await Promise.all([
+        em.count(Server),
+        em.count(Server, { status: 'running' }),
+        em.count(Server, { status: 'installing' }),
+        em.count(Node),
+        em.count(User),
+        em.count(Recipe),
+      ]);
 
-    const [servers, nodes, recipes, users] = await Promise.all([
-      em.find(Server, {}),
+    const [nodes, recentRows] = await Promise.all([
       em.find(Node, {}),
-      em.find(Recipe, {}),
-      em.find(User, {}),
+      em.find(Server, {}, { orderBy: { createdAt: 'desc' }, limit: 5 }),
     ]);
 
-    const runningCount = servers.filter((s) => s.status === 'running').length;
-    const installingCount = servers.filter((s) => s.status === 'installing').length;
+    // Per-node server count — one bounded count per node (nodes are few).
+    const counts = await Promise.all(
+      nodes.map((node) => em.count(Server, { nodeId: node.id })),
+    );
+
+    // Display rows of the recent 5 only (queries stay bounded).
+    const recipeIds = [...new Set(recentRows.map((server) => server.recipeId))];
+    const ownerIds = [...new Set(recentRows.map((server) => server.ownerId))];
+    const [recentRecipes, recentOwners] = await Promise.all([
+      recipeIds.length > 0 ? em.find(Recipe, { id: { $in: recipeIds } }) : [],
+      ownerIds.length > 0 ? em.find(User, { id: { $in: ownerIds } }) : [],
+    ]);
+    const recipeNames = new Map(recentRecipes.map((recipe) => [recipe.id, recipe.name]));
+    const ownerEmails = new Map(recentOwners.map((owner) => [owner.id, owner.email]));
 
     // DB status is served immediately; the health poll below refreshes it.
-    const nodeDtos = nodes.map((node) => ({
+    const nodeDtos = nodes.map((node, index) => ({
       id: node.id,
       name: node.name,
       fqdn: node.fqdn,
       publicPort: node.publicPort,
       status: node.status,
       lastSeenAt: node.lastSeenAt,
-      serverCount: servers.filter((s) => s.nodeId === node.id).length,
+      serverCount: counts[index],
     }));
 
-    const recentServers = [...servers]
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, 5)
-      .map((server) => ({
-        id: server.id,
-        name: server.name,
-        status: server.status,
-        nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
-        recipeName: recipes.find((p) => p.id === server.recipeId)?.name ?? '—',
-        ownerEmail: users.find((u) => u.id === server.ownerId)?.email ?? '—',
-        createdAt: server.createdAt,
-      }));
+    const recentServers = recentRows.map((server) => ({
+      id: server.id,
+      name: server.name,
+      status: server.status,
+      nodeName: nodes.find((n) => n.id === server.nodeId)?.name ?? '—',
+      recipeName: recipeNames.get(server.recipeId) ?? '—',
+      ownerEmail: ownerEmails.get(server.ownerId) ?? '—',
+      createdAt: server.createdAt,
+    }));
 
     return {
       counts: {
@@ -758,18 +804,7 @@ export const getHealthNodesFn = createServerFn({ method: 'GET' })
         return { stats, latencyMs: Date.now() - startedAt };
       }),
     );
-
-    const now = new Date();
-    nodes.forEach((node, index) => {
-      const ping = pings[index];
-      if (ping.status === 'fulfilled') {
-        node.status = 'online';
-        node.lastSeenAt = now;
-      } else {
-        node.status = 'offline';
-      }
-    });
-    if (nodes.length > 0) await orm.em.flush();
+    await applyPingResults(nodes, pings);
 
     return nodes.map((node, index) => ({
       id: node.id,

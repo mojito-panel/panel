@@ -258,9 +258,14 @@ function ServerSchedulesPage() {
         onOpenChange={(open) => {
           if (!open) setToDelete(null);
         }}
-        onConfirm={() => {
-          if (toDelete) remove.mutate(toDelete.id);
-          setToDelete(null);
+        onConfirm={async () => {
+          if (!toDelete) return;
+          try {
+            await remove.mutateAsync(toDelete.id);
+            setToDelete(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer « ${toDelete?.name ?? ''} » ?`}
         description="Une exécution déjà en cours s’achève ; plus aucune ne se déclenchera."

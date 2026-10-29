@@ -6,49 +6,16 @@ import type { INode, IServer, IAllocation } from '~/db/types';
 import { orm } from './orm';
 import { HttpError } from './session';
 import { encryptSecret } from './crypto';
-import { agentHealth, agentUpdateResources, AgentError } from './agent/client';
-import { secondaryPorts } from './servers';
+import { agentHealth } from './agent/client';
+import { pushServerResources } from './servers';
 import { DEFAULT_SFTP_PORT } from '~/contract';
 
 /**
  * Node + allocation-pool business service (server-only): plain functions
- * doing all the DB + agent work of the admin Nodes pages, running inside
- * the caller's MikroORM request context (the `withOrmContext` middleware).
+ * doing all the DB + agent work of the admin Nodes pages and the per-server
+ * Network pages, running inside the caller's MikroORM request context (the
+ * `withOrmContext` middleware).
  */
-
-/**
- * Tolerant push of a resources change to the agent's cache — a 404
- * (agent out of sync) is ignored, the DB stays the source of truth.
- * Anything else surfaces as a 502.
- */
-export async function pushResources(
-  node: INode,
-  serverId: string,
-  resources: {
-    port: number;
-    ip: string;
-    memoryMb: number | string;
-    cpuCores: number | string;
-    /** Secondary ports (non-primary allocations) — see serverResourcesSchema. */
-    ports?: number[];
-  },
-): Promise<void> {
-  try {
-    await agentUpdateResources(node, serverId, {
-      ...resources,
-      memoryMb: Number(resources.memoryMb),
-      cpuCores: Number(resources.cpuCores),
-    });
-  } catch (err) {
-    if (err instanceof AgentError && err.statusCode === 404) {
-      // tolerated — agent out of sync, DB remains the source of truth
-    } else if (err instanceof AgentError) {
-      throw new HttpError(502, `Synchronisation du node échouée : ${err.message}`);
-    } else {
-      throw err;
-    }
-  }
-}
 
 /**
  * Creates a node with a freshly generated agent token (encrypted at rest).
@@ -144,8 +111,8 @@ export async function createAllocations(
   alias: string | null,
 ): Promise<{ created: number; skipped: number }> {
   const em = orm.em;
-  const node = await requireNode(nodeId);
-  void node;
+  // Existence check — 404 when the node is unknown.
+  await requireNode(nodeId);
 
   const existing = await em.find(Allocation, { nodeId, ip });
   const takenPorts = new Set(existing.map((a) => a.port));
@@ -207,19 +174,9 @@ export async function assignAllocation(
   allocation.primary = !hadPrimary;
   await em.flush();
 
-  if (!hadPrimary) {
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (node) {
-      const assigned = await em.find(Allocation, { serverId: server.id });
-      await pushResources(node, server.id, {
-        port: allocation.port,
-        ip: allocation.ip,
-        memoryMb: server.memoryMb,
-        cpuCores: server.cpuCores,
-        ports: secondaryPorts(assigned),
-      });
-    }
-  }
+  // Tolerant push of the FULL record (primary port/ip + limits) — shared
+  // with every other resources sync of the panel.
+  if (!hadPrimary) await pushServerResources(server);
 }
 
 /**
@@ -243,31 +200,92 @@ export async function revokeAllocation(allocation: IAllocation): Promise<void> {
   const server = await em.findOne(Server, { id: allocation.serverId });
   allocation.serverId = null;
   allocation.primary = false;
-  let promoted: {
-    port: number;
-    ip: string;
-    memoryMb: number | string;
-    cpuCores: number | string;
-    ports?: number[];
-  } | null = null;
   if (wasPrimary && others.length > 0) {
     others[0].primary = true;
-    if (server) {
-      promoted = {
-        port: others[0].port,
-        ip: others[0].ip,
-        memoryMb: server.memoryMb,
-        cpuCores: server.cpuCores,
-        ports: secondaryPorts(others),
-      };
-    }
   }
   await em.flush();
 
-  if (wasPrimary && promoted && server) {
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (node) {
-      await pushResources(node, server.id, promoted);
-    }
+  // The primary moved — push the new record (tolerant, shared helper).
+  if (wasPrimary && others.length > 0 && server) await pushServerResources(server);
+}
+
+// ─── Per-server allocation actions (the Network page — shared by the
+// per-server and the admin server functions) ────────────────────────────────
+
+/**
+ * Claims a FREE allocation of the server's node and assigns it to the
+ * server (Pelican "add allocation"). A server without any primary promotes
+ * the newcomer and syncs the agent — otherwise the primary is left alone.
+ */
+export async function claimServerAllocation(
+  server: IServer,
+  allocationId: string,
+): Promise<IAllocation> {
+  const em = orm.em;
+  const allocation = await em.findOne(Allocation, { id: allocationId });
+  if (!allocation) throw new HttpError(404, 'Allocation introuvable');
+  if (allocation.serverId !== null) {
+    throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
   }
+  if (allocation.nodeId !== server.nodeId) {
+    throw new HttpError(422, 'Cette allocation n’appartient pas au node du serveur');
+  }
+
+  const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
+    (a) => a.primary,
+  );
+  allocation.serverId = server.id;
+  allocation.primary = !hadPrimary;
+  await em.flush();
+
+  if (!hadPrimary) await pushServerResources(server);
+  return allocation;
+}
+
+/**
+ * Releases a non-primary allocation — it returns to the node's free pool.
+ * The primary must be moved first (refuse otherwise, like Pelican).
+ */
+export async function releaseServerAllocation(
+  server: IServer,
+  allocationId: string,
+): Promise<IAllocation> {
+  const em = orm.em;
+  const allocation = await em.findOne(Allocation, { id: allocationId });
+  if (!allocation || allocation.serverId !== server.id) {
+    throw new HttpError(404, 'Allocation introuvable pour ce serveur');
+  }
+  if (allocation.primary) {
+    throw new HttpError(409, 'Définis une autre allocation principale avant de retirer celle-ci');
+  }
+
+  allocation.serverId = null;
+  allocation.primary = false;
+  await em.flush();
+  return allocation;
+}
+
+/**
+ * Sets the primary allocation (source of SERVER_PORT / SERVER_IP) and
+ * pushes the full record to the agent — the change applies at the next
+ * start.
+ */
+export async function promoteServerAllocation(
+  server: IServer,
+  allocationId: string,
+): Promise<IAllocation> {
+  const em = orm.em;
+  const allocation = await em.findOne(Allocation, { id: allocationId });
+  if (!allocation || allocation.serverId !== server.id) {
+    throw new HttpError(404, 'Allocation introuvable pour ce serveur');
+  }
+
+  const assigned = await em.find(Allocation, { serverId: server.id });
+  for (const entry of assigned) {
+    entry.primary = entry.id === allocation.id;
+  }
+  await em.flush();
+
+  await pushServerResources(server);
+  return allocation;
 }

@@ -39,6 +39,13 @@ export interface AdminJobRow {
   data: string | null;
 }
 
+// NOTE on the sorts below: the jobs list's sort mapping is hand-rolled
+// server-side (`SORT_COLUMNS` in server/functions/jobs.ts maps the column
+// ids to the pgboss column names — the list does not run through
+// `runListQuery`), so the `field()` targets declared here are inert for
+// the actual query. They stay so the table offers the sort headers, and
+// the column ids remain the shared wire contract between this list and
+// the function.
 export const adminJobsList = defineList<AdminJobRow>({
   name: 'admin-jobs',
   alias: 'j',

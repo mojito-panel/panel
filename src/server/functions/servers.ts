@@ -1,12 +1,9 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { Node, Recipe, Server, ServerUser, Allocation } from '~/db/entities';
+import { Node, Server, ServerUser, Allocation } from '~/db/entities';
 import { userServersList } from '~/lists/user-servers';
 import { serverAllocationsList } from '~/lists/allocations';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import { normalizeStoredRecipe } from '~/lib/stored-recipe';
-import { resolveRuntimeRecipes } from '../runtimes';
-import type { Recipe as RecipeContract } from '~/contract';
 import type { ServerStatusDb } from '~/db/types';
 import {
   requireUser,
@@ -21,9 +18,6 @@ import { logActivity } from '../activity';
 import { orm } from '../orm';
 import {
   requireNodeOf,
-  requireRecipeOf,
-  pushServerResources,
-  secondaryPorts,
   installServer,
   deleteServer,
   executeServerAction,
@@ -31,15 +25,20 @@ import {
   loadServerContext,
   reinstallServerFromPanel,
   refreshServerRecipeSnapshot,
+  secondaryPorts,
 } from '../servers';
+import {
+  claimServerAllocation,
+  releaseServerAllocation,
+  promoteServerAllocation,
+} from '../nodes';
 import { serverRecipeSnapshot, recipeGraphUpdatedAt } from '../recipe-snapshot';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { toConsolePermissions } from '~/lib/permissions';
 import {
-  agentInstallServer,
   agentGetInstallStatus,
-  agentServerAction,
+  agentInstallServer,
   agentSendCommand,
   agentUpdateServerVariables,
   AgentError,
@@ -51,7 +50,7 @@ import {
   serverActionInputSchema,
   sendCommandSchema,
   serverDetailQuerySchema,
-  serverLogsQuerySchema,
+  serverIdQuerySchema,
   deleteServerSchema,
   serverAllocationActionSchema,
 } from '~/validators/server';
@@ -144,13 +143,15 @@ export const installServerFn = createServerFn({ method: 'POST' })
     // Creation is an admin feature (Pelican semantics: an admin deploys for
     // a user) — plain users never self-serve a server.
     const user = await requirePanelPermission({ 'panel.servers': ['create'] });
-    return installServer(data, user);
+    const server = await installServer(data, user);
+    await logActivity({ event: 'server:install', description: `Serveur « ${server.name} » installé sur le node ${data.nodeId}`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { recipeId: data.recipeId } });
+    return server;
   });
 
 // ─── Install status + logs (live install panel) ──────────────────────────────
 
 export const getInstallStatusFn = createServerFn({ method: 'GET' })
-  .validator(serverLogsQuerySchema)
+  .validator(serverIdQuerySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
@@ -204,7 +205,7 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
 // ─── Install retry (after a failed install) ─────────────────────────────────
 
 export const retryInstallFn = createServerFn({ method: 'POST' })
-  .validator(serverLogsQuerySchema)
+  .validator(serverIdQuerySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
@@ -216,7 +217,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
 
     const node = await requireNodeOf(server);
     // The STORED snapshot — a retry never picks up recipe edits either.
-    const snapshot = await serverRecipeSnapshot(em, server);
+    const snapshot = await serverRecipeSnapshot(server);
     const allocations = await orm.em.find(Allocation, { serverId: server.id });
     const allocation = allocations.find((a) => a.primary);
     if (!allocation) throw new HttpError(500, 'Allocation introuvable');
@@ -239,6 +240,7 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
       });
       server.status = 'installing';
       await em.flush();
+      await logActivity({ event: 'server:retry_install', description: `Nouvelle tentative d’installation de « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
       return { id: server.id, status: 'installing' };
     } catch (err) {
       server.status = 'install_failed';
@@ -267,7 +269,7 @@ export const getServerFn = createServerFn({ method: 'GET' })
     // The SNAPSHOT definitions (app + required runtimes merged) — the
     // recipe row is only read for its identity and its update date (the
     // reload button shows when the row is newer than the snapshot).
-    const snapshot = await serverRecipeSnapshot(orm.em, server);
+    const snapshot = await serverRecipeSnapshot(server);
     const snapshotRecipe = snapshot.recipe;
 
     // Sub-users only see the variables/startup command with the matching
@@ -294,7 +296,6 @@ export const getServerFn = createServerFn({ method: 'GET' })
         // edit of the java runtime matters as much as one of the app
         // recipe.
         updatedAt: await recipeGraphUpdatedAt(
-          orm.em,
           recipe.json as Record<string, unknown>,
           recipe.updatedAt,
         ),
@@ -367,11 +368,11 @@ export const serverActionFn = createServerFn({ method: 'POST' })
 // ─── Reinstall (stop + re-run the SNAPSHOT recipe's install script) ───────────
 
 export const reinstallServerFn = createServerFn({ method: 'POST' })
-  .validator(serverLogsQuerySchema)
+  .validator(serverIdQuerySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
+    const { server } = await loadServerWithPermission(
       data.serverId,
       user,
       { 'server.settings': ['update'] },
@@ -381,13 +382,14 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
     // impacts an installed server; the explicit "reload recipe" action is
     // the propagation path.
     const result = await reinstallServerFromPanel(server);
+    await logActivity({ event: 'server:reinstall', description: `Réinstallation de « ${server.name} » lancée`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
     return { id: server.id, status: 'installing', message: result.message };
   });
 
 // ─── Reload recipe (re-snapshot from the current recipe row — NO reinstall) ──
 
 export const reloadRecipeFn = createServerFn({ method: 'POST' })
-  .validator(serverLogsQuerySchema)
+  .validator(serverIdQuerySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
@@ -403,6 +405,7 @@ export const reloadRecipeFn = createServerFn({ method: 'POST' })
     // variables first, then reinstalls from the settings page — the
     // agent is not touched here at all.
     const snapshot = await refreshServerRecipeSnapshot(server);
+    await logActivity({ event: 'server:reload_recipe', description: `Recette de « ${server.name} » rechargée depuis sa dernière version`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
     return {
       id: server.id,
       status: server.status as ServerStatusDb,
@@ -426,7 +429,7 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
 
     // The SNAPSHOT definitions (app + required runtimes merged) — editing
     // JAVA_VERSION on a Minecraft server works through the merged set.
-    const snapshot = await serverRecipeSnapshot(em, server);
+    const snapshot = await serverRecipeSnapshot(server);
     const definitions = snapshot.recipe.variables ?? [];
 
     // Merge: only user_editable variables accept the submitted values, the
@@ -474,6 +477,7 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
 
     server.variables = variables;
     await em.flush();
+    await logActivity({ event: 'server:variables', description: `Variables de « ${server.name} » mises à jour`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
 
     return { id: server.id, variables };
   });
@@ -506,12 +510,20 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
 // ─── Console token (JWT for the browser ↔ agent direct WS) ──────────────────
 
 export const createConsoleTokenFn = createServerFn({ method: 'POST' })
-  .validator(serverLogsQuerySchema)
+  .validator(serverIdQuerySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
     const { server, viewer } = await loadServerForViewer(data.serverId, user);
     const node = await requireNodeOf(server);
+
+    // A viewer without ANY console-related grant gets no token at all —
+    // the agent would refuse every message anyway, and an empty-permission
+    // JWT is a free WS slot for nothing.
+    const permissions = toConsolePermissions(viewer.permissions);
+    if (permissions.length === 0) {
+      throw new HttpError(403, 'Aucune permission console sur ce serveur');
+    }
 
     // Short-lived JWT — the agent validates signature/aud/scope/exp/serverId
     // and gates every console action on the permissions carried in the payload.
@@ -523,7 +535,7 @@ export const createConsoleTokenFn = createServerFn({ method: 'POST' })
       {
         userId: user.id,
         serverId: server.id,
-        permissions: toConsolePermissions(viewer.permissions),
+        permissions,
       },
       decryptSecret(node.agentToken),
     );
@@ -637,31 +649,14 @@ export const addServerAllocationFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
+    const { server } = await loadServerWithPermission(
       data.serverId,
       user,
       { 'server.network': ['update'] },
     );
 
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation) throw new HttpError(404, 'Allocation introuvable');
-    if (allocation.serverId !== null) {
-      throw new HttpError(409, 'Cette allocation est déjà utilisée par un autre serveur');
-    }
-    if (allocation.nodeId !== server.nodeId) {
-      throw new HttpError(422, 'Cette allocation n’appartient pas au node du serveur');
-    }
-
-    // A server without any primary (legacy data) promotes the newcomer and
-    // syncs the agent — otherwise the primary is left untouched
-    const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
-      (a) => a.primary,
-    );
-    allocation.serverId = server.id;
-    allocation.primary = !hadPrimary;
-    await em.flush();
-
-    if (!hadPrimary) await pushServerResources(server);
+    const allocation = await claimServerAllocation(server, data.allocationId);
+    await logActivity({ event: 'server:allocation_add', description: `Allocation ${allocation.ip}:${allocation.port} ajoutée à « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });
 
@@ -674,24 +669,14 @@ export const removeServerAllocationFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
+    const { server } = await loadServerWithPermission(
       data.serverId,
       user,
       { 'server.network': ['update'] },
     );
 
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation || allocation.serverId !== server.id) {
-      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
-    }
-    if (allocation.primary) {
-      throw new HttpError(409, 'Définis une autre allocation principale avant de retirer celle-ci');
-    }
-
-    allocation.serverId = null;
-    allocation.primary = false;
-    await em.flush();
-
+    const allocation = await releaseServerAllocation(server, data.allocationId);
+    await logActivity({ event: 'server:allocation_remove', description: `Allocation ${allocation.ip}:${allocation.port} retirée de « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });
 
@@ -704,23 +689,13 @@ export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
+    const { server } = await loadServerWithPermission(
       data.serverId,
       user,
       { 'server.network': ['update'] },
     );
 
-    const allocation = await em.findOne(Allocation, { id: data.allocationId });
-    if (!allocation || allocation.serverId !== server.id) {
-      throw new HttpError(404, 'Allocation introuvable pour ce serveur');
-    }
-
-    const assigned = await em.find(Allocation, { serverId: server.id });
-    for (const entry of assigned) {
-      entry.primary = entry.id === allocation.id;
-    }
-    await em.flush();
-
-    await pushServerResources(server);
+    const allocation = await promoteServerAllocation(server, data.allocationId);
+    await logActivity({ event: 'server:allocation_primary', description: `Allocation ${allocation.ip}:${allocation.port} définie principale sur « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
     return { id: allocation.id };
   });

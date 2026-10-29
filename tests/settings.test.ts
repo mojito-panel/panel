@@ -20,6 +20,15 @@ import { updateGeneralSettingsSchema, updateMailSettingsSchema } from '~/validat
 
 const SECRET = 'settings-test-secret-0123456789abcdef';
 
+/**
+ * The resolution service takes NO em parameter (services use the panel's
+ * ORM singleton through `orm.em`, like every service) — so the test swaps
+ * `~/server/orm` for the SQLite in-memory instance it seeds. `ormHolder.em`
+ * is filled in beforeAll; the mock module is hoisted above every import.
+ */
+const ormHolder = vi.hoisted(() => ({ em: undefined as unknown }));
+vi.mock('~/server/orm', () => ({ orm: ormHolder }));
+
 // ─── Catalog (pure) ──────────────────────────────────────────────────────────
 
 describe('settings catalog', () => {
@@ -51,8 +60,15 @@ describe('settings resolution', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    orm = await MikroORM.init({ dbName: ':memory:', entities: [Setting] });
+    orm = await MikroORM.init({
+      dbName: ':memory:',
+      entities: [Setting],
+      // The service reaches `orm.em` directly (no request context here):
+      // the global SQLite EM must be usable.
+      allowGlobalContext: true,
+    });
     await orm.schema.create();
+    ormHolder.em = orm.em;
   });
 
   afterAll(async () => {
@@ -61,8 +77,10 @@ describe('settings resolution', () => {
 
   beforeEach(async () => {
     vi.stubEnv('BETTER_AUTH_SECRET', SECRET);
-    // Isolate every test: a clean `setting` table (defaults apply).
+    // Isolate every test: a clean `setting` table (defaults apply) and a
+    // clean identity map — the service reads through the global EM.
     await orm.em.fork().nativeDelete(Setting, {});
+    orm.em.clear();
   });
 
   afterEach(() => {
@@ -70,75 +88,68 @@ describe('settings resolution', () => {
   });
 
   it('falls back to the code defaults when no row exists', async () => {
-    const em = orm.em.fork();
-    const { values, forced } = await resolveSettings(em);
+    const { values, forced } = await resolveSettings();
     expect(values['app:name']).toBe(SETTING_DEFAULTS['app:name']);
     expect(values['mail:smtp:port']).toBe('587');
     expect(forced).toEqual({});
   });
 
   it('lets a stored row override the default', async () => {
-    const em = orm.em.fork();
-    await writeSettings(em, { 'app:name': 'My Panel' });
-    expect(await getSettingValue(em.fork(), 'app:name')).toBe('My Panel');
+    await writeSettings({ 'app:name': 'My Panel' });
+    expect(await getSettingValue('app:name')).toBe('My Panel');
   });
 
   it('forces the env var over the stored row', async () => {
-    const em = orm.em.fork();
     // The DB row must exist BEFORE the env var is set — a forced key is
     // never written by writeSettings (see the skip test below).
-    await writeSettings(em, { 'app:name': 'DB Panel' });
+    await writeSettings({ 'app:name': 'DB Panel' });
     vi.stubEnv('MOJITO_APP_NAME', 'Env Panel');
     expect(envForcedKey('app:name')).toBe('MOJITO_APP_NAME');
-    const { values, forced } = await resolveSettings(em.fork());
+    const { values, forced } = await resolveSettings();
     expect(values['app:name']).toBe('Env Panel');
     expect(forced['app:name']).toBe('MOJITO_APP_NAME');
     // An empty env var is ignored (unset semantics)
     vi.stubEnv('MOJITO_APP_NAME', '');
-    expect(await getSettingValue(em.fork(), 'app:name')).toBe('DB Panel');
+    expect(await getSettingValue('app:name')).toBe('DB Panel');
   });
 
   it('encrypts secret keys at rest and reads them back in clear', async () => {
-    const em = orm.em.fork();
-    await writeSettings(em, { 'mail:smtp:password': 'smtp-secret' });
-    const row = await em.fork().findOne(Setting, { key: 'mail:smtp:password' });
+    await writeSettings({ 'mail:smtp:password': 'smtp-secret' });
+    const row = await orm.em.fork().findOne(Setting, { key: 'mail:smtp:password' });
     expect(row?.value).not.toBe('smtp-secret');
     expect(row?.value.startsWith('enc:v1:')).toBe(true);
     // Non-secret keys stay plaintext
-    await writeSettings(em, { 'mail:smtp:host': 'smtp.example.com' });
-    const hostRow = await em.fork().findOne(Setting, { key: 'mail:smtp:host' });
+    await writeSettings({ 'mail:smtp:host': 'smtp.example.com' });
+    const hostRow = await orm.em.fork().findOne(Setting, { key: 'mail:smtp:host' });
     expect(hostRow?.value).toBe('smtp.example.com');
     // And the effective value is the usable plaintext
-    expect(await getSettingValue(em.fork(), 'mail:smtp:password')).toBe('smtp-secret');
+    expect(await getSettingValue('mail:smtp:password')).toBe('smtp-secret');
   });
 
   it('skips env-forced keys on write (the DB value stays untouched)', async () => {
     vi.stubEnv('MOJITO_MAIL_SMTP_HOST', 'forced.example.com');
-    const em = orm.em.fork();
-    const written = await writeSettings(em, {
+    const written = await writeSettings({
       'mail:smtp:host': 'written.example.com',
       'mail:smtp:username': 'mailer',
     });
     expect(written).toEqual(['mail:smtp:username']);
-    const row = await em.fork().findOne(Setting, { key: 'mail:smtp:host' });
+    const row = await orm.em.fork().findOne(Setting, { key: 'mail:smtp:host' });
     expect(row).toBeNull();
-    expect(await getSettingValue(em.fork(), 'mail:smtp:host')).toBe('forced.example.com');
+    expect(await getSettingValue('mail:smtp:host')).toBe('forced.example.com');
   });
 
   it('resolves the registration toggle (default, DB override, env force)', async () => {
-    const em = orm.em.fork();
-    expect(await isRegistrationEnabled(em)).toBe(true);
-    await writeSettings(em, { 'app:registration_enabled': 'false' });
-    expect(await isRegistrationEnabled(em.fork())).toBe(false);
+    expect(await isRegistrationEnabled()).toBe(true);
+    await writeSettings({ 'app:registration_enabled': 'false' });
+    expect(await isRegistrationEnabled()).toBe(false);
     vi.stubEnv('MOJITO_APP_REGISTRATION_ENABLED', 'true');
-    expect(await isRegistrationEnabled(em.fork())).toBe(true);
+    expect(await isRegistrationEnabled()).toBe(true);
   });
 
   it('resolves the branding slice', async () => {
     vi.stubEnv('MOJITO_APP_FAVICON', 'https://example.com/icon.png');
-    const em = orm.em.fork();
-    await writeSettings(em, { 'app:gravatar': 'true' });
-    const branding = await getBranding(em.fork());
+    await writeSettings({ 'app:gravatar': 'true' });
+    const branding = await getBranding();
     expect(branding).toEqual({
       appName: SETTING_DEFAULTS['app:name'],
       favicon: 'https://example.com/icon.png',

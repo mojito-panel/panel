@@ -36,6 +36,7 @@ import { adminServersList } from '~/lists/servers';
 import { adminUsersList } from '~/lists/users';
 import { hasPermissions } from '~/lib/permissions';
 import { useAuth } from '~/contexts/use-auth';
+import type { ServerStatusDb } from '~/db/types';
 import { StatusBadge, isLiveData, statusLabel } from '~/components/status-badge';
 import { CardSection, TabsCard, type TabsCardTab } from '~/components/tabs-card';
 import { Button } from '~/components/ui/button';
@@ -66,7 +67,7 @@ export const Route = createFileRoute('/admin/servers/$serverId')({
 interface AdminServerDto {
   id: string;
   name: string;
-  status: string;
+  status: ServerStatusDb;
   suspended: boolean;
   memoryMb: number;
   cpuCores: number;
@@ -133,7 +134,9 @@ function AdminServerPage() {
     return <p className="text-destructive">{query.error.message}</p>;
   }
 
-  const server = query.data;
+  // The DB column genuinely holds the `ServerStatusDb` union — the entity
+  // property itself is typed `string` (a plain column), hence the narrow.
+  const server = query.data as AdminServerDto;
   const canUpdate = hasPermissions(permissions, { 'panel.servers': ['update'] });
   const canDelete = hasPermissions(permissions, { 'panel.servers': ['delete'] });
 
@@ -668,9 +671,14 @@ function AdminServerAllocationsPanel({
         onOpenChange={(open) => {
           if (!open) setAllocationToRevoke(null);
         }}
-        onConfirm={() => {
-          if (allocationToRevoke) remove.mutate(allocationToRevoke.id);
-          setAllocationToRevoke(null);
+        onConfirm={async () => {
+          if (!allocationToRevoke) return;
+          try {
+            await remove.mutateAsync(allocationToRevoke.id);
+            setAllocationToRevoke(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Retirer l’allocation ${allocationToRevoke?.ip}:${allocationToRevoke?.port} ?`}
         description="Elle retournera dans le pool du node."
@@ -963,9 +971,13 @@ function ServerActionsPanel({
       <ConfirmDialog
         open={confirmSuspendOpen}
         onOpenChange={setConfirmSuspendOpen}
-        onConfirm={() => {
-          suspend.mutate(true);
-          setConfirmSuspendOpen(false);
+        onConfirm={async () => {
+          try {
+            await suspend.mutateAsync(true);
+            setConfirmSuspendOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Suspendre « ${name} » ?`}
         description="Le serveur sera arrêté et son propriétaire perdra l’accès."
@@ -978,9 +990,13 @@ function ServerActionsPanel({
       <ConfirmDialog
         open={confirmReinstallOpen}
         onOpenChange={setConfirmReinstallOpen}
-        onConfirm={() => {
-          reinstallMutation.mutate();
-          setConfirmReinstallOpen(false);
+        onConfirm={async () => {
+          try {
+            await reinstallMutation.mutateAsync();
+            setConfirmReinstallOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title="Es-tu sûr de vouloir réinstaller ce serveur ?"
         description="Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à sauvegarder les données."
@@ -993,9 +1009,13 @@ function ServerActionsPanel({
       <ConfirmDialog
         open={confirmReloadOpen}
         onOpenChange={setConfirmReloadOpen}
-        onConfirm={() => {
-          reloadMutation.mutate();
-          setConfirmReloadOpen(false);
+        onConfirm={async () => {
+          try {
+            await reloadMutation.mutateAsync();
+            setConfirmReloadOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Recharger la recette « ${recipeName} » ?`}
         description="La version actuelle de la recette remplacera celle utilisée à l’installation. Rien n’est réinstallé à cette étape — ajuste les variables du serveur, puis réinstalle-le pour appliquer la nouvelle version."
@@ -1008,9 +1028,14 @@ function ServerActionsPanel({
       <ConfirmDialog
         open={confirmChangeOpen}
         onOpenChange={setConfirmChangeOpen}
-        onConfirm={() => {
-          if (targetRecipeId) changeMutation.mutate(targetRecipeId);
-          setConfirmChangeOpen(false);
+        onConfirm={async () => {
+          if (!targetRecipeId) return;
+          try {
+            await changeMutation.mutateAsync(targetRecipeId);
+            setConfirmChangeOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={
           targetRecipe
@@ -1027,9 +1052,14 @@ function ServerActionsPanel({
       <ConfirmDialog
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
-        onConfirm={() => {
-          remove.mutate(false);
-          setConfirmDeleteOpen(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync(false);
+            setConfirmDeleteOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open (the section
+            // offers the force retry when the agent is unreachable).
+          }
         }}
         title={`Supprimer « ${name} » ?`}
         description="Le dossier sera effacé."
@@ -1042,9 +1072,13 @@ function ServerActionsPanel({
       <ConfirmDialog
         open={confirmForceDeleteOpen}
         onOpenChange={setConfirmForceDeleteOpen}
-        onConfirm={() => {
-          remove.mutate(true);
-          setConfirmForceDeleteOpen(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync(true);
+            setConfirmForceDeleteOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer « ${name} » sans l’agent ?`}
         description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."

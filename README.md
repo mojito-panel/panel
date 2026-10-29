@@ -8,7 +8,7 @@ Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **shard** (
 | Component | Technology |
 |---|---|
 | Panel front | TanStack Start + shadcn/ui + TanStack Table |
-| Auth | better-auth (email/password, admin/user roles) |
+| Auth | better-auth (email/password; three built-in roles — admin / moderator / user — plus custom roles managed from a permission matrix at `/admin/roles`) |
 | DB | Postgres 17 (docker compose) — MikroORM v7 manages all tables (including better-auth) |
 | Panel ↔ agent contract | Shared Zod schemas (`src/contract`) |
 | Agent | **shard** — external Go daemon (Bearer token, one per machine): servers run as native Windows processes under Job Objects + dedicated local users — separate repository |
@@ -66,18 +66,20 @@ mise run docker:down
 
 ```
 src/
-├── contract/      # Shared Zod schemas (recipe JSON + panel ↔ agent API)
-├── routes/        # TanStack Router file-based routes
-├── components/    # React components (shadcn/ui generated in components/ui)
-├── server/        # TanStack Start server functions, agent client, JWT signing
-├── db/            # MikroORM entities + config + migrations
-├── lib/           # Auth, permissions, utils
-├── validators/    # Zod schemas for forms
-└── ...
-tests/             # Vitest tests (panel + contract)
-recipes/           # → separate repository (mojito-panel/recipes), imported via /admin/recipes
-scripts/           # Dev utility scripts
-docs/              # Architecture documentation
+├── contract/        # Shared Zod schemas (recipe JSON + panel ↔ agent API)
+├── routes/          # TanStack Router file-based routes (api routes under routes/api/)
+├── components/      # React components (shadcn/ui generated in components/ui)
+├── contexts/        # React contexts (AuthProvider, useAuth)
+├── hooks/           # Client hooks (use-mobile)
+├── lists/           # ONE module per list: columns + filters + sorts + query schema (defineList)
+├── server/          # TanStack Start server functions, services, agent client, JWT signing
+├── db/              # MikroORM entities + config + migrations
+├── lib/             # Auth, permissions, settings, cron, utils
+└── validators/      # Zod schemas for forms
+tests/               # Vitest tests (panel + contract)
+recipes/            # → separate repository (mojito-panel/recipes), imported via /admin/recipes
+scripts/            # Dev utility scripts
+docs/               # Architecture documentation
 ```
 
 ## Documentation
@@ -129,7 +131,7 @@ Browser ◀──auth-ok + log stream─── Agent (permissions re-validated o
 - The agent token is encrypted at rest in the panel DB (AES-256-GCM, key derived from `BETTER_AUTH_SECRET`) — it is both a credential and a signing key.
 - The JWT travels as the **first WS message** (`auth`), never in the URL; the agent checks the Origin header.
 - The token is refreshed **in place** (re-`auth`) before expiry — no reconnection.
-- Fallback: if the WS fails to open, the console falls back to log polling (`GET /logs?after=N`).
+- WS-only console: if the socket fails to open, the terminal retries with backoff (then slowly) and shows the error — there is no log-polling fallback.
 - The agent token is NEVER logged.
 
 ### SFTP

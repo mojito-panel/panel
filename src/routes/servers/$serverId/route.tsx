@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { AppSidebar, type PanelServerStatus } from '~/components/app-sidebar';
-import { isLiveData } from '~/components/status-badge';
+import { AppSidebar } from '~/components/app-sidebar';
+import { isLiveData, type PanelServerStatus } from '~/components/status-badge';
 import { AppShell } from '~/components/app-shell';
 import { getServerFn, getServerRuntimeFn } from '~/server/functions/servers';
 

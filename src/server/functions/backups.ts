@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { createServerFn } from '@tanstack/react-start';
 import { withOrmContext } from '../middleware';
-import type { EntityManager } from '@mikro-orm/core';
-import { Backup, Node, Recipe } from '~/db/entities';
+import { Backup, Node } from '~/db/entities';
 import { nanoid } from '~/lib/nanoid';
 import type { IBackup, INode } from '~/db/types';
 import type { BackupOperationStatus } from '~/contract';
@@ -12,6 +11,7 @@ import { requireUser, HttpError, loadServerWithPermission } from '../session';
 import { signBackupDownloadToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { logActivity } from '../activity';
+import { serverRecipeSnapshot } from '../recipe-snapshot';
 import {
   agentCreateBackup,
   agentGetBackupStatus,
@@ -69,7 +69,6 @@ function agentHttpError(action: string, err: AgentError): HttpError {
  * network failure leaves the row untouched (transient).
  */
 async function syncActiveBackups(
-  em: EntityManager,
   node: INode | null,
   serverId: string,
   rows: IBackup[],
@@ -134,7 +133,7 @@ export const listBackupsFn = createServerFn({ method: 'POST' })
     // Sync needs every ACTIVE row of the server, not just the requested page.
     const all = await em.find(Backup, { serverId: server.id });
     const node = await em.findOne(Node, { id: server.nodeId });
-    await syncActiveBackups(em, node, server.id, all);
+    await syncActiveBackups(node, server.id, all);
     await em.flush();
 
     // `loadServerWithPermission` types its em loosely; the shared builder wants
@@ -187,10 +186,13 @@ export const createBackupFn = createServerFn({ method: 'POST' })
     const node = await em.findOne(Node, { id: server.nodeId });
     if (!node) throw new HttpError(500, 'Node introuvable');
 
-    // The recipe declares the archive contents (glob include patterns)
-    const recipe = await em.findOne(Recipe, { id: server.recipeId });
-    if (!recipe) throw new HttpError(500, 'Recette introuvable');
-    const recipeJson = recipe.json as { backup?: { include?: string[] } };
+    // The recipe SNAPSHOT declares the archive contents (glob include
+    // patterns) — the stored document is what the agent installed, not the
+    // (possibly edited-since) live recipe row. When no snapshot exists,
+    // serverRecipeSnapshot backfills one from the recipe row: same result
+    // as the previous live-row read.
+    const snapshot = await serverRecipeSnapshot(server);
+    const include = snapshot.recipe.backup?.include;
 
     const backupId = nanoid();
     const backup = em.create(Backup, {
@@ -208,7 +210,7 @@ export const createBackupFn = createServerFn({ method: 'POST' })
     try {
       await agentCreateBackup(node, server.id, {
         backupId,
-        include: recipeJson.backup?.include,
+        include,
       });
       backup.status = 'running';
       await em.flush();

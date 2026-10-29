@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from 'cn';
 
 /**
@@ -46,22 +47,30 @@ export function CoverImage({
   /** Rounded corners / borders where the card meets the cover. */
   className?: string;
 }) {
+  // A broken artwork URL (bad base64, 404 data URL…) hides the <img> so
+  // the gradient underneath shows instead of a torn-image icon. Tracked
+  // per URL: a re-sync that brings a NEW cover gets a fresh chance.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const showImage = cover !== null && cover !== undefined && cover !== brokenUrl;
+
   return (
     <div
       className={cn('relative aspect-[2/3] w-full overflow-hidden bg-muted', className)}
     >
-      {cover ? (
+      {/* Gradient always rendered underneath — it is the fallback of a
+          missing OR failed cover. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 h-full w-full"
+        style={{ backgroundImage: gradientFor(seed) }}
+      />
+      {showImage && cover && (
         <img
           src={cover}
           alt=""
           loading="lazy"
+          onError={() => setBrokenUrl(cover)}
           className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div
-          aria-hidden
-          className="absolute inset-0 h-full w-full"
-          style={{ backgroundImage: gradientFor(seed) }}
         />
       )}
     </div>

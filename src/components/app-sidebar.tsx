@@ -22,8 +22,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import type { ServerStatus } from '~/contract';
-import { StatusBall, statusLabel } from '~/components/status-badge';
+import { StatusBall, statusLabel, type PanelServerStatus } from '~/components/status-badge';
 import { userServersList } from '~/lists/user-servers';
 import { SidebarUserMenu } from '~/components/user-menu';
 import {
@@ -48,9 +47,6 @@ import {
   hasServerPermissions,
   type PermissionRequest,
 } from '~/lib/permissions';
-
-/** Panel-side status (contract status + the install_failed state). */
-export type PanelServerStatus = ServerStatus | 'install_failed';
 
 /**
  * Server navigation — Pelican-style tabs. `soon` marks the pages that are
@@ -101,7 +97,7 @@ const adminItems: Array<{
   { title: 'Paramètres', url: '/admin/settings', icon: Settings, soon: false, permission: { 'panel.settings': ['read'] } },
   { title: 'Santé', url: '/admin/health', icon: HeartPulse, soon: false, permission: { 'panel.overview': ['read'] } },
   { title: 'Jobs', url: '/admin/jobs', icon: ListTodo, soon: false, permission: { 'panel.overview': ['read'] } },
-  { title: 'Activité', url: '/admin/activity', icon: History, soon: false, permission: { 'panel.servers': ['read'] } },
+  { title: 'Activité', url: '/admin/activity', icon: History, soon: false, permission: { 'panel.activity': ['read'] } },
 ];
 
 interface NavItemProps {

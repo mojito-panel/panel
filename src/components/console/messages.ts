@@ -54,6 +54,8 @@ const CATALOG: Record<string, (params: Params) => string> = {
   'power.kill': () => 'Killing the server process…',
   'server.online': () => 'Server is online',
   'power.stopped': () => 'Server stopped',
+  'server.crash_loop': (p) =>
+    p.code ? `Crash loop detected (${p.code}) — automatic restart skipped` : 'Crash loop detected — automatic restart skipped',
 
   // ─── Port watchdog (agent audits listening sockets vs the allocation) ────
   'watchdog.violation': (p) =>
@@ -77,6 +79,7 @@ const EMOJI: Record<string, string> = {
   'power.kill': '🚦',
   'server.online': '🚀',
   'power.stopped': '🚦',
+  'server.crash_loop': '💥',
   'watchdog.violation': '🐕‍🦺',
   'watchdog.squat': '🐕‍🦺',
   'watchdog.killed': '🐕‍🦺',

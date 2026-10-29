@@ -10,6 +10,7 @@ import {
   reloadRecipeFn,
   deleteServerFn,
 } from '~/server/functions/servers';
+import { userServersList } from '~/lists/user-servers';
 import { hasServerPermissions } from '~/lib/permissions';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
@@ -57,7 +58,7 @@ function ServerSettingsPage() {
   });
 
   const reinstallMutation = useMutation({
-    mutationFn: () => reinstall({ data: { serverId, after: 0 } }),
+    mutationFn: () => reinstall({ data: { serverId } }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
@@ -69,15 +70,21 @@ function ServerSettingsPage() {
   const remove = useMutation({
     mutationFn: (force: boolean) => deleteServer({ data: { serverId, force } }),
     onSuccess: async () => {
+      // Mirror of the admin delete: toast + back to the server list (the
+      // server this page is about no longer exists).
+      toast.success('Serveur supprimé');
+      await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
       await queryClient.invalidateQueries({ queryKey: ['servers'] });
+      await navigate({ to: '/servers', search: userServersList.defaultSearch });
     },
+    onError: (error) => toast.error(error.message),
   });
 
   // Reload recipe = re-snapshot from the CURRENT recipe row, WITHOUT
   // reinstalling — the new definitions (and their values) land on the
   // Variables page; the user reinstalls from this page when ready.
   const reloadMutation = useMutation({
-    mutationFn: () => reloadRecipe({ data: { serverId, after: 0 } }),
+    mutationFn: () => reloadRecipe({ data: { serverId } }),
     onSuccess: async () => {
       setAskReloadRecipe(false);
       await queryClient.invalidateQueries({ queryKey: ['server', serverId] });
@@ -239,11 +246,6 @@ function ServerSettingsPage() {
               <Trash2 />
               Supprimer
             </Button>
-            {remove.isSuccess && (
-              <span className="ml-2 text-sm text-muted-foreground">
-                Supprimé — retour à la liste…
-              </span>
-            )}
             {remove.isError && (
               <>
                 <span className="ml-2 text-sm text-destructive">{remove.error.message}</span>
@@ -262,9 +264,13 @@ function ServerSettingsPage() {
       <ConfirmDialog
         open={askReinstall}
         onOpenChange={setAskReinstall}
-        onConfirm={() => {
-          reinstallMutation.mutate();
-          setAskReinstall(false);
+        onConfirm={async () => {
+          try {
+            await reinstallMutation.mutateAsync();
+            setAskReinstall(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title="Es-tu sûr de vouloir réinstaller le serveur ?"
         description="Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à sauvegarder tes données."
@@ -287,9 +293,14 @@ function ServerSettingsPage() {
       <ConfirmDialog
         open={askDelete}
         onOpenChange={setAskDelete}
-        onConfirm={() => {
-          remove.mutate(false);
-          setAskDelete(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync(false);
+            setAskDelete(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open (the card
+            // offers the force retry when the agent is unreachable).
+          }
         }}
         title={server ? `Supprimer « ${server.name} » ?` : ''}
         description="Le dossier sera effacé."
@@ -301,9 +312,13 @@ function ServerSettingsPage() {
       <ConfirmDialog
         open={askForceDelete}
         onOpenChange={setAskForceDelete}
-        onConfirm={() => {
-          remove.mutate(true);
-          setAskForceDelete(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync(true);
+            setAskForceDelete(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={server ? `Supprimer « ${server.name} » sans l’agent ?` : ''}
         description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."

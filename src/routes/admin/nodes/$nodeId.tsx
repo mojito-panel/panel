@@ -225,9 +225,13 @@ function AdminNodeEditPage() {
       <ConfirmDialog
         open={tokenDialogOpen}
         onOpenChange={setTokenDialogOpen}
-        onConfirm={() => {
-          reset.mutate();
-          setTokenDialogOpen(false);
+        onConfirm={async () => {
+          try {
+            await reset.mutateAsync();
+            setTokenDialogOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title="Régénérer le token ?"
         description="L’agent en cours d’exécution ne reconnaîtra plus le panel tant que son shard.yml n’est pas mis à jour."
@@ -641,9 +645,13 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
         <ConfirmDialog
           open
           onOpenChange={(open) => !open && setAllocationToDelete(null)}
-          onConfirm={() => {
-            remove.mutate(allocationToDelete.id);
-            setAllocationToDelete(null);
+          onConfirm={async () => {
+            try {
+              await remove.mutateAsync(allocationToDelete.id);
+              setAllocationToDelete(null);
+            } catch {
+              // Toasted by the mutation — keep the dialog open.
+            }
           }}
           title={`Supprimer l’allocation ${allocationToDelete.ip}:${allocationToDelete.port} ?`}
           confirmLabel="Supprimer"

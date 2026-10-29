@@ -1,15 +1,17 @@
 import {
   functionalUpdate,
   useTable,
-  type ColumnDef,
   type ColumnVisibilityState,
   type PaginationState,
   type RowData,
-  type SortingState,
   type Updater,
 } from '@tanstack/react-table';
 import { useState } from 'react';
-import { DataTableColumnHeader } from '~/components/data-table/data-table-column-header';
+import {
+  buildColumns,
+  columnFiltersChangeHandler,
+  sortingChangeHandler,
+} from '~/components/data-table/table-wiring';
 import { DataTableFrame } from '~/components/data-table/data-table-frame';
 import { serverTableFeatures } from '~/components/data-table/features';
 import type { DefinedList, ListChoiceOption, ListQuery } from '~/lists/define';
@@ -44,29 +46,6 @@ export interface DataTableProps<TData extends RowData, TContext = void> {
   onRowClick?: (row: TData) => void;
 }
 
-/** Column definitions of a list, in declaration order. */
-function buildColumns<TData extends RowData, TContext>(
-  list: DefinedList<TData, TContext>,
-  rowContext: TContext | undefined,
-): ColumnDef<typeof serverTableFeatures, TData>[] {
-  return Object.entries(list.columns).map(([id, definition]) => ({
-    id,
-    header: definition.headerCell
-      ? () => definition.headerCell?.(rowContext)
-      : ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title={definition.header}
-            className={definition.className}
-          />
-        ),
-    cell: ({ row }) => definition.cell(row.original, rowContext as TContext),
-    enableSorting: Boolean(definition.sort),
-    enableColumnFilter: Boolean(definition.filter),
-    enableHiding: !definition.pinned,
-  }));
-}
-
 export function DataTable<TData extends RowData, TContext = void>({
   list,
   rows,
@@ -86,7 +65,7 @@ export function DataTable<TData extends RowData, TContext = void>({
     Object.fromEntries((hiddenColumns ?? []).map((id) => [id, false])),
   );
   const state = list.readTableState(search);
-  const columns = buildColumns(list, rowContext);
+  const columns = buildColumns(list, rowContext, 'server');
 
   const table = useTable({
     features: serverTableFeatures,
@@ -113,20 +92,8 @@ export function DataTable<TData extends RowData, TContext = void>({
       const page = next.pageSize !== state.pageSize ? 0 : Math.min(next.pageIndex, lastPage);
       onSearchChange({ page: page + 1, size: next.pageSize });
     },
-    onSortingChange: (updater: Updater<SortingState>) => {
-      const first = functionalUpdate(updater, state.sorting)[0];
-      onSearchChange({ sort: first?.id, dir: first?.desc ? 'desc' : 'asc', page: 1 });
-    },
-    onColumnFiltersChange: (updater) => {
-      const next = functionalUpdate(updater, state.columnFilters);
-      const patch: Partial<ListQuery> = { page: 1 };
-      for (const { column } of list.spec.filters) patch[column] = undefined;
-      for (const filter of next) {
-        patch[filter.id] =
-          typeof filter.value === 'string' && filter.value !== '' ? filter.value : undefined;
-      }
-      onSearchChange(patch);
-    },
+    onSortingChange: sortingChangeHandler(state, onSearchChange),
+    onColumnFiltersChange: columnFiltersChangeHandler(list, state, onSearchChange),
     onColumnVisibilityChange: setColumnVisibility,
   });
 

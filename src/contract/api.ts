@@ -49,6 +49,8 @@ export const serverResourcesSchema = z.object({
 export type ServerResourcesPayload = z.infer<typeof serverResourcesSchema>;
 
 export const installServerRequestSchema = z.object({
+  // The install route is the ONE request that DOES carry the id in the body
+  // (POST /servers/install has no path parameter — shard validates it).
   serverId: idSchema,
   name: z.string().min(1),
   recipe: z.unknown(), // Recipe validated on the panel side, passed as-is
@@ -65,10 +67,10 @@ export type InstallServerRequest = z.infer<typeof installServerRequestSchema>;
  * Reinstall — same semantics as Pelican: the agent stops the server (if
  * running), then re-runs the recipe's install script in place. The panel
  * sends the CURRENT recipe (an update may have changed the install script);
- * the agent keeps its stored installDir and resources.
+ * the agent keeps its stored installDir and resources. The server id never
+ * travels in the body — it is the `/servers/:serverId/reinstall` path.
  */
 export const reinstallServerRequestSchema = z.object({
-  serverId: idSchema,
   recipe: z.unknown(), // Recipe validated by the agent, passed as-is
   /** Resolved runtime recipes of the app's requires graph (installed first). */
   runtimes: z.array(z.unknown()).default([]),
@@ -79,13 +81,13 @@ export type ReinstallServerRequest = z.infer<typeof reinstallServerRequestSchema
 
 /**
  * Variable update — the panel re-sends the server's FULL variable record
- * (all env → value entries, not only the edited ones). The agent validates
+ * (all env → value entries, not only the edited ones); the server id is the
+ * `/servers/:serverId/variables` route path. The agent validates
  * each value against the recipe's variable definitions, then updates its
  * stored entry: the new values are used on the NEXT start (a running
  * process keeps its original environment).
  */
 export const updateServerVariablesRequestSchema = z.object({
-  serverId: idSchema,
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 
@@ -95,14 +97,14 @@ export type UpdateServerVariablesRequest = z.infer<
 
 /**
  * Resources update (Pelican "set primary allocation" / port change, and
- * the power start/restart limits sync). The FULL record is pushed every
+ * the power start/restart limits sync). The server id is the route path
+ * (`/servers/:serverId/resources`). The FULL record is pushed every
  * time — port, ip, memoryMb and cpuCores together, never partial chunks:
  * the panel is the source of truth and the agent replaces its stored
  * resources wholesale. The new values apply on the NEXT start — a
  * running process keeps its original environment.
  */
 export const updateServerResourcesRequestSchema = z.object({
-  serverId: idSchema,
   resources: z.object({
     port: z.number().int().positive(),
     ip: z.string().min(1),
@@ -123,14 +125,12 @@ export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
 export type ServerAction = z.infer<typeof serverActionSchema>;
 
 export const serverActionRequestSchema = z.object({
-  serverId: idSchema,
   action: serverActionSchema,
 });
 
 export type ServerActionRequest = z.infer<typeof serverActionRequestSchema>;
 
 export const sendCommandRequestSchema = z.object({
-  serverId: idSchema,
   command: z.string().min(1),
 });
 
@@ -149,13 +149,25 @@ export const serverStatusSchema = z.enum([
 
 export type ServerStatus = z.infer<typeof serverStatusSchema>;
 
+/**
+ * Server info as the agent's GET /servers/:serverId answers (shard
+ * internal/api/servers.go): identity + live status + the panel-bound
+ * runtime state string + the replayed console tail. The metric fields
+ * (pid/ramMb/cpuPercent/startedAt) are reserved by the agent but currently
+ * always null — kept nullable so the schema stays the wire's truth.
+ */
 export const serverInfoSchema = z.object({
   serverId: idSchema,
+  name: z.string(),
   status: serverStatusSchema,
+  /** Agent-side runtime state (Go ProcessState, e.g. "offline", "starting"). */
+  runtimeState: z.string(),
   pid: z.number().int().positive().nullable(),
   ramMb: z.number().nonnegative().nullable(),
   cpuPercent: z.number().nonnegative().nullable(),
   startedAt: z.string().datetime().nullable(),
+  /** Last console lines (the agent replays at most 50). */
+  logs: z.array(z.string()),
 });
 
 export type ServerInfo = z.infer<typeof serverInfoSchema>;
@@ -218,17 +230,6 @@ export const logLineSchema = z.object({
 });
 
 export type LogLine = z.infer<typeof logLineSchema>;
-
-// ─── WebSocket messages (discriminated union) ───────────────────────────────────
-
-export const wsMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('install-progress'), payload: installProgressSchema }),
-  z.object({ type: z.literal('log'), payload: logLineSchema }),
-  z.object({ type: z.literal('status'), payload: serverInfoSchema }),
-  z.object({ type: z.literal('pong') }),
-]);
-
-export type WsMessage = z.infer<typeof wsMessageSchema>;
 
 // ─── Console permissions & JWT (browser ↔ agent, token issued by the panel) ───
 
@@ -595,7 +596,6 @@ export type BackupOperation = z.infer<typeof backupOperationSchema>;
 
 /** Creates a backup — the agent archives async (202), the panel polls. */
 export const createBackupRequestSchema = z.object({
-  serverId: idSchema,
   /** Panel-generated backup id — the archive file name on the agent. */
   backupId: idSchema,
   /** Overrides the recipe's include patterns for THIS backup (optional). */
@@ -604,9 +604,8 @@ export const createBackupRequestSchema = z.object({
 
 export type CreateBackupRequest = z.infer<typeof createBackupRequestSchema>;
 
-/** Restores a backup onto the (stopped) server. */
+/** Restores a backup onto the (stopped) server — ids live in the route path. */
 export const restoreBackupRequestSchema = z.object({
-  serverId: idSchema,
   /**
    * Wipe the install dir (except the agent's `.bin/`) before extracting —
    * destructive: files absent from the archive are LOST. Default: merge.
@@ -747,8 +746,6 @@ export const AGENT_ROUTES = {
   command: 'POST /servers/:serverId/command',
   info: 'GET /servers/:serverId',
   installStatus: 'GET /servers/:serverId/install',
-  /** Incremental runtime logs (live console fallback, cursor-based). */
-  logs: 'GET /servers/:serverId/logs',
   variablesUpdate: 'POST /servers/:serverId/variables',
   resourcesUpdate: 'POST /servers/:serverId/resources',
   list: 'GET /servers',

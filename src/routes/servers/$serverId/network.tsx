@@ -228,9 +228,14 @@ function ServerNetworkPage() {
       <ConfirmDialog
         open={toRevoke !== null}
         onOpenChange={(open) => !open && setToRevoke(null)}
-        onConfirm={() => {
-          if (toRevoke) remove.mutate(toRevoke.id);
-          setToRevoke(null);
+        onConfirm={async () => {
+          if (!toRevoke) return;
+          try {
+            await remove.mutateAsync(toRevoke.id);
+            setToRevoke(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={toRevoke ? `Retirer l’allocation ${toRevoke.ip}:${toRevoke.port} ?` : ''}
         description="Elle retournera dans le pool du node."

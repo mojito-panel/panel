@@ -1,6 +1,5 @@
 import {
   sql,
-  raw,
   type EntityManager,
   type EntityName,
   type QBFilterQuery,
@@ -28,8 +27,7 @@ import type {
  * - a joined table is pulled with `sql.ref(table)` (a raw fragment would be
  *   wrapped as a sub-query: `left join (user) as "u"`);
  * - that join is single-row (its `left` column is unique), which is what keeps
- *   `getResultAndCount()`'s count exact;
- * - raw fragments (`raw(…)`) are valid as `where` keys and as `orderBy` keys.
+ *   `getResultAndCount()`'s count exact.
  */
 
 /** Root query builder of a list — the alias always comes from the list spec. */
@@ -46,15 +44,9 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
-/**
- * `where`/`orderBy` key of a target: the ORM path, or a raw fragment.
- *
- * A fragment is consumed as an object KEY: the ORM serializes it through its own
- * `key`/`toString` and recognizes it afterwards, so the runtime value stays the
- * fragment while the type is the string an object literal accepts.
- */
+/** `where`/`orderBy` key of a target — the ORM property path. */
 function targetKey(target: ListPath): string {
-  return ('path' in target ? target.path : raw(target.sql)) as unknown as string;
+  return target.path;
 }
 
 /** Join alias a path depends on (`'u.email'` → `'u'`), or null for root paths. */
@@ -64,7 +56,7 @@ function aliasOfPath(path: string): string | null {
 
 /** Join alias a target depends on, or null when it reads the root table. */
 function joinAliasOf(target: ListPath): string | null {
-  return 'path' in target ? aliasOfPath(target.path) : null;
+  return aliasOfPath(target.path);
 }
 
 /** ORM condition of one active filter value. */

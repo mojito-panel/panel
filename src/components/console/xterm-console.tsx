@@ -39,6 +39,8 @@ interface XtermConsoleProps {
 const WS_MAX_ATTEMPTS = 3;
 /** Reconnect backoff cap (ms). */
 const WS_BACKOFF_CAP_MS = 5000;
+/** Slow retry cadence once the fast attempts gave up (e.g. panel down). */
+const SLOW_RETRY_MS = 30_000;
 /** Refresh the console token this long before its expiry (Pelican-style re-auth). */
 const TOKEN_REFRESH_MARGIN_SECONDS = 60;
 
@@ -88,6 +90,7 @@ export function XtermConsole({
     let disposed = false;
     let term: import('@xterm/xterm').Terminal | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let slowRetryTimer: ReturnType<typeof setTimeout> | null = null;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let fitRaf: number | null = null;
@@ -106,7 +109,7 @@ export function XtermConsole({
      * red; the rest (server online/stopped) in green.
      */
     const eventColor = (code: string, params?: Record<string, string>): string => {
-      if (code.startsWith('watchdog.') || code === 'install.failed') return '\x1b[31m';
+      if (code.startsWith('watchdog.') || code === 'install.failed' || code === 'server.crash_loop') return '\x1b[31m';
       if (code.startsWith('power.')) return '\x1b[36m';
       if (code === 'install.done') return '\x1b[32m';
       if (params?.step) return '\x1b[33m';
@@ -131,7 +134,7 @@ export function XtermConsole({
           void (async () => {
             try {
               // Fresh token before expiry — Pelican-style in-place re-auth
-              const fresh = await createToken({ data: { serverId, after: 0 } });
+              const fresh = await createToken({ data: { serverId } });
               if (disposed || !socket || socket.readyState !== WebSocket.OPEN) return;
               currentToken = fresh.token;
               socket.send(JSON.stringify({ type: 'auth', token: fresh.token }));
@@ -148,17 +151,25 @@ export function XtermConsole({
 
     const connect = async (attempt: number) => {
       if (disposed) return;
+      // A reconnect superseded a pending slow retry — cancel it.
+      if (slowRetryTimer) {
+        clearTimeout(slowRetryTimer);
+        slowRetryTimer = null;
+      }
 
       // Fresh token at every attempt (short TTL — never reuse an old one)
       let wsUrl: string;
       try {
-        const response = await createToken({ data: { serverId, after: 0 } });
+        const response = await createToken({ data: { serverId } });
         wsUrl = response.wsUrl;
         currentToken = response.token;
       } catch {
         // Panel unreachable / ownership refused — retry
         if (attempt >= WS_MAX_ATTEMPTS - 1) {
           if (term) term.writeln('\x1b[31m[error] Console connection failed — retrying later\x1b[0m');
+          // Make "later" true: one more attempt every SLOW_RETRY_MS until
+          // the panel answers again (e.g. a dev-server restart).
+          slowRetryTimer = setTimeout(() => void connect(0), SLOW_RETRY_MS);
           return;
         }
         reconnectTimer = setTimeout(() => void connect(attempt + 1), 1000 * (attempt + 1));
@@ -177,7 +188,15 @@ export function XtermConsole({
 
       ws.onmessage = (event) => {
         if (disposed) return;
-        const message = JSON.parse(event.data.toString()) as ConsoleServerMessage;
+        // A malformed frame (truncated write, partial UTF-16 through a
+        // proxy…) must not kill the handler — drop it; the next frame
+        // re-syncs the stream.
+        let message: ConsoleServerMessage;
+        try {
+          message = JSON.parse(event.data.toString()) as ConsoleServerMessage;
+        } catch {
+          return;
+        }
         if (message.type === 'auth-ok') {
           if (!authenticated) {
             authenticated = true;
@@ -222,7 +241,7 @@ export function XtermConsole({
             // Token expired/refresh failed — re-auth in place with a fresh one
             void (async () => {
               try {
-                const fresh = await createToken({ data: { serverId, after: 0 } });
+                const fresh = await createToken({ data: { serverId } });
                 currentToken = fresh.token;
                 if (socket && socket.readyState === WebSocket.OPEN) {
                   socket.send(JSON.stringify({ type: 'auth', token: fresh.token }));
@@ -312,6 +331,7 @@ export function XtermConsole({
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (slowRetryTimer) clearTimeout(slowRetryTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
       if (resizeObserver) resizeObserver.disconnect();
       if (fitRaf !== null) cancelAnimationFrame(fitRaf);

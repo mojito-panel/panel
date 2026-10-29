@@ -27,6 +27,7 @@ import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
+import { Textarea } from '~/components/ui/textarea';
 import {
   Card,
   CardAction,
@@ -72,9 +73,15 @@ function AdminRecipesPage() {
 
   const importMutation = useMutation({
     mutationFn: (input: ImportMutationInput) => importRecipes({ data: input }),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ['admin-recipes'] });
+      // Summary toast (like the egg import) — the per-file detail list
+      // stays rendered under the import form.
+      toast.success('Import terminé', {
+        description: `${result.imported.length} recette(s) importée(s), ${result.failed.length} en échec — détail sous le formulaire.`,
+      });
     },
+    onError: (error) => toast.error(error.message),
   });
 
   const importEggMutation = useMutation({
@@ -185,7 +192,7 @@ function AdminRecipesPage() {
         <CardHeader>
           <CardTitle>Recettes</CardTitle>
           <CardDescription>
-            Recettes (format v3, œufs Pelican importables) installables sur les serveurs.
+            Recettes (format v4, œufs Pelican importables) installables sur les serveurs.
           </CardDescription>
           <CardAction>
             <div className="flex gap-2">
@@ -228,9 +235,14 @@ function AdminRecipesPage() {
         onOpenChange={(open) => {
           if (!open) setRecipeToDelete(null);
         }}
-        onConfirm={() => {
-          if (recipeToDelete) remove.mutate(recipeToDelete.id);
-          setRecipeToDelete(null);
+        onConfirm={async () => {
+          if (!recipeToDelete) return;
+          try {
+            await remove.mutateAsync(recipeToDelete.id);
+            setRecipeToDelete(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer la recette « ${recipeToDelete?.name} » ?`}
         confirmLabel="Supprimer"
@@ -245,9 +257,14 @@ function AdminRecipesPage() {
         onOpenChange={(open) => {
           if (!open) setRecipeToUpdate(null);
         }}
-        onConfirm={() => {
-          if (recipeToUpdate) updateSource.mutate(recipeToUpdate.id);
-          setRecipeToUpdate(null);
+        onConfirm={async () => {
+          if (!recipeToUpdate) return;
+          try {
+            await updateSource.mutateAsync(recipeToUpdate.id);
+            setRecipeToUpdate(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`« ${recipeToUpdate?.name} » a été modifiée localement`}
         description="Mettre à jour depuis la source écrasera les modifications locales — la recette redeviendra identique au fichier du registre."
@@ -266,12 +283,12 @@ function AdminRecipesPage() {
             <form onSubmit={onImportSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="recipeJson">JSON (texte)</Label>
-                <textarea
+                <Textarea
                   id="recipeJson"
                   name="recipeJson"
                   rows={8}
-                  placeholder={'{\n  "schema_version": 3,\n  "id": "ma-recette",\n  …'}
-                  className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
+                  placeholder={'{\n  "schema_version": 4,\n  "id": "ma-recette",\n  …'}
+                  className="font-mono text-xs"
                 />
               </div>
 
@@ -303,12 +320,12 @@ function AdminRecipesPage() {
               {/* ─── Egg import (PTDL_v2) — mapped, install scripts ignored ─── */}
               <div className="space-y-2 rounded-md border p-3">
                 <Label htmlFor="eggJson">Œuf Pelican (PTDL_v2, texte)</Label>
-                <textarea
+                <Textarea
                   id="eggJson"
                   name="eggJson"
                   rows={4}
                   placeholder={'{\n  "meta": { "version": "PTDL_v2" },\n  …'}
-                  className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-xs"
+                  className="font-mono text-xs"
                 />
                 <Label htmlFor="eggFiles">Fichiers d'œuf (.json)</Label>
                 <input

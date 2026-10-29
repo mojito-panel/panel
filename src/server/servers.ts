@@ -12,7 +12,7 @@ import type {
   ServerStatus,
 } from '~/contract';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
-import type { IBackup, INode, IServer, IUser, ServerStatusDb } from '~/db/types';
+import type { INode, IServer, IUser } from '~/db/types';
 import { orm } from './orm';
 import { HttpError } from './session';
 import { logActivity } from './activity';
@@ -156,10 +156,7 @@ export async function installServer(
   // VALUES — submitted form values over the definitions' defaults
   // (runtime variables like JAVA_VERSION included). A recipe edited
   // later never impacts this server.
-  const snapshot = await buildRecipeSnapshot(
-    orm.em,
-    recipe.json as Record<string, unknown>,
-  );
+  const snapshot = await buildRecipeSnapshot(recipe.json as Record<string, unknown>);
   const variables = mergeVariableValues(
     snapshot.recipe.variables ?? [],
     input.variables,
@@ -249,7 +246,7 @@ export async function refreshServerRecipeSnapshot(
   }
 
   const recipe = await requireRecipeOf(server);
-  const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
+  const snapshot = await buildRecipeSnapshot(recipe.json as Record<string, unknown>);
   server.recipeSnapshot = snapshot as unknown as Record<string, unknown>;
   server.recipeSyncedAt = new Date();
   server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);
@@ -281,7 +278,7 @@ export async function reinstallServerFromPanel(
     // marked as outdated.
     snapshot = await refreshServerRecipeSnapshot(server, { recipeId: options.recipeId });
   } else {
-    snapshot = await serverRecipeSnapshot(em, server);
+    snapshot = await serverRecipeSnapshot(server);
   }
 
   const allocations = await em.find(Allocation, { serverId: server.id });
@@ -346,7 +343,11 @@ export async function reinstallServerFromPanel(
 export async function executeServerAction(
   server: IServer,
   action: ServerActionContract,
-  options: { actor?: { id: string; name: string | null; email: string } | null } = {},
+  options: {
+    actor?: { id: string; name: string | null; email: string } | null;
+    /** Abort the agent call (timeout — the schedule runner bounds every call). */
+    signal?: AbortSignal;
+  } = {},
 ): Promise<{ status: string }> {
   const em = orm.em;
 
@@ -365,9 +366,9 @@ export async function executeServerAction(
   const node = await requireNodeOf(server);
 
   try {
-    const result = await agentServerAction(node, server.id, action);
-    // Sync the status
-    server.status = result.status as ServerStatusDb;
+    const result = await agentServerAction(node, server.id, action, { signal: options.signal });
+    // Sync the status — the type flows from the contract union.
+    server.status = result.status;
     await em.flush();
     await logActivity({
       event: 'server:power',
@@ -429,8 +430,9 @@ export async function deleteServer(
 }
 
 /**
- * Live status reported by the agent, synced into the DB row. Returns null
- * when the agent is unreachable (NOT an error — the UI shows "Inconnu").
+ * Live status reported by the agent (validated against the contract),
+ * synced into the DB row. Returns null when the agent is unreachable
+ * (NOT an error — the UI shows "Inconnu").
  */
 export async function syncRuntimeStatus(
   server: IServer,
@@ -458,19 +460,4 @@ export async function loadServerContext(server: IServer) {
   const recipe = await em.findOne(Recipe, { id: server.recipeId });
   const primaryAllocation = await findPrimaryAllocation(server.id);
   return { node, recipe, primaryAllocation };
-}
-
-/** Counts the backups of a server (admin detail page). */
-export async function countServerBackups(serverId: string): Promise<number> {
-  return orm.em.count(Backup, { serverId });
-}
-
-/** Counts the sub-user grants of a server (admin detail page). */
-export async function countServerSubusers(serverId: string): Promise<number> {
-  return orm.em.count(ServerUser, { serverId });
-}
-
-/** All backups of a server (backups list sync + limit checks). */
-export async function findServerBackups(serverId: string): Promise<IBackup[]> {
-  return orm.em.find(Backup, { serverId });
 }

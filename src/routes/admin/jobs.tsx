@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
 import { RefreshCw } from 'lucide-react';
@@ -16,6 +16,7 @@ import { mergeQuery, type ListQuery } from '~/lists/define';
  */
 export const Route = createFileRoute('/admin/jobs')({
   validateSearch: (search: Record<string, unknown>): ListQuery => adminJobsList.querySchema.parse(search),
+  search: { middlewares: [stripSearchParams(adminJobsList.defaultSearch)] },
   component: AdminJobsPage,
 });
 

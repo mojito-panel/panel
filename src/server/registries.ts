@@ -24,6 +24,7 @@ import {
 } from './registry-entries';
 import { cloneRecipeFiles, readGitFile } from './git-source';
 import {
+  assertValidRecipeJson,
   fetchRecipeJsonFromUrl,
   normalizeRecipeUrl,
   requireRecipe,
@@ -188,8 +189,10 @@ export async function enqueueRegistrySync(registryId: string): Promise<void> {
  * Syncs one registry: clone depth 1, validate every recipe file into
  * `registry_entry` rows (the previous set is REPLACED), cache the repo-root
  * cover on the row and stamp the upstream hashes of the recipes imported
- * from it. A failure lands in `lastError` (the previous catalog stays
- * readable).
+ * from it. The registry stamp and the catalog replace are ONE transaction:
+ * a failed insert rolls back to the previous catalog (delete + bulk insert
+ * are never half-applied) and the failure lands in `lastError` while the
+ * previous catalog stays readable.
  */
 async function syncRegistryRow(registry: IRegistry): Promise<void> {
   const em = orm.em;
@@ -202,28 +205,45 @@ async function syncRegistryRow(registry: IRegistry): Promise<void> {
     );
 
     const drafts = buildRegistryEntries(files);
-    registry.cover = cover;
-    registry.headSha = headSha;
-    registry.branchName = branch;
-    registry.lastSyncedAt = new Date();
-    registry.lastError = null;
-    await em.flush();
 
-    await replaceRegistryEntries(registry.id, drafts);
-    await stampRegistryRecipes(registry, drafts);
+    // ONE unit of work. The stamp goes through nativeUpdate on purpose: it
+    // joins the transaction unconditionally, and on rollback the managed
+    // entity stays PRISTINE — a later flush of the request context can
+    // never persist a success stamp for a catalog that failed to replace.
+    const now = new Date();
+    await em.transactional(async (tem) => {
+      await tem.nativeUpdate(Registry, { id: registry.id }, {
+        cover,
+        headSha,
+        branchName: branch,
+        lastSyncedAt: now,
+        lastError: null,
+        updatedAt: now,
+      });
+      // Inside the callback `orm.em` resolves to the transaction fork, so
+      // the delete + bulk insert join the same unit.
+      await replaceRegistryEntries(registry.id, drafts);
+    });
+
+    await stampRegistryRecipes(registry, branch, drafts);
   } catch (err) {
-    registry.lastSyncedAt = new Date();
-    registry.lastError = (err as Error).message;
-    await em.flush();
+    // Previous catalog kept (rolled back), error recorded on the row.
+    await em.nativeUpdate(Registry, { id: registry.id }, {
+      lastSyncedAt: new Date(),
+      lastError: (err as Error).message,
+      updatedAt: new Date(),
+    });
   }
 }
 
 /**
  * Replaces the catalog of one registry: every previous `registry_entry` row
- * goes, the fresh draft set is bulk-inserted (one flush). The catalog is
- * small (recipes repos carry dozens of files, not thousands) and the sync
- * is never hot — a wholesale replace keeps the table strictly equal to the
- * last clone, with no diff logic to get wrong.
+ * goes, the fresh draft set is bulk-inserted (one flush). Runs INSIDE the
+ * sync's transaction (see syncRegistryRow): a failed insert rolls back to
+ * the previous catalog, so the delete + bulk insert are never half-applied.
+ * The catalog is small (recipes repos carry dozens of files, not
+ * thousands) and the sync is never hot — a wholesale replace keeps the
+ * table strictly equal to the last clone, with no diff logic to get wrong.
  */
 async function replaceRegistryEntries(registryId: string, drafts: RegistryEntryDraft[]): Promise<void> {
   const em = orm.em;
@@ -263,16 +283,22 @@ async function sshKeyOf(registry: IRegistry): Promise<ISshKey | null> {
 
 /**
  * Stamps the upstream hashes of every recipe imported from this registry
- * (matched by its source URL — `"<repo>#<branch>:<path>"`). Only the LIGHT
- * entry columns are read (path/sha — never the cached file contents). A
+ * (matched by its source URL — `"<repo>#<branch>:<path>"`). The branch is
+ * passed explicitly: the sync just wrote it via nativeUpdate, so the
+ * in-memory row the caller holds may be stale. Only the LIGHT entry
+ * columns are read (path/sha — never the cached file contents). A
  * path that disappeared upstream reads as null sha + a checked timestamp:
  * "gone".
  */
-async function stampRegistryRecipes(registry: IRegistry, drafts: RegistryEntryDraft[]): Promise<void> {
-  if (!registry.branchName) return;
+async function stampRegistryRecipes(
+  registry: IRegistry,
+  branchName: string,
+  drafts: RegistryEntryDraft[],
+): Promise<void> {
+  if (!branchName) return;
 
   const em = orm.em;
-  const prefix = `${registry.url}#${registry.branchName}:`;
+  const prefix = `${registry.url}#${branchName}:`;
   const recipes = await em.find(Recipe, { sourceUrl: { $ne: null } });
   const shaBySourceUrl = new Map(drafts.map((draft) => [`${prefix}${draft.path}`, draft.sha]));
   const now = new Date();
@@ -294,6 +320,14 @@ export interface ImportedDependency {
   created: boolean;
 }
 
+/** Light catalog row of the import cascade — everything except the content. */
+interface LightRegistryEntry {
+  path: string;
+  sha: string;
+  slug: string | null;
+  error: string | null;
+}
+
 /** Report of a one-click registry import: the recipe + its imported requirements. */
 export interface RegistryImportReport {
   slug: string;
@@ -313,9 +347,9 @@ export interface RegistryImportReport {
  * every recipe the target `requires` is resolved transitively from the SAME
  * registry (an existing local recipe by slug satisfies the requirement, an
  * entry of the registry is imported along, anything else lands in
- * `missing`). The contents come from the registry's catalog rows (no
- * clone); each recipe gets the git-form source URL and the entry hash as
- * its provenance stamp.
+ * `missing`). The catalog is read with LIGHT columns only (the cached file
+ * contents are fetched per imported entry, on demand); each recipe gets
+ * the git-form source URL and the entry hash as its provenance stamp.
  *
  * A slug clash with a recipe from ANOTHER source is refused — overwriting
  * another origin silently is never OK.
@@ -329,8 +363,17 @@ export async function importRegistryEntry(
   if (!registry) throw new HttpError(404, 'Registre introuvable');
   if (!registry.branchName) throw new HttpError(409, 'Le registre n’est pas encore synchronisé');
 
-  /** The registry's catalog, light columns only — id→slug and slug→entry. */
-  const entries = await em.find(RegistryEntry, { registryId });
+  /**
+   * The registry's catalog, LIGHT columns only (everything except the
+   * cached file content) — slug resolution never reads the contents;
+   * each imported entry fetches its own on demand below.
+   */
+  const entries: LightRegistryEntry[] = (await em.find(RegistryEntry, { registryId }, { exclude: ['content'] })).map((entry) => ({
+    path: entry.path,
+    sha: entry.sha,
+    slug: entry.slug ?? null,
+    error: entry.error ?? null,
+  }));
   const entryBySlug = new Map(
     entries
       .filter((entry) => entry.slug !== null && !entry.error)
@@ -342,8 +385,18 @@ export async function importRegistryEntry(
   const missing = new Set<string>();
   const inProgress = new Set<string>();
 
-  const importOne = async (entry: IRegistryEntry): Promise<void> => {
-    const recipeJson = parseRecipeJson(entry.content);
+  const importOne = async (entry: LightRegistryEntry): Promise<void> => {
+    // On-demand content fetch — only the imported entries load their cached
+    // file (`refresh` because the light list above left a partial entity in
+    // the identity map). Validated through assertValidRecipeJson so an
+    // unknown template variable fails HERE, not on the agent.
+    const row = await em.findOne(
+      RegistryEntry,
+      { registryId, path: entry.path },
+      { refresh: true },
+    );
+    if (!row) throw new HttpError(404, 'Fichier introuvable dans le registre');
+    const recipeJson = assertValidRecipeJson(row.content);
     const source = {
       url: formatGitSource(registry.url, registry.branchName as string, entry.path),
       sha: entry.sha,
@@ -451,7 +504,7 @@ export async function updateRecipeFromSource(
       ? await fetchRecipeJsonFromUrl(source.url)
       : await readGitRecipeFile(source);
 
-  const recipeJson = parseRecipeJson(raw);
+  const recipeJson = assertValidRecipeJson(raw);
   const sha = canonicalRecipeHash(recipeJson);
 
   await updateRecipe(recipeId, recipeJson);
@@ -525,7 +578,7 @@ async function runSweep(): Promise<void> {
   }
 
   await checkUncoveredRecipeSources();
-  await writeSettings(em, { 'marketplace:last_check': new Date().toISOString() });
+  await writeSettings({ 'marketplace:last_check': new Date().toISOString() });
 }
 
 /**
@@ -537,17 +590,24 @@ async function runSweep(): Promise<void> {
 async function maybeEnqueueSweep(): Promise<void> {
   if (sweepPending) return;
 
-  const em = orm.em;
-  const intervalMinutes = Number(await getSettingValue(em, 'marketplace:sync_interval'));
+  const intervalMinutes = Number(await getSettingValue('marketplace:sync_interval'));
   if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0) return;
 
-  const lastCheck = await getSettingValue(em, 'marketplace:last_check');
+  const lastCheck = await getSettingValue('marketplace:last_check');
   const lastCheckedAt = lastCheck ? Date.parse(lastCheck) : 0;
   if (Date.now() - lastCheckedAt < intervalMinutes * 60_000) return;
 
   sweepPending = true;
   try {
-    await getQueue().send(MARKETPLACE_QUEUE, {}, JOB_OPTIONS);
+    // Same singleton semantics as a manual sync, keyed per JOB instead of
+    // per registry: a sweep and a manual sync of the same registry can no
+    // longer race each other into a unique-constraint violation, and two
+    // sweeps cannot stack within the collapse window either.
+    await getQueue().send(MARKETPLACE_QUEUE, {}, {
+      ...JOB_OPTIONS,
+      singletonKey: 'marketplace-sweep',
+      singletonSeconds: 60,
+    });
   } catch (err) {
     sweepPending = false;
     throw err;

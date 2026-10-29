@@ -45,7 +45,14 @@ export function VariableField({
           disabled={disabled}
         >
           <SelectTrigger id={variable.env} className="w-full" onBlur={onBlur}>
-            <SelectValue />
+            {/* base-ui only resolves an item's LABEL once its popup opened —
+                a closed trigger would show the raw 'true'/'false' wire value,
+                so the label is resolved here (FilterControl is the reference). */}
+            <SelectValue>
+              {(current: string | null) =>
+                current === 'true' ? 'Activé' : current === 'false' ? 'Désactivé' : '—'
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="true">Activé</SelectItem>

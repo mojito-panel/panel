@@ -51,3 +51,8 @@ jobs:
 
       - name: Tests
         run: npx vitest run
+
+      # The build needs no database (vite, client + SSR) — it catches
+      # import-protection and bundling regressions the tests cannot see.
+      - name: Build (client + SSR, no DB needed)
+        run: npm run build

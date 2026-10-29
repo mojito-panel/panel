@@ -7,7 +7,6 @@ import {
   serverInfoSchema,
   installProgressSchema,
   logLineSchema,
-  wsMessageSchema,
   permissionSchema,
   ALL_PERMISSIONS,
   CONSOLE_TOKEN_TTL_SECONDS,
@@ -149,18 +148,19 @@ describe('serverActionSchema', () => {
 
 describe('sendCommandRequestSchema', () => {
   it('rejects an empty command', () => {
-    const result = sendCommandRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
-      command: '',
-    });
+    const result = sendCommandRequestSchema.safeParse({ command: '' });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts a command without a body serverId — the id is the route path', () => {
+    const result = sendCommandRequestSchema.safeParse({ command: 'say hello' });
+    expect(result.success).toBe(true);
   });
 });
 
 describe('updateServerResourcesRequestSchema', () => {
   it('validates a full resources update (limits sync)', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0 },
     });
     expect(result.success).toBe(true);
@@ -168,7 +168,6 @@ describe('updateServerResourcesRequestSchema', () => {
 
   it('rejects a partial record (port/ip only)', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: { port: 25565, ip: '192.168.1.10' },
     });
     expect(result.success).toBe(false);
@@ -176,7 +175,6 @@ describe('updateServerResourcesRequestSchema', () => {
 
   it('rejects a non-integer port', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: { port: 25565.5, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 1 },
     });
     expect(result.success).toBe(false);
@@ -184,23 +182,13 @@ describe('updateServerResourcesRequestSchema', () => {
 
   it('rejects an empty ip', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: { port: 25565, ip: '', memoryMb: 4096, cpuCores: 1 },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects an empty serverId', () => {
-    const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '',
-      resources: { port: 25565, ip: '192.168.1.10' },
     });
     expect(result.success).toBe(false);
   });
 
   it('accepts secondary ports in the record', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: {
         port: 25565,
         ip: '192.168.1.10',
@@ -217,7 +205,6 @@ describe('updateServerResourcesRequestSchema', () => {
 
   it('defaults the secondary ports to an empty list (old agent record)', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0 },
     });
     expect(result.success).toBe(true);
@@ -228,7 +215,6 @@ describe('updateServerResourcesRequestSchema', () => {
 
   it('rejects an invalid secondary port', () => {
     const result = updateServerResourcesRequestSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
       resources: { port: 25565, ip: '192.168.1.10', memoryMb: 4096, cpuCores: 0, ports: [0] },
     });
     expect(result.success).toBe(false);
@@ -236,28 +222,53 @@ describe('updateServerResourcesRequestSchema', () => {
 });
 
 describe('serverInfoSchema', () => {
-  it('validates a running status with pid', () => {
+  it('validates a running answer — the REAL agent response shape', () => {
     const result = serverInfoSchema.safeParse({
       serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'my-server',
       status: 'running',
-      pid: 1234,
-      ramMb: 512.5,
-      cpuPercent: 12.3,
-      startedAt: new Date().toISOString(),
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('validates a stopped status without metrics', () => {
-    const result = serverInfoSchema.safeParse({
-      serverId: '550e8400-e29b-41d4-a716-446655440000',
-      status: 'stopped',
+      runtimeState: 'running',
       pid: null,
       ramMb: null,
       cpuPercent: null,
       startedAt: null,
+      logs: ['[12:00:00] [Server thread/INFO]: Done!'],
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('my-server');
+      expect(result.data.logs).toHaveLength(1);
+    }
+  });
+
+  it('validates a stopped answer without metrics', () => {
+    const result = serverInfoSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'my-server',
+      status: 'stopped',
+      runtimeState: 'offline',
+      pid: null,
+      ramMb: null,
+      cpuPercent: null,
+      startedAt: null,
+      logs: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an unknown status', () => {
+    const result = serverInfoSchema.safeParse({
+      serverId: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'my-server',
+      status: 'kaboom',
+      runtimeState: 'offline',
+      pid: null,
+      ramMb: null,
+      cpuPercent: null,
+      startedAt: null,
+      logs: [],
+    });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -294,30 +305,6 @@ describe('logLineSchema', () => {
       line: '[12:00:00] [Server thread/INFO]: Done!',
     });
     expect(result.success).toBe(true);
-  });
-});
-
-describe('wsMessageSchema', () => {
-  it('validates an install-progress message', () => {
-    const result = wsMessageSchema.safeParse({
-      type: 'install-progress',
-      payload: {
-        serverId: '550e8400-e29b-41d4-a716-446655440000',
-        step: 1,
-        totalSteps: 3,
-        message: 'start',
-        percent: 0,
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('validates a pong', () => {
-    expect(wsMessageSchema.safeParse({ type: 'pong' }).success).toBe(true);
-  });
-
-  it('rejects an unknown type', () => {
-    expect(wsMessageSchema.safeParse({ type: 'unknown' }).success).toBe(false);
   });
 });
 
@@ -690,9 +677,8 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
   const serverId = '6f6c3c8e-0b7a-4a2e-9f2b-3a1d4c5e6f70';
   const backupId = '9d8b0f6e-2c4a-4e8f-9a3b-5c7d1e2f3a4b';
 
-  it('validates a create backup request', () => {
+  it('validates a create backup request — the server id is the route path, never the body', () => {
     const result = createBackupRequestSchema.safeParse({
-      serverId,
       backupId,
       include: ['world/**'],
     });
@@ -702,14 +688,14 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
     }
   });
 
-  it('defaults truncate to false on a restore request', () => {
-    const result = restoreBackupRequestSchema.parse({ serverId });
+  it('defaults truncate to false on a restore request (no body ids)', () => {
+    const result = restoreBackupRequestSchema.parse({});
     expect(result.truncate).toBe(false);
   });
 
-  it('rejects empty ids on a create backup request', () => {
+  it('rejects empty backup ids on a create backup request', () => {
     expect(
-      createBackupRequestSchema.safeParse({ serverId, backupId: '' }).success,
+      createBackupRequestSchema.safeParse({ backupId: '' }).success,
     ).toBe(false);
   });
 

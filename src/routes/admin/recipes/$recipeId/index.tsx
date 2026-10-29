@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { toast } from 'sonner';
 
 import { Download, Trash2 } from 'lucide-react';
 import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract';
@@ -64,6 +65,7 @@ function EditRecipePage() {
       await queryClient.invalidateQueries({ queryKey: ['recipe-options'] });
       await navigate({ to: '/admin/recipes', search: adminRecipesList.defaultSearch });
     },
+    onError: (error) => toast.error(error.message),
   });
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -116,9 +118,13 @@ function EditRecipePage() {
       <ConfirmDialog
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
-        onConfirm={() => {
-          remove.mutate();
-          setConfirmDeleteOpen(false);
+        onConfirm={async () => {
+          try {
+            await remove.mutateAsync();
+            setConfirmDeleteOpen(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer la recette « ${query.data?.name} » ?`}
         confirmLabel="Supprimer"

@@ -44,3 +44,32 @@ export class FixedWindowLimiter {
     return this.#hits.size;
   }
 }
+
+// ─── better-auth rate limiting (~/lib/auth) ──────────────────────────────────
+
+/**
+ * Rate-limit configuration handed to better-auth (`rateLimit` option).
+ * Exported from this PURE module so tests can assert the shape —
+ * importing ~/lib/auth in a test would drag the ORM singleton (and its
+ * Postgres connection) along, which is not feasible without the database.
+ *
+ * - global: 50 requests / 60 s per client IP across the auth endpoints;
+ * - `/sign-in/email`: 10 attempts / 60 s — the password is REUSED for SFTP
+ *   (see ~/lib/sftp), so the login door gets the strictest window. The
+ *   custom rule REPLACES better-auth's built-in sign-in rule (3 / 10 s,
+ *   which still allows ~1080 attempts/hour) with a tighter sustained cap
+ *   (10 / 60 s = 600/hour max).
+ *
+ * Values chosen from the documented options of the installed better-auth
+ * (v1.7): { enabled, window, max, customRules, storage }. Storage stays
+ * in-memory (the panel is a single process — see the schedules runner's
+ * single-instance note).
+ */
+export const AUTH_RATE_LIMIT = {
+  enabled: true,
+  window: 60,
+  max: 50,
+  customRules: {
+    '/sign-in/email': { window: 60, max: 10 },
+  },
+} as const;

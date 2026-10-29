@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract';
+import { RECIPE_FILE_PATTERN } from '../src/server/registry-entries';
 
 /**
  * Cross-repo contract test: EVERY recipe JSON of the shipped recipes repo
@@ -18,11 +19,18 @@ import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract
 
 const RECIPES_DIR = join(fileURLToPath(import.meta.url), '..', '..', '..', 'recipes');
 
-/** Lists `recipe-*.json` under the recipes repo — [] when it is absent. */
+/**
+ * Lists the recipe files under the recipes repo — [] when it is absent.
+ * The file pattern is the MARKETPLACE's own (RECIPE_FILE_PATTERN, shared
+ * import from src/server/registry-entries): `recipe-*.json` anywhere and
+ * NESTED `<id>.json`, exactly what a registry sync would catalog — the
+ * shipped repo and the marketplace must never disagree on what a recipe
+ * file is.
+ */
 function listRecipeFiles(): string[] {
   try {
     return readdirSync(RECIPES_DIR, { recursive: true, encoding: 'utf-8' })
-      .filter((file) => /recipe-[^/\\]+\.json$/.test(file))
+      .filter((file) => RECIPE_FILE_PATTERN.test(file.replaceAll('\\', '/')))
       .map((file) => join(RECIPES_DIR, file))
       .filter((file) => existsSync(file));
   } catch {

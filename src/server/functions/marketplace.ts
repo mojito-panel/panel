@@ -3,6 +3,7 @@ import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
 import { orm } from '../orm';
 import { HttpError, requirePanelPermission } from '../session';
 import { withOrmContext } from '../middleware';
+import { logActivity } from '../activity';
 import { canonicalRecipeHash } from '../registry-entries';
 import {
   computeEntryStatus,
@@ -242,8 +243,9 @@ export const addRegistryFn = createServerFn({ method: 'POST' })
   .validator(addRegistrySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['create'] });
+    const user = await requirePanelPermission({ 'panel.recipes': ['create'] });
     const registry = await addRegistry(data);
+    await logActivity({ event: 'registry:add', description: `Registre « ${registry.name} » ajouté (${registry.url})`, actor: { id: user.id, name: user.name, email: user.email }, properties: { registryId: registry.id } });
     return { id: registry.id };
   });
 
@@ -255,8 +257,10 @@ export const updateRegistryFn = createServerFn({ method: 'POST' })
   .validator(updateRegistrySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['update'] });
-    return updateRegistry(data);
+    const user = await requirePanelPermission({ 'panel.recipes': ['update'] });
+    const result = await updateRegistry(data);
+    await logActivity({ event: 'registry:update', description: `Registre « ${data.name} » modifié`, actor: { id: user.id, name: user.name, email: user.email }, properties: { registryId: data.registryId, resynced: result.synced } });
+    return result;
   });
 
 /** Enqueues a manual sync of one registry (pg-boss job — the UI polls). */
@@ -264,8 +268,9 @@ export const syncRegistryFn = createServerFn({ method: 'POST' })
   .validator(registryIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['update'] });
+    const user = await requirePanelPermission({ 'panel.recipes': ['update'] });
     await enqueueRegistrySync(data.registryId);
+    await logActivity({ event: 'registry:sync', description: `Synchronisation du registre demandée (${data.registryId})`, actor: { id: user.id, name: user.name, email: user.email }, properties: { registryId: data.registryId } });
     return { queued: true };
   });
 
@@ -273,8 +278,10 @@ export const deleteRegistryFn = createServerFn({ method: 'POST' })
   .validator(registryIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['delete'] });
+    const user = await requirePanelPermission({ 'panel.recipes': ['delete'] });
+    const registry = await orm.em.findOne(Registry, { id: data.registryId });
     await deleteRegistry(data.registryId);
+    await logActivity({ event: 'registry:delete', description: `Registre « ${registry?.name ?? data.registryId} » supprimé`, actor: { id: user.id, name: user.name, email: user.email }, properties: { registryId: data.registryId } });
     return { deleted: true };
   });
 
@@ -380,14 +387,8 @@ export const getRegistryEntryFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     await requirePanelPermission({ 'panel.recipes': ['read'] });
-
-    const entry = await orm.em.findOne(RegistryEntry, {
-      registryId: data.registryId,
-      path: data.path,
-    });
-    if (!entry) throw new HttpError(404, 'Fichier introuvable dans le registre');
-
-    return { path: entry.path, content: entry.content };
+    // The service owns the lookup (single findOne, 404 semantics).
+    return getRegistryEntry(data.registryId, data.path);
   });
 
 /** Imports (or updates) one catalog entry in one click — with its runtimes. */
@@ -395,8 +396,10 @@ export const importRegistryEntryFn = createServerFn({ method: 'POST' })
   .validator(importRegistryEntrySchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['create'] });
-    return importRegistryEntry(data.registryId, data.path);
+    const user = await requirePanelPermission({ 'panel.recipes': ['create'] });
+    const report = await importRegistryEntry(data.registryId, data.path);
+    await logActivity({ event: 'registry:import', description: `Recette « ${report.slug} » importée du registre`, actor: { id: user.id, name: user.name, email: user.email }, properties: { registryId: data.registryId, path: data.path, created: report.created, imported: report.imported.map((d) => d.slug), missing: report.missing } });
+    return report;
   });
 
 // ─── Source updates (/admin/recipes) ─────────────────────────────────────────
@@ -409,6 +412,8 @@ export const updateRecipeFromSourceFn = createServerFn({ method: 'POST' })
   .validator(updateRecipeSourceSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({ 'panel.recipes': ['update'] });
-    return updateRecipeFromSource(data.recipeId);
+    const user = await requirePanelPermission({ 'panel.recipes': ['update'] });
+    const result = await updateRecipeFromSource(data.recipeId);
+    await logActivity({ event: 'recipe:update_source', description: `Recette « ${result.slug} » mise à jour depuis sa source`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: data.recipeId } });
+    return result;
   });

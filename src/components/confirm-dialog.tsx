@@ -15,8 +15,10 @@ import { Button } from '~/components/ui/button';
  *
  * Replaces the native `confirm()` calls: the caller keeps the pending
  * target in state (what the confirmation is ABOUT), the dialog renders on
- * top of it. `onConfirm` runs the action; the caller closes the dialog in
- * `onConfirm` (or lets it close on cancel via `onOpenChange(false)`).
+ * top of it. `onConfirm` runs the action — the AWAITED pattern: await the
+ * mutation (`mutateAsync`) and clear the target only on success, so the
+ * dialog stays open with its `pending` spinner while the action flies and
+ * on failure (the mutation toasts the error itself).
  */
 export function ConfirmDialog({
   open,
@@ -32,7 +34,8 @@ export function ConfirmDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  /** Runs the action — may be async (the `pending` prop covers the flight). */
+  onConfirm: () => void | Promise<void>;
   title: ReactNode;
   description?: ReactNode;
   confirmLabel?: string;

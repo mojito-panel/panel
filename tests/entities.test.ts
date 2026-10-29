@@ -7,12 +7,18 @@ import {
   Verification,
   Node,
   Recipe,
+  Registry,
+  RegistryEntry,
+  SshKey,
   Server,
   Allocation,
   ServerUser,
   PanelRole,
   Backup,
   Setting,
+  ActivityLog,
+  Schedule,
+  ScheduleTask,
 } from '~/db/entities';
 
 /**
@@ -32,12 +38,18 @@ describe('MikroORM entities (SQLite in-memory)', () => {
         Verification,
         Node,
         Recipe,
+        Registry,
+        RegistryEntry,
+        SshKey,
         Server,
         Allocation,
         ServerUser,
         PanelRole,
         Backup,
         Setting,
+        ActivityLog,
+        Schedule,
+        ScheduleTask,
       ],
     });
     await orm.schema.create();
@@ -64,6 +76,12 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(tableNames).toContain('role');
     expect(tableNames).toContain('backup');
     expect(tableNames).toContain('setting');
+    expect(tableNames).toContain('registry');
+    expect(tableNames).toContain('registry_entry');
+    expect(tableNames).toContain('ssh_key');
+    expect(tableNames).toContain('activity_log');
+    expect(tableNames).toContain('schedule');
+    expect(tableNames).toContain('schedule_task');
   });
 
   it('creates a User with the default role', async () => {
@@ -283,5 +301,139 @@ describe('MikroORM entities (SQLite in-memory)', () => {
 
     const found = await em.findOne(Session, { token: 'tok_abc' });
     expect(found?.userId).toBe('user-1');
+  });
+
+  it('creates a Registry with its sync bookkeeping', async () => {
+    const em = orm.em.fork();
+    const registry = em.create(Registry, {
+      id: 'registry-1',
+      name: 'Mojito recipes',
+      url: 'https://github.com/mojito/recipes',
+      branch: '',
+      branchName: 'main',
+      headSha: 'abc123',
+      lastSyncedAt: new Date(),
+      lastError: null,
+      sshKeyId: null,
+      cover: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(registry);
+    await em.flush();
+
+    const found = await em.findOne(Registry, { id: 'registry-1' });
+    expect(found?.name).toBe('Mojito recipes');
+    expect(found?.branchName).toBe('main');
+    expect(found?.lastError).toBeNull();
+  });
+
+  it('creates a RegistryEntry catalog row (light columns + content)', async () => {
+    const em = orm.em.fork();
+    const entry = em.create(RegistryEntry, {
+      id: 'entry-1',
+      registryId: 'registry-1',
+      path: 'steamcmd/minecraft/recipe-minecraft.json',
+      sha: 'deadbeef',
+      slug: 'minecraft',
+      name: 'Minecraft',
+      type: null,
+      description: null,
+      error: null,
+      cover: null,
+      content: '{"schema_version":4}',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(entry);
+    await em.flush();
+
+    const found = await em.findOne(RegistryEntry, { registryId: 'registry-1' });
+    expect(found?.slug).toBe('minecraft');
+    expect(found?.content).toBe('{"schema_version":4}');
+  });
+
+  it('creates an SshKey with its fingerprint', async () => {
+    const em = orm.em.fork();
+    const key = em.create(SshKey, {
+      id: 'key-1',
+      name: 'Deploy key',
+      publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample deploy@panel',
+      privateKey: '-----BEGIN OPENSSH PRIVATE KEY-----',
+      fingerprint: 'SHA256:abc123',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(key);
+    await em.flush();
+
+    const found = await em.findOne(SshKey, { id: 'key-1' });
+    expect(found?.name).toBe('Deploy key');
+    expect(found?.fingerprint).toBe('SHA256:abc123');
+  });
+
+  it('creates an ActivityLog row with its denormalized actor snapshot', async () => {
+    const em = orm.em.fork();
+    const log = em.create(ActivityLog, {
+      id: 'activity-1',
+      event: 'server:power',
+      description: 'Action « start » sur « My MC server »',
+      ip: '203.0.113.10',
+      userAgent: 'vitest',
+      actorId: 'user-1',
+      actorName: 'Admin',
+      actorEmail: 'admin@example.com',
+      serverId: 'server-1',
+      serverName: 'My MC server',
+      properties: { action: 'start' },
+      createdAt: new Date(),
+    });
+    em.persist(log);
+    await em.flush();
+
+    const found = await em.findOne(ActivityLog, { event: 'server:power' });
+    expect(found?.actorEmail).toBe('admin@example.com');
+    expect(found?.properties).toMatchObject({ action: 'start' });
+  });
+
+  it('creates a Schedule with its task chain', async () => {
+    const em = orm.em.fork();
+    const schedule = em.create(Schedule, {
+      id: 'schedule-1',
+      serverId: 'server-1',
+      name: 'Nightly restart',
+      cron: '30 4 * * *',
+      timezone: 'Europe/Paris',
+      isActive: true,
+      isProcessing: false,
+      onlyWhenOnline: false,
+      lastRunAt: null,
+      nextRunAt: new Date('2030-01-01T04:30:00Z'),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(schedule);
+
+    const task = em.create(ScheduleTask, {
+      id: 'task-1',
+      scheduleId: 'schedule-1',
+      sequenceId: 1,
+      action: 'power',
+      payload: 'restart',
+      timeOffset: 0,
+      continueOnFailure: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    em.persist(task);
+    await em.flush();
+
+    const found = await em.findOne(Schedule, { id: 'schedule-1' });
+    expect(found?.cron).toBe('30 4 * * *');
+    expect(found?.isProcessing).toBe(false);
+
+    const tasks = await em.find(ScheduleTask, { scheduleId: 'schedule-1' });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.payload).toBe('restart');
   });
 });

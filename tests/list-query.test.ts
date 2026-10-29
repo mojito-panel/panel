@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { Server } from '~/db/entities';
-import { defineList, expr, field, tableStateToQuery, type DefinedList } from '~/lists/define';
+import { defineList, field, type DefinedList } from '~/lists/define';
 import { applyListQuery, listQueryBuilder } from '~/server/list/query';
 
 /**
@@ -78,28 +78,6 @@ const serversList: DefinedList<Row> = defineList<Row>({
     },
     createdAt: { header: 'Créé le', cell: (row) => row.id, sort: field('createdAt') },
     actions: { header: '', cell: () => null, pinned: true },
-  },
-});
-
-/** Raw-fragment target (a JSON column filter, e.g. the recipe docker image). */
-const recipesList: DefinedList<Row> = defineList<Row>({
-  name: 'test-recipes',
-  alias: 'r',
-  defaultSort: { column: 'name', desc: false },
-  columns: {
-    name: { header: 'Recette', cell: (row) => row.name, sort: field('name') },
-    image: {
-      header: 'Image',
-      cell: (row) => row.status,
-      filter: {
-        control: 'choice',
-        target: expr(`"r"."json"->>'docker_image'`),
-        options: [
-          { value: 'ghcr.io/mojito/windows-jdk21:latest', label: 'JDK 21' },
-          { value: 'ghcr.io/mojito/steamcmd:latest', label: 'SteamCMD' },
-        ],
-      },
-    },
   },
 });
 
@@ -284,28 +262,6 @@ describe('table state', () => {
     expect(state.sorting).toEqual([{ id: 'name', desc: false }]);
     expect(state.columnFilters).toEqual([{ id: 'status', value: 'running,stopped' }]);
   });
-
-  it('writes table state back, resetting the page and clearing removed filters', () => {
-    const current = parseQuery(serversList, { page: '4', status: 'running', name: 'mc' });
-    const next = tableStateToQuery({ columnFilters: [{ id: 'name', value: 'survie' }] }, current, serversList);
-    expect(next.page).toBe(4);
-    expect(next.name).toBe('survie');
-    expect(next.status).toBeUndefined();
-  });
-
-  it('resets the page index when only the page changes', () => {
-    const current = parseQuery(serversList, {});
-    expect(tableStateToQuery({ pageIndex: 2, pageSize: 10 }, current, serversList)).toMatchObject({
-      page: 3,
-      size: 10,
-    });
-  });
-
-  it('falls back to the default sort when the sorting is cleared', () => {
-    const next = tableStateToQuery({ sorting: [] }, parseQuery(serversList, {}), serversList);
-    expect(next.sort).toBe('createdAt');
-    expect(next.dir).toBe('desc');
-  });
 });
 
 describe('mikroORM mapping', () => {
@@ -367,11 +323,6 @@ describe('mikroORM mapping', () => {
     expect(sql).toContain(' or ');
     // The joined path of a search target must pull its join in.
     expect(sql).toContain('left join "user" as "u"');
-  });
-
-  it('filters on a raw fragment target (JSON column)', () => {
-    const sql = sqlOf(recipesList, { image: 'ghcr.io/mojito/windows-jdk21:latest' });
-    expect(sql).toContain(`"r"."json"->>'docker_image' = 'ghcr.io/mojito/windows-jdk21:latest'`);
   });
 
   it('filters a nullable column on both states', () => {

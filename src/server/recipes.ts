@@ -1,5 +1,6 @@
 import '@tanstack/react-start/server-only';
 import {
+  findUnknownVariables,
   isRuntimeRecipeJson,
   parseRecipe,
   parseRuntimeRecipe,
@@ -14,6 +15,7 @@ import { recipeErrorMessage } from '~/lib/recipe-source';
 import { Recipe, Server } from '~/db/entities';
 import { orm } from './orm';
 import { HttpError } from './session';
+import { assertPublicHost } from './assert-public-host';
 
 export { recipeErrorMessage };
 
@@ -49,6 +51,10 @@ export async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
   if (!new URL(normalized).pathname.toLowerCase().endsWith('.json')) {
     throw new HttpError(400, 'Seules les URLs pointant vers un .json sont supportées');
   }
+  // SSRF gate BEFORE the fetch: resolve and refuse loopback/link-local
+  // targets (see ~/server/assert-public-host for the ranges and the
+  // DNS-rebinding limitation — the fetch below does its own resolution).
+  await assertPublicHost(normalized);
   let res: Response;
   try {
     res = await fetch(normalized, {
@@ -68,13 +74,24 @@ export async function fetchRecipeJsonFromUrl(url: string): Promise<string> {
   return body;
 }
 
-/** Validates a raw recipe string, mapping the error to a 400 HttpError. */
+/**
+ * Validates a raw recipe string, mapping the error to a 400 HttpError.
+ * Imported APP recipes also run the template check: an unknown `{{VAR}}`
+ * must fail AT IMPORT TIME, not on the agent at install time (the
+ * contract's "unknown variable = install-time error" is enforced at the
+ * earliest boundary the panel controls).
+ */
 export function assertValidRecipeJson(raw: string): RecipeDefinition | RuntimeRecipe {
   const parsed: unknown = JSON.parse(raw);
   if (isRuntimeRecipeJson(parsed)) {
     return parseRuntimeRecipe(parsed);
   }
-  return parseRecipe(parsed);
+  const recipe = parseRecipe(parsed);
+  const unknown = findUnknownVariables(recipe);
+  if (unknown.length > 0) {
+    throw new HttpError(400, `Variables inconnues dans les gabarits : ${unknown.join(', ')}`);
+  }
+  return recipe;
 }
 
 /**

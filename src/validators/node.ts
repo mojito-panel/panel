@@ -16,9 +16,25 @@ export function isHttpsScheme(scheme: string): boolean {
   return scheme === 'https' || scheme === 'https-behind-proxy';
 }
 
+/**
+ * Hostname / IP-literal pattern: a bare hostname (letters, digits, hyphens,
+ * dots — no spaces, no scheme, no path, no `?`), an IPv4 literal, or a
+ * BRACKETED IPv6 literal. The agent client interpolates the value raw into
+ * `scheme://<fqdn>:<port>` URLs (src/server/agent/client.ts, the console and
+ * health WS URLs), so anything carrying its own scheme, port or path would
+ * break every URL the panel builds — and brackets are the only way an IPv6
+ * literal survives that interpolation.
+ */
+const HOSTNAME_OR_IP_PATTERN =
+  /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$|^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$|^\d{1,3}(?:\.\d{1,3}){3}$|^\[[0-9A-Fa-f:.]+\]$/;
+
 export const createNodeSchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
-  fqdn: z.string().min(3, 'FQDN invalide').max(255),
+  fqdn: z
+    .string()
+    .min(3, 'FQDN invalide')
+    .max(255)
+    .regex(HOSTNAME_OR_IP_PATTERN, 'FQDN invalide — un nom d’hôte ou une IP, sans schéma ni port'),
   agentPort: z.number().int().min(1).max(65535),
   /** Accessible port — the port the panel and browsers connect to. */
   publicPort: z.number().int().min(1).max(65535),
@@ -43,7 +59,11 @@ export type NodeFqdnDto = z.infer<typeof nodeFqdnSchema>;
 export const updateNodeSchema = z.object({
   nodeId: z.string().min(1),
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
-  fqdn: z.string().min(3, 'FQDN invalide').max(255),
+  fqdn: z
+    .string()
+    .min(3, 'FQDN invalide')
+    .max(255)
+    .regex(HOSTNAME_OR_IP_PATTERN, 'FQDN invalide — un nom d’hôte ou une IP, sans schéma ni port'),
   agentPort: z.number().int().min(1).max(65535),
   /** Accessible port — the port the panel and browsers connect to. */
   publicPort: z.number().int().min(1).max(65535),

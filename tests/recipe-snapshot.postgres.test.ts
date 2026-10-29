@@ -3,7 +3,8 @@ import { MikroORM } from '@mikro-orm/postgresql';
 import { ormConfig } from '../src/db/index';
 import { Recipe, Server } from '~/db/entities';
 import type { IServer } from '~/db/types';
-import { serverRecipeSnapshot } from '../src/server/recipe-snapshot';
+import { databaseReachable } from './helpers/db-reachable';
+import { metadataOnly } from './helpers/metadata-orm';
 
 /**
  * The recipe snapshot merge against the REAL dev database — the exact
@@ -14,40 +15,23 @@ import { serverRecipeSnapshot } from '../src/server/recipe-snapshot';
  * Applies the panel migrations itself (the dev stack is usually started
  * by the panel boot, not the CLI) and SKIPS when no database is
  * reachable — `npm test` stays green without the dev stack.
+ *
+ * The service modules (../src/server/recipe-snapshot, which resolves the
+ * request EM through the global ORM singleton) are imported DYNAMICALLY
+ * inside beforeAll: their module graph initializes a Postgres connection,
+ * which must only happen once the probe has passed.
  */
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
-/**
- * `connect: false` is runtime-valid but absent from the MikroORM v7 option
- * types (metadata-only init). Spread from a VARIABLE — spread properties
- * skip the object literal's excess-property check, so the cast stays on
- * that single option instead of the whole config.
- */
-const metadataOnly = { connect: false } as const;
-
-async function databaseReachable(): Promise<boolean> {
-  try {
-    const options = {
-      ...ormConfig,
-      clientUrl: DATABASE_URL,
-      ...metadataOnly,
-    };
-    const orm = await MikroORM.init(options);
-    await orm.connect();
-    await orm.close(true);
-    return true;
-  } catch (error) {
-    console.error('database probe failed:', error);
-    return false;
-  }
-}
-
-const databaseUp = await databaseReachable();
+const databaseUp = await databaseReachable(DATABASE_URL);
 
 describe.skipIf(!databaseUp)('recipe snapshot against Postgres', () => {
   let orm: MikroORM;
   let seededServer: IServer;
+  /** Service imports — dynamic (see the module docblock). */
+  let serverRecipeSnapshot: typeof import('../src/server/recipe-snapshot').serverRecipeSnapshot;
+  let runWithOrmContext: typeof import('../src/server/orm').runWithOrmContext;
 
   const javaJson = {
     schema_version: 4,
@@ -97,7 +81,10 @@ describe.skipIf(!databaseUp)('recipe snapshot against Postgres', () => {
   };
 
   beforeAll(async () => {
-    orm = await MikroORM.init({ ...ormConfig, clientUrl: DATABASE_URL });
+    ({ serverRecipeSnapshot } = await import('../src/server/recipe-snapshot'));
+    ({ runWithOrmContext } = await import('../src/server/orm'));
+
+    orm = await MikroORM.init({ ...ormConfig, clientUrl: DATABASE_URL, ...metadataOnly });
     await orm.migrator.up();
     const em = orm.em.fork();
 
@@ -149,7 +136,11 @@ describe.skipIf(!databaseUp)('recipe snapshot against Postgres', () => {
     const server = await em.findOne(Server, { id: 'server-snaptest' });
     if (!server) throw new Error('seeded server missing');
 
-    const snapshot = await serverRecipeSnapshot(em, server as unknown as IServer);
+    // The service resolves its EM through the panel's global ORM singleton
+    // (no em parameter) — run it inside one request context like the panel does.
+    const snapshot = await runWithOrmContext(() =>
+      serverRecipeSnapshot(server as unknown as IServer),
+    );
 
     const envs = (snapshot.recipe.variables ?? []).map((v) => v.env);
     expect(envs).toContain('MINECRAFT_VERSION');

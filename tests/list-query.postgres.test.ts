@@ -16,6 +16,7 @@ import {
 } from '~/db/entities';
 import { adminServersList } from '~/lists/servers';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
+import { databaseReachable } from './helpers/db-reachable';
 
 /**
  * The list queries executed by real Postgres.
@@ -36,32 +37,10 @@ const ENTITIES = [
   Allocation, ServerUser, PanelRole, Backup, Setting,
 ];
 
-/**
- * `connect: false` is runtime-valid but absent from the MikroORM v7 option
- * types (metadata-only init). Spread from a VARIABLE — spread properties
- * skip the object literal's excess-property check, so the cast stays on
- * that single option instead of the whole config.
- */
-const metadataOnly = { connect: false } as const;
-
-async function databaseReachable(): Promise<boolean> {
-  try {
-    const orm = await MikroORM.init({
-      dbName: 'mojito',
-      clientUrl: DATABASE_URL,
-      entities: ENTITIES,
-      debug: false,
-      ...metadataOnly,
-    });
-    await orm.connect();
-    await orm.close(true);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const databaseUp = await databaseReachable();
+// Plain TCP probe (tests/helpers/db-reachable) — a MikroORM probe's
+// internal rejections escape as unhandled under Vitest and turn the skip
+// into a failure.
+const databaseUp = await databaseReachable(DATABASE_URL);
 
 describe.skipIf(!databaseUp)('admin servers list against Postgres', () => {
   let orm: MikroORM;

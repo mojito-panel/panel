@@ -85,19 +85,16 @@ const listBaseSchema = z.object({
 
 /**
  * Where a column reads from in SQL: an ORM property path of the root entity,
- * optionally alias-qualified for a joined table (`field('u.email')`), or a raw
- * fragment for a computed / JSON path (`expr(`"r"."json"->>'type'`)`).
+ * optionally alias-qualified for a joined table (`field('u.email')`).
+ * (A raw-SQL-fragment variant existed for computed/JSON-path targets but had
+ * zero consumers — deleted in the 2026-10-29 audit; reintroduce as a typed
+ * variant if a list ever needs one.)
  */
-export type ListPath = { path: string } | { sql: string };
+export type ListPath = { path: string };
 
 /** ORM property path — `field('name')`, or `field('u.email')` for the join `u`. */
 export function field(path: string): ListPath {
   return { path };
-}
-
-/** Raw SQL fragment — computed column or JSON path (`'col'->>'key'`). */
-export function expr(sql: string): ListPath {
-  return { sql };
 }
 
 // ─── Sort / filter declarations ─────────────────────────────────────────────
@@ -263,7 +260,6 @@ export interface DefineListOptions<TData, TContext = void> {
   columns: Record<string, ListColumn<TData, TContext>>;
   /** Sort applied when the URL carries none — required when a column sorts. */
   defaultSort?: { column: string; desc?: boolean };
-  defaultSize?: number;
   /**
    * Paths the `q` search runs `ILIKE` against — the "search everything" box of
    * the list (plain ORM paths only, alias-qualified when joined). Empty means no
@@ -331,7 +327,8 @@ export function defineList<TData, TContext = void>(
   const { name, alias, columns } = options;
   const mode = options.mode ?? 'server';
   const joins = options.joins ?? {};
-  const defaultSize = options.defaultSize ?? DEFAULT_PAGE_SIZE;
+  // Every list shares the default page size (PAGE_SIZES' middle step).
+  const defaultSize = DEFAULT_PAGE_SIZE;
 
   for (const [key, join] of Object.entries(joins)) {
     if (key !== join.alias) {
@@ -508,36 +505,4 @@ export function mergeQuery(current: ListQuery, patch: Partial<ListQuery>): ListQ
     size: patch.size ?? current.size,
     dir: patch.dir ?? current.dir,
   };
-}
-
-/** Table state → the search params to write back (page reset included). */
-export function tableStateToQuery(
-  state: Partial<ListTableState>,
-  current: ListQuery,
-  list: Pick<DefinedList<unknown>, 'spec'>,
-): ListQuery {
-  const page = state.pageIndex !== undefined ? state.pageIndex + 1 : current.page;
-  const next: ListQuery = {
-    ...current,
-    page: page < 1 ? 1 : page,
-    size: state.pageSize ?? current.size ?? list.spec.defaultSize,
-  };
-
-  if (state.sorting !== undefined) {
-    const first = state.sorting[0];
-    const fallback = list.spec.defaultSort[0];
-    next.sort = first?.id ?? fallback?.id;
-    next.dir = (first ? first.desc : (fallback?.desc ?? true)) ? 'desc' : 'asc';
-  }
-
-  if (state.columnFilters !== undefined) {
-    for (const { column } of list.spec.filters) {
-      next[column] = undefined;
-    }
-    for (const { id, value } of state.columnFilters) {
-      next[id] = value === '' ? undefined : value;
-    }
-  }
-
-  return next;
 }

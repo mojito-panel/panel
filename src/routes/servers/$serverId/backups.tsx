@@ -6,6 +6,7 @@ import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
 import { HardDriveDownload } from 'lucide-react';
 import { DataTable } from '~/components/data-table/data-table';
+import { triggerDownload } from '~/components/download';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { ConfirmDialog } from '~/components/confirm-dialog';
@@ -127,7 +128,9 @@ function ServerBackupsPage() {
     mutationFn: (input: { backupId: string }) =>
       getDownloadUrl({ data: { serverId, backupId: input.backupId } }),
     onSuccess: (result) => {
-      window.location.href = result.url;
+      // Synthetic <a download> click (see components/download.ts) — the
+      // browser streams the archive straight from the agent.
+      triggerDownload(result.url, result.url.split('/').pop() ?? 'sauvegarde');
     },
     onError: (error) => toast.error(error.message),
   });
@@ -214,9 +217,17 @@ function ServerBackupsPage() {
       <ConfirmDialog
         open={toRestore !== null}
         onOpenChange={(open) => !open && setToRestore(null)}
-        onConfirm={() => {
-          if (toRestore) restore.mutate({ backupId: toRestore.backup.id, truncate: toRestore.truncate });
-          setToRestore(null);
+        onConfirm={async () => {
+          if (!toRestore) return;
+          try {
+            await restore.mutateAsync({
+              backupId: toRestore.backup.id,
+              truncate: toRestore.truncate,
+            });
+            setToRestore(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={
           toRestore?.truncate
@@ -236,9 +247,14 @@ function ServerBackupsPage() {
       <ConfirmDialog
         open={toDelete !== null}
         onOpenChange={(open) => !open && setToDelete(null)}
-        onConfirm={() => {
-          if (toDelete) remove.mutate({ backupId: toDelete.id });
-          setToDelete(null);
+        onConfirm={async () => {
+          if (!toDelete) return;
+          try {
+            await remove.mutateAsync({ backupId: toDelete.id });
+            setToDelete(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={toDelete ? `Supprimer « ${toDelete.name} » ?` : ''}
         confirmLabel="Supprimer"

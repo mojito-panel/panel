@@ -15,6 +15,7 @@ const SORT_COLUMNS: Record<string, string> = {
   id: 'id',
   name: 'name',
   state: 'state',
+  retryCount: 'retry_count',
   startAfter: 'start_after',
   startedOn: 'started_on',
   completedOn: 'completed_on',
@@ -36,7 +37,7 @@ export const getJobStatsFn = createServerFn({ method: 'GET' })
     return stats;
   });
 
-/** pg renvoie les timestamptz tantôt en Date, tantôt en string selon le chemin de requête. */
+/** pg returns timestamptz sometimes as a Date, sometimes as a string depending on the query path. */
 function toIsoOrNull(value: unknown): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value as string);
@@ -76,7 +77,7 @@ export const listJobsFn = createServerFn({ method: 'POST' })
     const offset = ((data.page ?? 1) - 1) * pageSize;
 
     const rows = await orm.em.execute(
-      `SELECT id, name, state, retry_count, retry_limit, start_after, created_on, started_on, completed_on, output::text AS output
+      `SELECT id, name, state, retry_count, retry_limit, start_after, created_on, started_on, completed_on, output::text AS output, data::text AS data
        FROM pgboss.job ${where} ORDER BY ${sortColumn} ${dir}, id LIMIT ${pageSize} OFFSET ${offset}`,
       params,
     );
@@ -99,7 +100,9 @@ export const listJobsFn = createServerFn({ method: 'POST' })
         startedOn: toIsoOrNull(job.started_on),
         completedOn: toIsoOrNull(job.completed_on),
         output: job.output ? JSON.stringify(job.output) : null,
-        data: job.data ? JSON.stringify(job.data) : null,
+        // `data::text` — the raw job payload as JSON text (the list module
+        // renders it as a string, like `output`).
+        data: job.data || null,
       })),
     };
   });

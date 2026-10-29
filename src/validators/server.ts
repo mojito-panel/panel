@@ -74,12 +74,11 @@ export const serverDetailQuerySchema = z.object({
 export type ServerDetailQueryDto = z.infer<typeof serverDetailQuerySchema>;
 
 /**
- * Incremental logs cursor (console polling) — `after` is the last line
- * index seen by the client.
+ * Server id alone — install status, (re)install, retry, reload and
+ * console-token queries (the id is a route param everywhere it is used).
  */
-export const serverLogsQuerySchema = z.object({
+export const serverIdQuerySchema = z.object({
   serverId: z.string().min(1),
-  after: z.coerce.number().int().min(0).default(0),
 });
 
 /**

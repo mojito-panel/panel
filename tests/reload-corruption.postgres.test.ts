@@ -2,8 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/postgresql';
 import { ormConfig } from '../src/db/index';
 import { Recipe, Server } from '~/db/entities';
-import { buildRecipeSnapshot } from '../src/server/recipe-snapshot';
 import { mergeVariableValues } from '../src/lib/recipe-merge';
+import { databaseReachable } from './helpers/db-reachable';
+import { metadataOnly } from './helpers/metadata-orm';
 
 /**
  * Reproduction of the reported corruption: "reload recipe" from the
@@ -14,41 +15,25 @@ import { mergeVariableValues } from '../src/lib/recipe-merge';
  * assign the ONE-document server.recipeSnapshot → mergeVariableValues →
  * flush), then the recipe rows are reloaded FRESH and their `requires`
  * checked.
+ *
+ * The service modules (../src/server/recipe-snapshot, which resolves the
+ * request EM through the global ORM singleton) are imported DYNAMICALLY
+ * inside beforeAll: their module graph initializes a Postgres connection,
+ * which must only happen once the probe has passed.
  */
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
-/**
- * `connect: false` is runtime-valid but absent from the MikroORM v7 option
- * types (metadata-only init). Spread from a VARIABLE — spread properties
- * skip the object literal's excess-property check, so the cast stays on
- * that single option instead of the whole config.
- */
-const metadataOnly = { connect: false } as const;
-
-async function databaseReachable(): Promise<boolean> {
-  try {
-    const options = {
-      ...ormConfig,
-      clientUrl: DATABASE_URL,
-      ...metadataOnly,
-    };
-    const probe = await MikroORM.init(options);
-    await probe.connect();
-    await probe.close(true);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const databaseUp = await databaseReachable();
+const databaseUp = await databaseReachable(DATABASE_URL);
 
 describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', () => {
   let orm: MikroORM;
   const SUFFIX = `repro${Date.now()}`;
   const appSlug = `mc-${SUFFIX}`;
   const runtimeSlug = `java-${SUFFIX}`;
+  /** Service imports — dynamic (see the module docblock). */
+  let buildRecipeSnapshot: typeof import('../src/server/recipe-snapshot').buildRecipeSnapshot;
+  let runWithOrmContext: typeof import('../src/server/orm').runWithOrmContext;
 
   const runtimeJson = {
     schema_version: 4,
@@ -99,7 +84,15 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
   };
 
   beforeAll(async () => {
-    orm = await MikroORM.init({ ...ormConfig, clientUrl: DATABASE_URL, allowGlobalContext: true });
+    ({ buildRecipeSnapshot } = await import('../src/server/recipe-snapshot'));
+    ({ runWithOrmContext } = await import('../src/server/orm'));
+
+    orm = await MikroORM.init({
+      ...ormConfig,
+      clientUrl: DATABASE_URL,
+      allowGlobalContext: true,
+      ...metadataOnly,
+    });
     await orm.migrator.up();
     const em = orm.em.fork();
     const now = new Date();
@@ -139,7 +132,11 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
     await em.flush();
 
     // ── The reload sequence, verbatim (refreshServerRecipeSnapshot) ──
-    const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
+    // The service resolves its EM through the panel's global ORM singleton
+    // (no em parameter) — run it inside one request context like the panel does.
+    const snapshot = await runWithOrmContext(() =>
+      buildRecipeSnapshot(recipe.json as Record<string, unknown>),
+    );
     server.recipeSnapshot = snapshot as unknown as Record<string, unknown>;
     server.recipeSyncedAt = new Date();
     server.variables = mergeVariableValues(snapshot.recipe.variables ?? [], server.variables);

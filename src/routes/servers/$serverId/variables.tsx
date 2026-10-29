@@ -19,7 +19,7 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 
-/** /servers/$serverId/variables — variables du serveur (ex-"Démarrage"). */
+/** /servers/$serverId/variables — the server's variables (ex-"Startup" page). */
 export const Route = createFileRoute('/servers/$serverId/variables')({
   component: ServerVariablesPage,
 });

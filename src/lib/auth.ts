@@ -7,6 +7,7 @@ import { orm, runWithOrmContext } from '../server/orm';
 import { User } from '~/db/entities';
 import { isRegistrationEnabled } from '../server/settings';
 import { ac, PANEL_ROLES } from '~/lib/permissions';
+import { AUTH_RATE_LIMIT } from '~/lib/rate-limit';
 
 const databaseUrl =
   process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
@@ -33,6 +34,15 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
   },
+  /**
+   * Rate limiting — the login door must be throttled: the panel password
+   * is REUSED for SFTP (lib/sftp), so an online brute-force here also
+   * attacks the SFTP door. better-auth's default rules only apply in
+   * production, so `enabled: true` makes them effective everywhere.
+   * Storage stays in-memory (single panel process — see the schedules
+   * runner's single-instance note); a shared/DB limiter is V2.
+   */
+  rateLimit: AUTH_RATE_LIMIT,
   user: {
     // NOTE: the `role`/`banned`/`banReason`/`banExpires` fields come from the
     // admin plugin — their snake_case mapping lives in the plugin's own
@@ -124,7 +134,7 @@ export const auth = betterAuth({
       // context (single request-scoped EM fork, no manual fork()).
       return runWithOrmContext(async () => {
         const em = orm.em;
-        if (!(await isRegistrationEnabled(em))) {
+        if (!(await isRegistrationEnabled())) {
           throw new APIError('FORBIDDEN', {
             message: 'Les inscriptions sont désactivées par un administrateur',
           });

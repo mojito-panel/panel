@@ -30,20 +30,12 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 import { ConfirmDialog } from '~/components/confirm-dialog';
+import type { RoleDto } from '~/lists/roles';
 
-/** /admin/roles — rôles du panel (Pelican-style) : rôles intégrés + rôles personnalisés. */
+/** /admin/roles — the panel roles (Pelican-style): built-in + custom roles. */
 export const Route = createFileRoute('/admin/roles')({
   component: AdminRolesPage,
 });
-
-interface RoleDto {
-  id: string;
-  name: string;
-  description: string | null;
-  permissions: string[];
-  userCount: number;
-  builtIn: boolean;
-}
 
 /** Converts flat checked permissions into the statements wire format. */
 function checkedToStatements(checked: Record<string, boolean>): PermissionStatements {
@@ -312,11 +304,14 @@ function AdminRolesPage() {
         onOpenChange={(open) => {
           if (!open) setRoleToDelete(null);
         }}
-        onConfirm={() => {
-          if (roleToDelete) {
-            remove.mutate({ roleId: roleToDelete.id });
+        onConfirm={async () => {
+          if (!roleToDelete) return;
+          try {
+            await remove.mutateAsync({ roleId: roleToDelete.id });
+            setRoleToDelete(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
           }
-          setRoleToDelete(null);
         }}
         title={`Supprimer le rôle « ${roleToDelete?.name ?? ''} » ?`}
         description={

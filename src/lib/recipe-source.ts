@@ -233,15 +233,6 @@ export function computeEntryStatus(
   return 'up_to_date';
 }
 
-/** What the catalog row knows about the locally installed copy (null = none). */
-export interface RegistryEntryRecipeRef {
-  recipeId: string;
-  slug: string;
-  name: string;
-  sourceSha: string | null;
-  storedSha: string | null;
-}
-
 // ─── Error formatting ─────────────────────────────────────────────────────────
 
 /** Readable error message (ZodError → list of fields in error). */

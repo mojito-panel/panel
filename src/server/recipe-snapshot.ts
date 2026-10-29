@@ -1,8 +1,8 @@
 import '@tanstack/react-start/server-only';
-import type { EntityManager } from '@mikro-orm/core';
 import type { Recipe as RecipeContract, RecipeVariable } from '~/contract';
 import { Recipe } from '~/db/entities';
 import type { IServer } from '~/db/types';
+import { orm } from './orm';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import { mergeVariableDefinitions } from '~/lib/recipe-merge';
 import { resolveRuntimeRecipes } from './runtimes';
@@ -30,7 +30,6 @@ export interface ServerRecipeSnapshot {
  * the merged variable definitions, plus the resolved runtime recipes.
  */
 export async function buildRecipeSnapshot(
-  em: EntityManager,
   recipeJson: Record<string, unknown> | null | undefined,
 ): Promise<ServerRecipeSnapshot> {
   // DEEP CLONE on the entity boundary: the recipe JSONs are LIVE
@@ -41,7 +40,7 @@ export async function buildRecipeSnapshot(
   const app = structuredClone(
     normalizeStoredRecipe((recipeJson ?? {}) as Record<string, unknown>),
   ) as RecipeContract;
-  const runtimes = (await resolveRuntimeRecipes(em, recipeJson)).map(
+  const runtimes = (await resolveRuntimeRecipes(recipeJson)).map(
     (runtime) => structuredClone(runtime),
   ) as Record<string, unknown>[];
 
@@ -62,9 +61,9 @@ export async function buildRecipeSnapshot(
  * the same walk as resolveRuntimeRecipes, without the payloads.
  */
 async function runtimeSlugs(
-  em: EntityManager,
   recipeJson: Record<string, unknown> | null | undefined,
 ): Promise<string[]> {
+  const em = orm.em;
   const seen = new Set<string>();
   // COPY, never alias: for a v4 recipe `recipeJson` IS the live entity's
   // json object — the walk shifts its queue dry, aliasing `requires`
@@ -93,11 +92,11 @@ async function runtimeSlugs(
  * as editing the app recipe itself.
  */
 export async function recipeGraphUpdatedAt(
-  em: EntityManager,
   recipeJson: Record<string, unknown> | null | undefined,
   appUpdatedAt: Date,
 ): Promise<Date> {
-  const slugs = await runtimeSlugs(em, recipeJson);
+  const em = orm.em;
+  const slugs = await runtimeSlugs(recipeJson);
   if (slugs.length === 0) return appUpdatedAt;
   const rows = await em.find(Recipe, { slug: { $in: slugs } });
   let latest = appUpdatedAt;
@@ -113,10 +112,8 @@ export async function recipeGraphUpdatedAt(
  * backfilled on first touch, dated now: the recipe they run is the one
  * the panel has).
  */
-export async function serverRecipeSnapshot(
-  em: EntityManager,
-  server: IServer,
-): Promise<ServerRecipeSnapshot> {
+export async function serverRecipeSnapshot(server: IServer): Promise<ServerRecipeSnapshot> {
+  const em = orm.em;
   const stored = server.recipeSnapshot as unknown as ServerRecipeSnapshot | null | undefined;
   if (stored && stored.recipe && Array.isArray(stored.runtimes)) {
     return stored;
@@ -126,7 +123,7 @@ export async function serverRecipeSnapshot(
     // No stored snapshot and no recipe row: the panel DB itself is broken.
     throw new Error('Recette introuvable');
   }
-  const snapshot = await buildRecipeSnapshot(em, recipe.json as Record<string, unknown>);
+  const snapshot = await buildRecipeSnapshot(recipe.json as Record<string, unknown>);
   server.recipeSnapshot = snapshot as unknown as Record<string, unknown>;
   server.recipeSyncedAt = new Date();
   await em.flush();

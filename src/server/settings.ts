@@ -1,5 +1,4 @@
 import '@tanstack/react-start/server-only';
-import type { EntityManager } from '@mikro-orm/core';
 import { Setting } from '~/db/entities';
 import {
   SETTING_DEFAULTS,
@@ -10,6 +9,7 @@ import {
   type BrandingSettings,
   type SettingKey,
 } from '~/lib/settings';
+import { orm } from './orm';
 import { decryptSecret, encryptSecret } from './crypto';
 
 /**
@@ -42,8 +42,8 @@ export function envForcedKey(key: SettingKey): string | null {
 }
 
 /** Reads one setting row from the DB (raw stored value, null when absent). */
-async function readStored(em: EntityManager, key: SettingKey): Promise<string | null> {
-  const row = await em.findOne(Setting, { key });
+async function readStored(key: SettingKey): Promise<string | null> {
+  const row = await orm.em.findOne(Setting, { key });
   return row?.value ?? null;
 }
 
@@ -61,10 +61,10 @@ function readSecret(value: string): string {
 }
 
 /** Effective value of one setting: env var > DB row > code default. */
-export async function getSettingValue(em: EntityManager, key: SettingKey): Promise<string> {
+export async function getSettingValue(key: SettingKey): Promise<string> {
   const forced = envForcedKey(key);
   if (forced) return process.env[forced] as string;
-  const stored = await readStored(em, key);
+  const stored = await readStored(key);
   if (stored === null) return SETTING_DEFAULTS[key];
   return SETTING_SECRETS.has(key) ? readSecret(stored) : stored;
 }
@@ -73,8 +73,8 @@ export async function getSettingValue(em: EntityManager, key: SettingKey): Promi
  * Resolves every catalog key in ONE query. Unknown rows in the table are
  * ignored — the catalog is the authority (a stale row never crashes the UI).
  */
-export async function resolveSettings(em: EntityManager): Promise<SettingsBundle> {
-  const rows = await em.find(Setting, {});
+export async function resolveSettings(): Promise<SettingsBundle> {
+  const rows = await orm.em.find(Setting, {});
   const stored = new Map(rows.map((row) => [row.key, row.value]));
 
   const values = {} as Record<SettingKey, string>;
@@ -98,9 +98,9 @@ export async function resolveSettings(em: EntityManager): Promise<SettingsBundle
  * encrypted at rest.
  */
 export async function writeSettings(
-  em: EntityManager,
   entries: Partial<Record<SettingKey, string>>,
 ): Promise<SettingKey[]> {
+  const em = orm.em;
   const written: SettingKey[] = [];
   for (const key of Object.keys(entries) as SettingKey[]) {
     if (envForcedKey(key)) continue;
@@ -121,13 +121,13 @@ export async function writeSettings(
 // ─── Semantics helpers ───────────────────────────────────────────────────────
 
 /** Whether public self-registration (/register) is open. */
-export async function isRegistrationEnabled(em: EntityManager): Promise<boolean> {
-  return parseSettingBool(await getSettingValue(em, 'app:registration_enabled'));
+export async function isRegistrationEnabled(): Promise<boolean> {
+  return parseSettingBool(await getSettingValue('app:registration_enabled'));
 }
 
 /** Branding slice of the settings (title/favicon of the document, avatars). */
-export async function getBranding(em: EntityManager): Promise<BrandingSettings> {
-  const { values } = await resolveSettings(em);
+export async function getBranding(): Promise<BrandingSettings> {
+  const { values } = await resolveSettings();
   return {
     appName: values['app:name'],
     favicon: values['app:favicon'],

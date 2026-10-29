@@ -1,3 +1,5 @@
+import type { ServerStatusDb } from '~/db/types';
+
 /**
  * Status display components — one place to restyle every status in the
  * panel (admin dashboard, server header, server sidebar, server list,
@@ -12,6 +14,19 @@
  * - Live data (< 20 s old) — concentric sonar rings around the dot.
  */
 
+/**
+ * Panel-side server status (the DB-level union — contract statuses plus
+ * the panel-only `install_failed` state). Lives here, next to the status
+ * display, so any client module imports it from one place.
+ */
+export type PanelServerStatus = ServerStatusDb;
+
+/**
+ * Every status a badge renders: the server statuses (`ServerStatusDb`) +
+ * the node online/offline pair + the node `unknown` default.
+ */
+export type BadgeStatus = ServerStatusDb | 'online' | 'offline' | 'unknown';
+
 /** Live threshold: data behind a badge is "live" while fresher than this. */
 export const LIVE_MAX_AGE_MS = 20_000;
 
@@ -23,8 +38,8 @@ export function isLiveData(query: { dataUpdatedAt: number }): boolean {
   return Date.now() - query.dataUpdatedAt < LIVE_MAX_AGE_MS;
 }
 
-/** Ball color per status (LED tint) — defaults to neutral gray. */
-const BALL_COLORS: Record<string, string> = {
+/** Ball color per status (LED tint) — missing entries default to neutral gray. */
+const BALL_COLORS: Partial<Record<BadgeStatus, string>> = {
   starting: 'bg-amber-400',
   running: 'bg-lime-400',
   online: 'bg-lime-400',
@@ -36,14 +51,14 @@ const BALL_COLORS: Record<string, string> = {
 };
 
 /** Text tint matching the ball color — the LED glow reads currentColor. */
-const LED_TEXT: Record<string, string> = {
+const LED_TEXT: Partial<Record<BadgeStatus, string>> = {
   starting: 'text-amber-400',
   stopping: 'text-amber-400',
   installing: 'text-blue-500',
 };
 
 /** Pill tint per status — semi-transparent bg, text/border matching the ball. */
-const PILL_COLORS: Record<string, string> = {
+const PILL_COLORS: Partial<Record<BadgeStatus, string>> = {
   running: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   online: 'border border-lime-400/50 bg-lime-400/15 text-lime-400',
   crashed: 'border border-red-500/50 bg-red-500/15 text-red-500',
@@ -52,13 +67,13 @@ const PILL_COLORS: Record<string, string> = {
 };
 
 /** Transitional statuses — an action is in progress (glass LED pill). */
-const IN_PROGRESS = new Set(['starting', 'stopping', 'installing']);
+const IN_PROGRESS = new Set<BadgeStatus>(['starting', 'stopping', 'installing']);
 
 /** Steady "beacon" statuses — the dot broadcasts a soft expanding halo. */
-const BEACON = new Set(['running', 'online']);
+const BEACON = new Set<BadgeStatus>(['running', 'online']);
 
-/** French label per status — defaults to the raw status. */
-const LABELS: Record<string, string> = {
+/** French label per status. */
+const LABELS: Record<BadgeStatus, string> = {
   starting: 'Démarrage…',
   running: 'En marche',
   online: 'En ligne',
@@ -72,7 +87,9 @@ const LABELS: Record<string, string> = {
 };
 
 export function statusLabel(status: string): string {
-  return LABELS[status] ?? status;
+  // Loose wire type on purpose: rows cross the boundary as plain strings
+  // (the DB column) — an unknown status falls back to the raw value.
+  return LABELS[status as BadgeStatus] ?? status;
 }
 
 /** Tones of the in-progress LED pill (indicator + glass tint). */
@@ -112,7 +129,7 @@ export function InProgressBadge({ label, tone = 'amber' }: { label: string; tone
  * in-progress ones, a calm static dot otherwise.
  */
 export function StatusBall({ status, live }: { status: string; live?: boolean }) {
-  const color = BALL_COLORS[status] ?? 'bg-muted-foreground';
+  const color = BALL_COLORS[status as BadgeStatus] ?? 'bg-muted-foreground';
   return (
     <span className="relative inline-flex size-2.5 shrink-0">
       {live ? (
@@ -122,12 +139,14 @@ export function StatusBall({ status, live }: { status: string; live?: boolean })
             className={`absolute inset-0 animate-live-ring rounded-full ${color} [animation-delay:0.66s]`}
           />
         </>
-      ) : BEACON.has(status) ? (
+      ) : BEACON.has(status as BadgeStatus) ? (
         <span className={`absolute inset-0 animate-halo rounded-full ${color}`} />
       ) : null}
       <span
         className={`relative inline-flex size-2.5 rounded-full ${color} ${
-          IN_PROGRESS.has(status) ? `animate-led ${LED_TEXT[status]}` : ''
+          IN_PROGRESS.has(status as BadgeStatus)
+            ? `animate-led ${LED_TEXT[status as BadgeStatus] ?? ''}`
+            : ''
         }`}
       />
     </span>
@@ -136,7 +155,7 @@ export function StatusBall({ status, live }: { status: string; live?: boolean })
 
 /** Pill badge: status dot + label — glass LED pill for in-progress statuses. */
 export function StatusBadge({ status, live }: { status: string; live?: boolean }) {
-  if (IN_PROGRESS.has(status)) {
+  if (IN_PROGRESS.has(status as BadgeStatus)) {
     return (
       <InProgressBadge
         label={statusLabel(status)}
@@ -147,7 +166,7 @@ export function StatusBadge({ status, live }: { status: string; live?: boolean }
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        PILL_COLORS[status] ??
+        PILL_COLORS[status as BadgeStatus] ??
         'border border-muted-foreground/50 bg-muted-foreground/15 text-muted-foreground'
       }`}
     >

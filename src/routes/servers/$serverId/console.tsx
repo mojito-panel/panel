@@ -5,13 +5,14 @@ import { useState } from 'react';
 import { useRef } from 'react';
 import type { FormEvent } from 'react';
 import { Play, Square, RotateCw, Skull, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import type {
   ConsoleClientMessage,
   ConsoleInstallStatus,
   ServerStatus,
   ServerStats,
 } from '~/contract';
-import type { PanelServerStatus } from '~/components/app-sidebar';
+import type { PanelServerStatus } from '~/components/status-badge';
 import {
   getServerFn,
   getServerRuntimeFn,
@@ -99,7 +100,7 @@ function ServerConsolePage() {
   // (installing → stopped / install_failed). The LIVE state comes over the
   // WS; this only repairs the panel DB when the WS announces an outcome.
   const syncInstallDb = useMutation({
-    mutationFn: () => getInstallStatus({ data: { serverId, after: 0 } }),
+    mutationFn: () => getInstallStatus({ data: { serverId } }),
   });
 
   const handleInstallStatus = (status: ConsoleInstallStatus) => {
@@ -114,7 +115,7 @@ function ServerConsolePage() {
   };
 
   const retry = useMutation({
-    mutationFn: () => retryInstall({ data: { serverId, after: 0 } }),
+    mutationFn: () => retryInstall({ data: { serverId } }),
     onSuccess: async () => {
       // The agent replays the new install over the WS (reset) — status follows
       await queryClient.invalidateQueries({ queryKey: ['install-status', serverId] });
@@ -129,6 +130,7 @@ function ServerConsolePage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['server-runtime', serverId] });
     },
+    onError: (error) => toast.error(error.message),
   });
 
   const submitCommand = useMutation({
@@ -306,9 +308,13 @@ function ServerConsolePage() {
       <ConfirmDialog
         open={askKill}
         onOpenChange={setAskKill}
-        onConfirm={() => {
-          runAction('kill');
-          setAskKill(false);
+        onConfirm={async () => {
+          try {
+            await action.mutateAsync('kill');
+            setAskKill(false);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title="Forcer l’arrêt du process ?"
         confirmLabel="Forcer l’arrêt"

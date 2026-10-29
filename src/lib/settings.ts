@@ -58,8 +58,10 @@ export const SETTING_DEFAULTS: Record<SettingKey, string> = {
   'app:favicon': '',
   'app:gravatar': 'false',
   'app:registration_enabled': 'true',
-  // Only SMTP is implemented in V1 — the driver key exists so other
-  // transports (mailgun, sendgrid…) slot in later without a schema change.
+  // NO mailer is wired yet (V2): the mail settings are STORED — the SMTP
+  // password encrypted at rest — but nothing sends mail. The driver key
+  // exists so transports (smtp, mailgun, sendgrid…) slot in later without
+  // a schema change.
   'mail:driver': 'smtp',
   'mail:smtp:host': 'localhost',
   'mail:smtp:port': '587',

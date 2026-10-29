@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { getFileDownloadUrlFn } from '~/server/functions/files';
 import { getServerFn } from '~/server/functions/servers';
 import { hasServerPermissions } from '~/lib/permissions';
+import { triggerDownload } from '~/components/download';
 import { filesSearchSchema } from '~/validators/files';
 import { FileBrowser } from '~/components/files/file-browser';
 import { FileEditor } from '~/components/files/file-editor';
@@ -68,10 +69,7 @@ function FilesPage() {
   async function download(path: string) {
     try {
       const { url } = await getDownloadUrl({ data: { serverId, path } });
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = path.split('/').pop() ?? 'fichier';
-      a.click();
+      triggerDownload(url, path.split('/').pop() ?? 'fichier');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Téléchargement impossible');
     }

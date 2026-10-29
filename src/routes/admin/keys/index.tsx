@@ -128,9 +128,14 @@ function AdminSshKeysPage() {
         onOpenChange={(open) => {
           if (!open) setKeyToDelete(null);
         }}
-        onConfirm={() => {
-          if (keyToDelete) remove.mutate(keyToDelete.id);
-          setKeyToDelete(null);
+        onConfirm={async () => {
+          if (!keyToDelete) return;
+          try {
+            await remove.mutateAsync(keyToDelete.id);
+            setKeyToDelete(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer la clé « ${keyToDelete?.name} » ?`}
         description="La clé privée est définitivement supprimée — les dépôts privés qui l’utilisent ne seront plus accessibles."

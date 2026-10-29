@@ -40,7 +40,9 @@ function encryptionKey(): Buffer {
 /** Encrypts a secret for storage. */
 export function encryptSecret(plaintext: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  // authTagLength is EXPLICIT: Node 24 marks implicit GCM auth-tag sizes as
+  // deprecated (DEP0182) — a future release will refuse the call without it.
+  const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv, { authTagLength: 16 });
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${PREFIX}${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
@@ -54,7 +56,9 @@ export function decryptSecret(value: string): string {
   if (!value.startsWith(PREFIX)) return value;
   const [ivB64, tagB64, dataB64] = value.slice(PREFIX.length).split(':');
   try {
-    const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivB64, 'base64'));
+    const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivB64, 'base64'), {
+      authTagLength: 16,
+    });
     decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
     return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
   } catch {

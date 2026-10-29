@@ -14,6 +14,9 @@ import {
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { CoverImage } from '~/components/cover-image';
 import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
+import { ErrorState } from '~/components/error/error-state';
+import { useAuth } from '~/contexts/use-auth';
+import { hasPermissions } from '~/lib/permissions';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
@@ -92,6 +95,13 @@ function RegistryCatalogPage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const search = Route.useSearch();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const permissions = user?.permissions ?? [];
+
+  // Panel-level grants — the server functions enforce the same ones
+  // (sync = update, import = create)
+  const canUpdate = hasPermissions(permissions, { 'panel.recipes': ['update'] });
+  const canImport = hasPermissions(permissions, { 'panel.recipes': ['create'] });
 
   const listEntries = useServerFn(listRegistryEntriesFn);
   const syncRegistry = useServerFn(syncRegistryFn);
@@ -224,10 +234,12 @@ function RegistryCatalogPage() {
             {registry?.neverSynced && ' · première synchronisation en cours…'}
           </CardDescription>
           <CardAction>
-            <Button variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}>
-              <RefreshCw />
-              Synchroniser
-            </Button>
+            {canUpdate && (
+              <Button variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}>
+                <RefreshCw />
+                Synchroniser
+              </Button>
+            )}
           </CardAction>
         </CardHeader>
         <CardContent>
@@ -284,6 +296,9 @@ function RegistryCatalogPage() {
                 <div key={index} className="aspect-[2/3] animate-pulse rounded-md bg-muted" />
               ))}
             </div>
+          ) : query.isError ? (
+            // A failed load is NEVER an empty catalog — offer the retry.
+            <ErrorState message={query.error.message} onRetry={() => query.refetch()} bare />
           ) : visible.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {registry?.neverSynced
@@ -340,22 +355,26 @@ function RegistryCatalogPage() {
                     )}
                     <div className="mt-auto flex items-center gap-1 pt-1">
                       {IMPORTABLE_STATUSES.has(row.status) ? (
-                        <Button
-                          size="sm"
-                          className="flex-1"
-                          variant={row.status === 'not_imported' ? 'default' : 'outline'}
-                          disabled={runImport.isPending}
-                          onClick={() => onImport(row)}
-                        >
-                          {row.status === 'not_imported' ? (
-                            'Importer'
-                          ) : (
-                            <>
-                              <RefreshCw />
-                              Mettre à jour
-                            </>
-                          )}
-                        </Button>
+                        canImport ? (
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            variant={row.status === 'not_imported' ? 'default' : 'outline'}
+                            disabled={runImport.isPending}
+                            onClick={() => onImport(row)}
+                          >
+                            {row.status === 'not_imported' ? (
+                              'Importer'
+                            ) : (
+                              <>
+                                <RefreshCw />
+                                Mettre à jour
+                              </>
+                            )}
+                          </Button>
+                        ) : (
+                          <span className="flex-1" />
+                        )
                       ) : (
                         <span className="flex-1" />
                       )}
@@ -384,9 +403,14 @@ function RegistryCatalogPage() {
         onOpenChange={(open) => {
           if (!open) setRowToConfirm(null);
         }}
-        onConfirm={() => {
-          if (rowToConfirm) runImport.mutate(rowToConfirm);
-          setRowToConfirm(null);
+        onConfirm={async () => {
+          if (!rowToConfirm) return;
+          try {
+            await runImport.mutateAsync(rowToConfirm);
+            setRowToConfirm(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`« ${rowToConfirm?.name} » a été modifiée localement`}
         description="Mettre à jour depuis le registre écrasera les modifications locales — la recette redeviendra identique au fichier du dépôt."

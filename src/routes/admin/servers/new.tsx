@@ -307,7 +307,7 @@ function NewServerPage() {
                     onBlur={field.handleBlur}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Fractional values allowed (1.5) — 0 = unlimited.
+                    Valeurs fractionnaires acceptées (ex. 1.5) — 0 = illimité.
                   </p>
                   {field.state.meta.errors.length > 0 && (
                     <p className="text-sm text-destructive">

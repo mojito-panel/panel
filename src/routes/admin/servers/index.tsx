@@ -127,9 +127,16 @@ function AdminServersPage() {
         onOpenChange={(open) => {
           if (!open) setServerToDelete(null);
         }}
-        onConfirm={() => {
-          if (serverToDelete) remove.mutate({ server: serverToDelete });
-          setServerToDelete(null);
+        onConfirm={async () => {
+          if (!serverToDelete) return;
+          try {
+            await remove.mutateAsync({ server: serverToDelete });
+            setServerToDelete(null);
+          } catch {
+            // Toasted by the mutation — an unreachable agent opens the force
+            // dialog (the mutation's onError), so this one closes either way.
+            setServerToDelete(null);
+          }
         }}
         title={`Supprimer « ${serverToDelete?.name} » ?`}
         description="Le dossier sera effacé sur le node."
@@ -144,9 +151,14 @@ function AdminServersPage() {
         onOpenChange={(open) => {
           if (!open) setForceTarget(null);
         }}
-        onConfirm={() => {
-          if (forceTarget) remove.mutate({ server: forceTarget, force: true });
-          setForceTarget(null);
+        onConfirm={async () => {
+          if (!forceTarget) return;
+          try {
+            await remove.mutateAsync({ server: forceTarget, force: true });
+            setForceTarget(null);
+          } catch {
+            // Toasted by the mutation — keep the dialog open.
+          }
         }}
         title={`Supprimer « ${forceTarget?.name} » sans l’agent ?`}
         description="L’agent est injoignable : le serveur sera supprimé du panel, mais son dossier et son conteneur resteront sur le node — ils seront nettoyés automatiquement dès que le node répondra à nouveau."
