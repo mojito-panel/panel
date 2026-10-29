@@ -87,16 +87,25 @@ describe('buildRegistryEntries', () => {
     }
   });
 
-  it('only matches the recipe-*.json naming convention (anchored)', () => {
+  it('matches BOTH naming conventions: recipe-*.json and nested <id>.json', () => {
     const entries = buildRegistryEntries([
       { path: 'steamcmd/x/recipe-x.json', content: JSON.stringify(APP_RECIPE) },
+      { path: 'steamcmd/enshrouded/enshrouded.json', content: JSON.stringify(APP_RECIPE) },
       { path: 'steamcmd/x/README.md', content: 'not a recipe' },
+      // The loose <id>.json form: the base name IS the id (kebab charset) —
+      // 'myrecipe-x.json' is simply a recipe whose id is 'myrecipe-x'.
       { path: 'steamcmd/x/myrecipe-x.json', content: JSON.stringify(APP_RECIPE) },
+      // Only the recipe-id charset (lowercase letters, digits, dashes).
+      { path: 'steamcmd/x/Package.json', content: JSON.stringify(APP_RECIPE) },
+      // ...and only NESTED files — a repo-root json (package.json…) is config.
+      { path: 'package.json', content: JSON.stringify(APP_RECIPE) },
       { path: 'nested/deep/dir/recipe-deep.json', content: JSON.stringify(APP_RECIPE) },
     ]);
 
     expect(entries.map((entry) => entry.path)).toEqual([
       'nested/deep/dir/recipe-deep.json',
+      'steamcmd/enshrouded/enshrouded.json',
+      'steamcmd/x/myrecipe-x.json',
       'steamcmd/x/recipe-x.json',
     ]);
   });

@@ -25,11 +25,19 @@ export function sha256Text(text: string): string {
 }
 
 /**
- * Recipe JSON file pattern — the recipes repo naming convention
- * (`<category>/<recipe>/recipe-<id>.json`). Anchored after a separator so
- * "myrecipe-x.json" does not match.
+ * Recipe JSON file patterns — BOTH naming conventions are accepted:
+ *
+ * - the historical `recipe-<id>.json` (any id chars after the prefix,
+ *   anywhere in the tree);
+ * - the plain `<id>.json` — the base name IS the recipe id, hence the
+ *   contract's id charset (lowercase letters, digits, dashes) — and it must
+ *   sit NESTED (`steamcmd/enshrouded/enshrouded.json`), so a repo-root
+ *   config file (`package.json`, `registry.json`…) never enters the catalog.
+ *
+ * A file that matches but does not validate still shows up (with its
+ * `error`) — only the NAMING decides what is a candidate.
  */
-export const RECIPE_FILE_PATTERN = /(^|\/)recipe-[^/\\]+\.json$/;
+export const RECIPE_FILE_PATTERN = /(^|\/)recipe-[^/\\]+\.json$|(^|\/)[a-z0-9-]+\/[a-z0-9-]+\.json$/;
 
 /** Upper bound per recipe file — same cap as a URL import. */
 export const MAX_RECIPE_FILE_BYTES = 2_000_000;
