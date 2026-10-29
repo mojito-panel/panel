@@ -152,6 +152,14 @@
   border-bottom-color: color-mix(in oklab, var(--destructive) 30%, transparent);
 }
 
+/* ─── Wide-screen layout (marketplace grids) ───────────────────────────────── */
+@theme {
+  /* 2xl (1536px) is reached by a maximized 1080p window once the sidebar
+     collapses — too early for 8-column grids. 1920px only clears on a
+     1440p display: 6 columns stay the 1080p density. */
+  --breakpoint-3xl: 120rem;
+}
+
 /* ─── Status indicator animations (components/status-badge.tsx) ────────────── */
 @theme {
   /* Breathing glow of an in-progress LED indicator. The glow is the DOT's
