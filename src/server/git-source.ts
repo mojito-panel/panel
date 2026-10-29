@@ -2,7 +2,7 @@ import '@tanstack/react-start/server-only';
 import { execFile } from 'node:child_process';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { isSshRemote } from '~/lib/ssh-key';
 import { MAX_RECIPE_FILE_BYTES, RECIPE_FILE_PATTERN } from './registry-entries';
@@ -43,7 +43,11 @@ export interface GitCloneResult {
 export interface GitRecipeFile {
   path: string;
   content: string;
-  /** Sibling cover image (cover.png/jpg/jpeg/webp), base64 data URL — null when absent or too large. */
+  /**
+   * Cover artwork (base64 data URL) — the recipe's OWN base name
+   * (`recipe-icarus.json` → `recipe-icarus.jpg|png|…`) or the shared sibling
+   * `cover.*`; null when the repo ships neither (or the file is too large).
+   */
   cover: string | null;
 }
 
@@ -227,20 +231,47 @@ async function readRecipeFiles(root: string): Promise<GitRecipeFile[]> {
 }
 
 /**
- * Reads the sibling cover of a recipe file — `cover.png`, `cover.jpg`,
- * `cover.jpeg` or `cover.webp` in the same directory (vertical artwork,
- * rendered on the marketplace cards). Returns a base64 data URL, null when
- * the recipe ships none (or the file exceeds the cosmetic size cap).
+ * The cover candidates of a recipe file, best first:
+ *
+ * 1. the recipe's OWN base name — `recipe-icarus.json` looks for
+ *    `recipe-icarus.png|jpg|jpeg|webp` next to it (one folder per recipe:
+ *    the cover travels with its recipe, no cross-recipe confusion);
+ * 2. the shared sibling `cover.png|jpg|jpeg|webp` (the original convention,
+ *    still honored so existing repositories keep working).
+ *
+ * The extension priority follows COVER_FILES (png, jpg, jpeg, webp) for
+ * both groups. Pure — unit-tested. Returns file NAMES relative to the
+ * recipe's own directory; the caller joins them with that directory.
+ */
+export function coverCandidates(recipePath: string): Array<{ name: string; mime: string }> {
+  const base = basename(recipePath, extname(recipePath));
+
+  const candidates: Array<{ name: string; mime: string }> = [];
+  for (const [coverName, mime] of Object.entries(COVER_FILES)) {
+    candidates.push({ name: `${base}${extname(coverName)}`, mime });
+  }
+  for (const [name, mime] of Object.entries(COVER_FILES)) {
+    candidates.push({ name, mime });
+  }
+  return candidates;
+}
+
+/**
+ * Reads the cover of a recipe file (vertical artwork, rendered on the
+ * marketplace cards): the recipe's own base name first
+ * (`recipe-icarus.json` → `recipe-icarus.jpg`…), then the shared sibling
+ * `cover.*`. Returns a base64 data URL, null when the recipe ships none
+ * (the UI renders a generated gradient instead).
  */
 async function readCover(root: string, recipePath: string): Promise<string | null> {
   const dir = dirname(recipePath);
-  for (const [name, mime] of Object.entries(COVER_FILES)) {
+  for (const { name, mime } of coverCandidates(recipePath)) {
     try {
       const buffer = await readFile(join(root, dir, name));
       if (buffer.byteLength === 0 || buffer.byteLength > MAX_COVER_BYTES) continue;
       return `data:${mime};base64,${buffer.toString('base64')}`;
     } catch {
-      // No such file — try the next extension.
+      // No such file — try the next candidate.
     }
   }
   return null;
