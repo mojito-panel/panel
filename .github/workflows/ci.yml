@@ -2,9 +2,8 @@
 #
 # A Postgres 17 service container backs the database suites (they read
 # DATABASE_URL); when the database is unreachable the Postgres suites
-# self-skip, and the shipped-recipes suite self-skips when the sibling
-# `../recipes` checkout is absent (this workflow checks out the panel
-# repo alone).
+# self-skip. The recipe contract is validated by the recipes repo's CI (it
+# checks out this repo and runs tests/recipe-schema.test.ts).
 name: CI
 
 on:
