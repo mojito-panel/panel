@@ -31,7 +31,15 @@ describe('recipeGraphHashOf', () => {
   });
 
   it('ignores key order and the runtime resolution order', () => {
-    const reordered = { author: 'Tester', name: 'Minecraft', ...app };
+    // Same content as `app`, with the keys written in a different order.
+    const reordered = {
+      variables: app.variables,
+      requires: app.requires,
+      author: app.author,
+      name: app.name,
+      id: app.id,
+      schema_version: app.schema_version,
+    };
     const other = { ...java, id: 'bedrock' };
     expect(recipeGraphHashOf(reordered, [java, other])).toBe(recipeGraphHashOf(app, [other, java]));
   });
