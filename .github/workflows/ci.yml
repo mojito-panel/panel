@@ -2,8 +2,9 @@
 #
 # A Postgres 17 service container backs the database suites (they read
 # DATABASE_URL); when the database is unreachable the Postgres suites
-# self-skip. The recipe contract is validated by the recipes repo's CI (it
-# checks out this repo and runs tests/recipe-schema.test.ts).
+# self-skip. The panel validates RECIPES it receives (contract + agent), never
+# the recipes repository itself: shipped recipes are validated by the recipes
+# repo's own CI.
 name: CI
 
 on:

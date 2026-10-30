@@ -164,6 +164,7 @@ src/
 - After any change: `npm test` must pass.
 - Before finishing: `hk check --all` (or `mise run check`) must pass — it runs oxfmt, oxlint, tsc and the tests, exactly like CI.
 - List contract: `tests/list-query.test.ts` (query schema + the SQL each declaration generates, via a metadata-only Postgres ORM with `connect: false`), `tests/search-params.test.ts` (URL round-trip) and `tests/list-query.postgres.test.ts` (the same spec executed against the dev database — it skips itself when none is reachable, so `npm test` stays green without the dev stack).
+- **NEVER test the recipes repo from here.** The panel owns the recipe CONTRACT (`src/contract/recipe-schema.ts`) and validates the recipes it receives (import, registry sync, agent payloads) — that is what its tests cover. The SHIPPED recipes (the `mojito-panel/recipes` repository) are validated by that repo's own CI; the panel suite must not read a sibling `../recipes`, check out the recipes repo, or add a shipped-recipes test. This was removed twice already — do not bring it back.
 
 ## Deferred to V2 (do NOT do in V1)
 
