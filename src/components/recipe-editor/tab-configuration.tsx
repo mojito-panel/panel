@@ -1,4 +1,5 @@
 import { CardSection } from '~/components/tabs-card';
+import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import {
   Select,
@@ -8,13 +9,15 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
+import { newStartConfigValue, type StartConfigValue } from '~/validators/recipe-editor';
 
-import { FieldShell, KvRows, TagsInput } from './fields';
+import { CollapseCard, FieldShell, ItemActions, KvRows, TagsInput } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
 /**
  * Tab « Configuration » of a recipe — identity, type (app/runtime),
- * required runtimes, runtime export and host requirements.
+ * required runtimes, runtime export, fixed env, pre-start config files
+ * and backups.
  */
 
 /** Row-level errors of a key/value list (`prefix[i].key` from the form errorMap). */
@@ -256,9 +259,9 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
       </form.Subscribe>
 
       {/* App-only sections — a runtime recipe has no fixed env (its
-          exports are the export block), no host requirements (its steps
-          run under the requiring server's own caps) and no backups (its
-          .bin dir lives inside the app's and is always excluded). */}
+          exports are the export block), no pre-start config files (it is
+          never started) and no backups (its .bin dir lives inside the
+          app's and is always excluded). */}
       <form.Subscribe selector={(s) => s.values.recipeType}>
         {(recipeType) =>
           recipeType === 'app' && (
@@ -301,83 +304,142 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
               </CardSection>
 
               <CardSection
-                title="Prérequis"
-                description="Refusés par l'agent si la machine ne convient pas (0 = aucun)."
+                title="Configuration au démarrage"
+                description="Fichiers de configuration ré-appliqués AVANT chaque démarrage (même mécanique que les eggs Pelican) : les clés déclarées sont mises à jour, le reste du fichier est conservé, un fichier absent est créé. Les modifications de variables arrivent donc dans le jeu au prochain démarrage, sans réinstallation."
               >
-                <div className="grid gap-4 md:grid-cols-2">
-                  <form.Field name="requirements.minRamMb">
-                    {(field) => (
-                      <FieldShell
-                        id="recipe-min-ram"
-                        label="RAM minimale (Mo)"
-                        errors={field.state.meta.errors}
-                      >
-                        <Input
-                          id="recipe-min-ram"
-                          type="number"
-                          value={String(field.state.value)}
-                          onChange={(e) => field.handleChange(Number(e.target.value))}
-                          onBlur={field.handleBlur}
-                        />
-                      </FieldShell>
-                    )}
-                  </form.Field>
+                <form.Field name="start.configs" mode="array">
+                  {(field) => (
+                    <div className="space-y-3">
+                      {field.state.value.map((_, index) => (
+                        <form.Subscribe key={index} selector={(s) => s.values.start.configs[index]}>
+                          {(config) => (
+                            <CollapseCard
+                              title={config?.file || 'Fichier de configuration'}
+                              subtitle={config?.parser}
+                              badge={
+                                <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+                                  #{index + 1}
+                                </span>
+                              }
+                              actions={
+                                <ItemActions
+                                  onMoveUp={
+                                    index > 0 ? () => field.moveValue(index, index - 1) : undefined
+                                  }
+                                  onMoveDown={
+                                    index < field.state.value.length - 1
+                                      ? () => field.moveValue(index, index + 1)
+                                      : undefined
+                                  }
+                                  onRemove={() => field.removeValue(index)}
+                                />
+                              }
+                            >
+                              <div className="grid gap-4 md:grid-cols-2">
+                                <form.Field name={`start.configs[${index}].file`}>
+                                  {(fileField) => (
+                                    <FieldShell
+                                      id={`start-config-${index}-file`}
+                                      label="Fichier"
+                                      hint="Relatif à la racine du serveur."
+                                      errors={fileField.state.meta.errors}
+                                    >
+                                      <Input
+                                        id={`start-config-${index}-file`}
+                                        className="font-mono"
+                                        value={fileField.state.value}
+                                        onChange={(e) => fileField.handleChange(e.target.value)}
+                                        onBlur={fileField.handleBlur}
+                                        placeholder="server.properties"
+                                      />
+                                    </FieldShell>
+                                  )}
+                                </form.Field>
 
-                  <form.Field name="requirements.minDiskMb">
-                    {(field) => (
-                      <FieldShell
-                        id="recipe-min-disk"
-                        label="Disque minimal (Mo)"
-                        errors={field.state.meta.errors}
-                      >
-                        <Input
-                          id="recipe-min-disk"
-                          type="number"
-                          value={String(field.state.value)}
-                          onChange={(e) => field.handleChange(Number(e.target.value))}
-                          onBlur={field.handleBlur}
-                        />
-                      </FieldShell>
-                    )}
-                  </form.Field>
+                                <form.Field name={`start.configs[${index}].parser`}>
+                                  {(parserField) => (
+                                    <FieldShell
+                                      id={`start-config-${index}-parser`}
+                                      label="Parser"
+                                      errors={parserField.state.meta.errors}
+                                    >
+                                      <Select
+                                        value={parserField.state.value}
+                                        onValueChange={(parser) =>
+                                          parserField.handleChange(
+                                            parser as StartConfigValue['parser'],
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger
+                                          id={`start-config-${index}-parser`}
+                                          className="w-full"
+                                        >
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="properties">properties</SelectItem>
+                                          <SelectItem value="ini">ini</SelectItem>
+                                          <SelectItem value="yaml">yaml</SelectItem>
+                                          <SelectItem value="json">json</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </FieldShell>
+                                  )}
+                                </form.Field>
 
-                  <form.Field name="requirements.minCpuPercent">
-                    {(field) => (
-                      <FieldShell
-                        id="recipe-min-cpu"
-                        label="CPU minimal (%)"
-                        errors={field.state.meta.errors}
-                      >
-                        <Input
-                          id="recipe-min-cpu"
-                          type="number"
-                          value={String(field.state.value)}
-                          onChange={(e) => field.handleChange(Number(e.target.value))}
-                          onBlur={field.handleBlur}
-                        />
-                      </FieldShell>
-                    )}
-                  </form.Field>
+                                <div className="md:col-span-2">
+                                  <form.Field name={`start.configs[${index}].find`}>
+                                    {(findField) => (
+                                      <FieldShell
+                                        id={`start-config-${index}-find`}
+                                        label="Clés à modifier (clé → valeur)"
+                                        errors={findField.state.meta.errors}
+                                      >
+                                        <form.Subscribe
+                                          selector={(s) =>
+                                            (
+                                              s.errorMap.onChange as
+                                                | { fields?: Record<string, readonly unknown[]> }
+                                                | undefined
+                                            )?.fields ?? {}
+                                          }
+                                        >
+                                          {(errorFields) => (
+                                            <KvRows
+                                              pairs={findField.state.value}
+                                              onChange={findField.handleChange}
+                                              keyPlaceholder="server-port"
+                                              valuePlaceholder="{{SERVER_PORT}}"
+                                              addLabel="Ajouter une clé"
+                                              errors={pairErrors(
+                                                `start.configs[${index}].find`,
+                                                errorFields,
+                                              )}
+                                            />
+                                          )}
+                                        </form.Subscribe>
+                                      </FieldShell>
+                                    )}
+                                  </form.Field>
+                                </div>
+                              </div>
+                            </CollapseCard>
+                          )}
+                        </form.Subscribe>
+                      ))}
 
-                  <form.Field name="requirements.requiredCommands">
-                    {(field) => (
-                      <FieldShell
-                        id="recipe-required-commands"
-                        label="Commandes requises"
-                        hint="Exécutables qui doivent exister sur l'hôte, séparés par des virgules."
-                        errors={field.state.meta.errors}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => field.pushValue(newStartConfigValue())}
                       >
-                        <TagsInput
-                          id="recipe-required-commands"
-                          value={field.state.value}
-                          onChange={field.handleChange}
-                          onBlur={field.handleBlur}
-                          placeholder="java, curl"
-                        />
-                      </FieldShell>
-                    )}
-                  </form.Field>
-                </div>
+                        + Fichier de configuration
+                      </Button>
+                    </div>
+                  )}
+                </form.Field>
               </CardSection>
 
               <CardSection

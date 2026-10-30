@@ -59,17 +59,6 @@ export const recipeVariableSchema = z.object({
 
 export type RecipeVariable = z.infer<typeof recipeVariableSchema>;
 
-// ─── Requirements ─────────────────────────────────────────────────────────────
-
-export const recipeRequirementsSchema = z.object({
-  min_ram_mb: z.number().int().positive().optional(),
-  min_disk_mb: z.number().int().positive().optional(),
-  min_cpu_percent: z.number().int().min(1).max(100).optional(),
-  required_commands: z.array(z.string()).optional(),
-});
-
-export type RecipeRequirements = z.infer<typeof recipeRequirementsSchema>;
-
 // ─── Runner actions ────────────────────────────────────────────────────────
 
 const downloadActionSchema = z.object({
@@ -105,8 +94,9 @@ const replaceActionSchema = z.object({
 /**
  * Pelican's `config.files` equivalent: typed modification of config files
  * via a parser (properties, ini, yaml, json) — key -> templated value.
+ * Used by the install actions AND by the pre-start configs (`start.configs`).
  */
-const configFileActionSchema = z.object({
+export const configFileActionSchema = z.object({
   action: z.literal('configFile'),
   file: z.string().min(1),
   parser: z.enum(['properties', 'ini', 'yaml', 'json']),
@@ -299,11 +289,31 @@ export type BackupConfig = z.infer<typeof backupConfigSchema>;
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
+/**
+ * Pre-start config update (Pelican's `config.files` / wings
+ * `UpdateConfigurationFiles`): a typed find/replace applied to a file
+ * BEFORE every spawn — the panel's variable edits reach the game at the
+ * next start, without a reinstall. Same shape as the `configFile` install
+ * action; a missing file is CREATED with the declared keys, every other
+ * line (comments, unknown keys) is preserved.
+ *
+ * Errors are logged and never block the boot (wings' semantics: worst
+ * case the server starts with a stale value, the user can fix it by hand).
+ */
+export const startConfigFileSchema = configFileActionSchema.omit({ action: true });
+
+export type StartConfigFile = z.infer<typeof startConfigFileSchema>;
+
 export const startConfigSchema = z.object({
   command: z.string().min(1),
   stop: stopConfigSchema.optional(),
   ready: readyConfigSchema.optional(),
   working_directory: z.string().optional(),
+  /**
+   * Config files re-applied before every start (see `startConfigFileSchema`).
+   * Absent in a raw recipe JSON — the contract defaults it to `[]`.
+   */
+  configs: z.array(startConfigFileSchema).optional(),
 });
 
 export type StartConfig = z.infer<typeof startConfigSchema>;
@@ -330,7 +340,6 @@ export const recipeSchema = z.object({
   tags: z.array(z.string()).default([]),
   /** URL of a recipe update JSON (Pelican's meta.update_url equivalent). */
   update_url: z.string().url().optional(),
-  requirements: recipeRequirementsSchema.optional(),
   variables: z.array(recipeVariableSchema).default([]),
   install: z.array(runnerActionSchema).default([]),
   start: startConfigSchema,
@@ -501,6 +510,10 @@ export function findUnknownVariables(recipe: Recipe): string[] {
   if (recipe.start.working_directory) collectFrom(recipe.start.working_directory);
   if (recipe.start.ready) collectFrom(recipe.start.ready.pattern);
   if (recipe.start.stop) collectFrom(recipe.start.stop.value);
+  for (const config of recipe.start.configs ?? []) {
+    collectFrom(config.file);
+    for (const value of Object.values(config.find)) collectFrom(value);
+  }
 
   for (const action of recipe.install) {
     if (action.action === 'download') {

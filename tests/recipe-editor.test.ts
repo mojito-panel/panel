@@ -35,7 +35,6 @@ function fullEditorValue(): RecipeEditorValue {
     requires: ['java'],
     exportPath: '',
     exportEnv: [],
-    requirements: { minRamMb: 1024, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [{ key: 'SERVER_JARFILE', value: 'server.jar' }],
     backup: { include: ['world', 'plugins/*', 'server.properties'] },
     variables: [
@@ -86,6 +85,13 @@ function fullEditorValue(): RecipeEditorValue {
       stop: { type: 'command', value: 'stop', timeoutMs: 30000 },
       ready: { pattern: 'Done \\([0-9.]+s\\)!', strip: '' },
       workingDirectory: '',
+      configs: [
+        {
+          file: 'server.properties',
+          parser: 'properties',
+          find: [{ key: 'server-port', value: '{{SERVER_PORT}}' }],
+        },
+      ],
     },
     logs: { mode: 'stdout', file: '', stripAnsi: true },
   };
@@ -198,6 +204,34 @@ describe('recipeEditorValueToRecipe', () => {
     expect(recipe?.backup).toBeUndefined();
   });
 
+  it('carries the pre-start configs to the recipe JSON', () => {
+    const { recipe } = appRecipeOf(fullEditorValue());
+    expect(recipe?.start.configs).toEqual([
+      {
+        file: 'server.properties',
+        parser: 'properties',
+        find: { 'server-port': '{{SERVER_PORT}}' },
+      },
+    ]);
+  });
+
+  it('drops the pre-start configs when the list is empty', () => {
+    const value = fullEditorValue();
+    value.start.configs = [];
+    const { recipe } = appRecipeOf(value);
+    expect(recipe?.start.configs).toBeUndefined();
+  });
+
+  it('rejects a pre-start config without a file or without keys', () => {
+    const noFile = fullEditorValue();
+    noFile.start.configs = [{ file: ' ', parser: 'ini', find: [{ key: 'a', value: 'b' }] }];
+    expect(recipeEditorSchema.safeParse(noFile).success).toBe(false);
+
+    const noKeys = fullEditorValue();
+    noKeys.start.configs = [{ file: 'server.properties', parser: 'properties', find: [] }];
+    expect(recipeEditorSchema.safeParse(noKeys).success).toBe(false);
+  });
+
   it('rejects an escaping backup include pattern in the schema', () => {
     const value = fullEditorValue();
     value.backup = { include: ['../secrets'] };
@@ -221,6 +255,18 @@ describe('findUnknownVariablesInEditorValue', () => {
     const value = fullEditorValue();
     value.start.command = 'java -jar {{UNDECLARED_VAR}}';
     expect(findUnknownVariablesInEditorValue(value)).toEqual(['UNDECLARED_VAR']);
+  });
+
+  it('detects an undeclared template variable in a pre-start config', () => {
+    const value = fullEditorValue();
+    value.start.configs = [
+      {
+        file: 'server.properties',
+        parser: 'properties',
+        find: [{ key: 'motd', value: '{{NOPE}}' }],
+      },
+    ];
+    expect(findUnknownVariablesInEditorValue(value)).toEqual(['NOPE']);
   });
 
   it('accepts system variables without declaration', () => {

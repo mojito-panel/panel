@@ -34,7 +34,6 @@ const validPaperRecipe = {
   author: 'papermc',
   description: 'High performance Spigot fork.',
   tags: ['minecraft', 'java'],
-  requirements: { min_ram_mb: 512, required_commands: ['java'] },
   variables: [
     {
       env: 'MINECRAFT_VERSION',
@@ -86,6 +85,13 @@ const validPaperRecipe = {
     command: 'java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}}',
     stop: { type: 'command' as const, value: 'stop', timeout_ms: 30000 },
     ready: { pattern: 'Done \\([0-9.]+s\\)! For help', strip: '\\[.*?\\] ' },
+    configs: [
+      {
+        file: 'server.properties',
+        parser: 'properties' as const,
+        find: { 'server-port': '{{SERVER_PORT}}' },
+      },
+    ],
   },
   logs: { mode: 'stdout' as const, strip_ansi: true },
   env: { JAVA_OPTS: '-XX:+UseG1GC' },
@@ -308,6 +314,71 @@ describe('findUnknownVariables', () => {
       ],
     });
     expect(findUnknownVariables(recipe)).toEqual(['NOT_DECLARED']);
+  });
+
+  it('detects unknown variables in the pre-start configs', () => {
+    const recipe = parseRecipe({
+      ...validPaperRecipe,
+      start: {
+        ...validPaperRecipe.start,
+        configs: [{ file: 'x.ini', parser: 'ini', find: { key: '{{MISSING}}' } }],
+      },
+    });
+    expect(findUnknownVariables(recipe)).toEqual(['MISSING']);
+  });
+});
+
+describe('pre-start configs (start.configs)', () => {
+  it('leaves the list absent when the recipe declares none', () => {
+    const recipe = parseRecipe({
+      ...validPaperRecipe,
+      start: { ...validPaperRecipe.start, configs: undefined },
+    });
+    expect(recipe.start.configs).toBeUndefined();
+  });
+
+  it('accepts one entry per file with its parser and keys', () => {
+    const recipe = parseRecipe(validPaperRecipe);
+    expect(recipe.start.configs).toEqual([
+      {
+        file: 'server.properties',
+        parser: 'properties',
+        find: { 'server-port': '{{SERVER_PORT}}' },
+      },
+    ]);
+  });
+
+  it('rejects an unknown parser', () => {
+    const result = safeParseRecipe({
+      ...validPaperRecipe,
+      start: {
+        ...validPaperRecipe.start,
+        configs: [{ file: 'x.toml', parser: 'toml', find: { a: 'b' } }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an entry without a file', () => {
+    const result = safeParseRecipe({
+      ...validPaperRecipe,
+      start: {
+        ...validPaperRecipe.start,
+        configs: [{ file: '', parser: 'ini', find: { a: 'b' } }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('requirements (removed from the contract)', () => {
+  it('ignores a legacy requirements block instead of rejecting the recipe', () => {
+    const result = safeParseRecipe({
+      ...validPaperRecipe,
+      requirements: { min_ram_mb: 1024, required_commands: ['java'] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).not.toHaveProperty('requirements');
   });
 });
 

@@ -11,6 +11,7 @@ import {
   type RuntimeRecipe,
   type RunnerAction,
   type RunnerActionInput,
+  type StartConfigFile,
   type StopSignal,
 } from '~/contract';
 
@@ -278,17 +279,23 @@ export const logsValueSchema = z.object({
 
 export type LogsValue = z.infer<typeof logsValueSchema>;
 
-// ─── Requirements ────────────────────────────────────────────────────────────
+// ─── Pre-start configs (Pelican's config.files) ──────────────────────────────
 
-export const requirementsValueSchema = z.object({
-  /** 0 = absent. */
-  minRamMb: z.number().int().min(0),
-  minDiskMb: z.number().int().min(0),
-  minCpuPercent: z.number().int().min(0).max(100),
-  requiredCommands: z.array(z.string()),
+/**
+ * One config file re-applied before EVERY start (same shape as the
+ * `configFile` install action, minus the `action` discriminator).
+ */
+export const startConfigValueSchema = z.object({
+  file: z.string(),
+  parser: z.enum(['properties', 'ini', 'yaml', 'json']),
+  find: z.array(kvPairSchema),
 });
 
-export type RequirementsValue = z.infer<typeof requirementsValueSchema>;
+export type StartConfigValue = z.infer<typeof startConfigValueSchema>;
+
+export function newStartConfigValue(): StartConfigValue {
+  return { file: '', parser: 'properties', find: [] };
+}
 
 // ─── Backup (glob include patterns) ──────────────────────────────────────────
 
@@ -363,7 +370,6 @@ export const recipeEditorSchema = z
     description: z.string(),
     tags: z.array(z.string()),
     updateUrl: z.string(),
-    requirements: requirementsValueSchema,
     /** Runtime recipe ids this recipe requires (app AND runtime both). */
     requires: z.array(z.string().regex(/^[a-z0-9-]+$/, 'ID de runtime invalide')),
     /**
@@ -395,6 +401,8 @@ export const recipeEditorSchema = z
       stop: stopValueSchema.nullable(),
       ready: readyValueSchema.nullable(),
       workingDirectory: z.string(),
+      /** Config files re-applied before every start (app only). */
+      configs: z.array(startConfigValueSchema),
     }),
     logs: logsValueSchema,
   })
@@ -435,6 +443,25 @@ export const recipeEditorSchema = z
     };
     checkPairs(value.env, ['env']);
 
+    // Pre-start configs: a file and at least one key each, no duplicate keys
+    value.start.configs.forEach((config, index) => {
+      if (!config.file.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['start', 'configs', index, 'file'],
+          message: 'Fichier requis',
+        });
+      }
+      if (config.find.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['start', 'configs', index, 'find'],
+          message: 'Au moins une clé à modifier est requise',
+        });
+      }
+      checkPairs(config.find, ['start', 'configs', index, 'find']);
+    });
+
     // Logs file required when following a file
     if (value.logs.mode === 'file' && !value.logs.file) {
       ctx.addIssue({ code: 'custom', path: ['logs', 'file'], message: 'Fichier de log requis' });
@@ -465,7 +492,6 @@ export function runtimeToEditorValue(recipe: RuntimeRecipe): RecipeEditorValue {
     requires: recipe.requires ?? [],
     exportPath: recipe.export?.path ?? '',
     exportEnv: toPairs(recipe.export?.env),
-    requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [],
     backup: { include: [] },
     variables: contractVariablesToEditor(recipe.variables),
@@ -475,6 +501,7 @@ export function runtimeToEditorValue(recipe: RuntimeRecipe): RecipeEditorValue {
       stop: null,
       ready: null,
       workingDirectory: '',
+      configs: [],
     },
     logs: { mode: 'stdout', file: '', stripAnsi: false },
   };
@@ -494,7 +521,6 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
     requires: [],
     exportPath: '.',
     exportEnv: [],
-    requirements: { minRamMb: 0, minDiskMb: 0, minCpuPercent: 0, requiredCommands: [] },
     env: [],
     backup: { include: [] },
     variables: [],
@@ -504,6 +530,7 @@ export function emptyRecipeEditorValue(): RecipeEditorValue {
       stop: null,
       ready: null,
       workingDirectory: '',
+      configs: [],
     },
     logs: { mode: 'stdout', file: '', stripAnsi: false },
   };
@@ -605,13 +632,12 @@ function contractActionsToEditor(install: RunnerAction[]): ActionValue[] {
 }
 
 /** Contract requirements → editor requirements (0 = absent). */
-function contractRequirementsToEditor(requirements: Recipe['requirements']): RequirementsValue {
-  return {
-    minRamMb: requirements?.min_ram_mb ?? 0,
-    minDiskMb: requirements?.min_disk_mb ?? 0,
-    minCpuPercent: requirements?.min_cpu_percent ?? 0,
-    requiredCommands: requirements?.required_commands ?? [],
-  };
+function contractStartConfigsToEditor(configs: StartConfigFile[] | undefined): StartConfigValue[] {
+  return (configs ?? []).map((config) => ({
+    file: config.file,
+    parser: config.parser,
+    find: toPairs(config.find),
+  }));
 }
 
 /** Parsed recipe (contract output — defaults applied) → editor value. */
@@ -627,7 +653,6 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
     requires: recipe.requires ?? [],
     exportPath: '',
     exportEnv: [],
-    requirements: contractRequirementsToEditor(recipe.requirements),
     env: toPairs(recipe.env),
     backup: { include: recipe.backup?.include ?? [] },
     variables: contractVariablesToEditor(recipe.variables),
@@ -645,6 +670,7 @@ export function recipeToEditorValue(recipe: Recipe): RecipeEditorValue {
         ? { pattern: recipe.start.ready.pattern, strip: recipe.start.ready.strip ?? '' }
         : null,
       workingDirectory: recipe.start.working_directory ?? '',
+      configs: contractStartConfigsToEditor(recipe.start.configs),
     },
     logs: {
       mode: recipe.logs?.mode ?? 'stdout',
@@ -750,19 +776,15 @@ function editorActionsToContract(actions: ActionValue[]): RunnerActionInput[] {
 }
 
 /** Editor requirements → contract requirements (0/empty = absent). */
-function editorRequirementsToContract(requirements: RequirementsValue) {
-  return requirements.minRamMb ||
-    requirements.minDiskMb ||
-    requirements.minCpuPercent ||
-    requirements.requiredCommands.length > 0
-    ? {
-        min_ram_mb: requirements.minRamMb || undefined,
-        min_disk_mb: requirements.minDiskMb || undefined,
-        min_cpu_percent: requirements.minCpuPercent || undefined,
-        required_commands:
-          requirements.requiredCommands.length > 0 ? requirements.requiredCommands : undefined,
-      }
-    : undefined;
+function editorStartConfigsToContract(configs: StartConfigValue[]): StartConfigFile[] | undefined {
+  const out = configs
+    .filter((config) => config.file.trim())
+    .map((config) => ({
+      file: config.file.trim(),
+      parser: config.parser,
+      find: pairsToRecord(config.find) ?? {},
+    }));
+  return out.length > 0 ? out : undefined;
 }
 
 /**
@@ -803,7 +825,6 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
         })()
       : {
           ...common,
-          requirements: editorRequirementsToContract(value.requirements),
           env: pairsToRecord(value.env),
           backup: (() => {
             const include = value.backup.include.map((p) => p.trim()).filter(Boolean);
@@ -825,6 +846,7 @@ export function recipeEditorValueToRecipe(value: RecipeEditorValue): {
                 }
               : undefined,
             working_directory: value.start.workingDirectory || undefined,
+            configs: editorStartConfigsToContract(value.start.configs),
           },
           logs: {
             mode: value.logs.mode,
@@ -870,6 +892,10 @@ export function findUnknownVariablesInEditorValue(value: RecipeEditorValue): str
   if (value.start.ready) collect(value.start.ready.pattern);
   if (value.start.stop) collect(value.start.stop.value);
   if (value.logs.file) collect(value.logs.file);
+  for (const config of value.start.configs) {
+    collect(config.file);
+    for (const pair of config.find) collect(pair.value);
+  }
 
   for (const action of value.install) {
     collect(action.url);

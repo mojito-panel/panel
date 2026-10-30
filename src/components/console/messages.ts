@@ -19,6 +19,10 @@ export function formatBytes(bytes: number): string {
 }
 
 const CATALOG: Record<string, (params: Params) => string> = {
+  // ─── Runtime / pre-start config ─────────────────────────────────────────
+  'config.updated': (p) => `Applied ${p.file}`,
+  'config.failed': (p) => `Could not update ${p.file}: ${p.error}`,
+
   // ─── Install lifecycle ────────────────────────────────────────────────────
   'install.start': (p) => `Installing ${p.name} (${p.steps} steps)`,
   'install.reinstall': (p) => `Reinstalling ${p.name} (${p.steps} steps)`,
