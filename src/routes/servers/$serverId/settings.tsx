@@ -103,12 +103,10 @@ function ServerSettingsPage() {
 
   const server = query.data;
 
-  // The reload button only appears when the recipe row changed after the
-  // server's snapshot — no update, nothing to propagate.
-  const recipeUpdatedSinceSnapshot =
-    !!server?.recipe.updatedAt &&
-    !!server.recipe.syncedAt &&
-    new Date(server.recipe.updatedAt) > new Date(server.recipe.syncedAt);
+  // The reload button only appears when the recipe CONTENT changed after the
+  // server's snapshot (hash comparison server-side — a marketplace sync
+  // moves the recipe's `updatedAt` without changing anything).
+  const recipeUpdatedSinceSnapshot = !!server?.recipe.outdated;
 
   // Per-server grants: reinstall needs server.settings.update, deletion is
   // owner/admin only (non-delegable)

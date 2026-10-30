@@ -80,6 +80,8 @@ interface AdminServerDto {
     name: string;
     slug: string;
     updatedAt: Date | string;
+    /** The current graph content differs from the server's snapshot hash. */
+    outdated: boolean;
     syncedAt?: Date | string | null;
   };
   owner: { id: string; name: string | null; email: string } | null;
@@ -482,7 +484,7 @@ function ServerRecordTabs({
           name={server.name}
           recipeId={server.recipe.id}
           recipeName={server.recipe.name}
-          recipeUpdatedAt={server.recipe.updatedAt}
+          recipeOutdated={server.recipe.outdated}
           recipeSyncedAt={server.recipe.syncedAt}
           suspended={server.suspended}
           canUpdate={canUpdate}
@@ -697,7 +699,7 @@ function ServerActionsPanel({
   name,
   recipeId,
   recipeName,
-  recipeUpdatedAt,
+  recipeOutdated,
   recipeSyncedAt,
   suspended,
   canUpdate,
@@ -707,7 +709,7 @@ function ServerActionsPanel({
   name: string;
   recipeId: string;
   recipeName: string;
-  recipeUpdatedAt: Date | string;
+  recipeOutdated: boolean;
   recipeSyncedAt: Date | string | null | undefined;
   suspended: boolean;
   canUpdate: boolean;
@@ -812,10 +814,9 @@ function ServerActionsPanel({
   const [targetRecipeId, setTargetRecipeId] = useState('');
   const targetRecipe = recipesQuery.data?.find((r) => r.id === targetRecipeId);
 
-  // The reload button only appears when the recipe row changed after the
+  // The reload button only appears when the recipe CONTENT changed after the
   // server's snapshot — no update, nothing to propagate.
-  const recipeUpdatedSinceSnapshot =
-    !!recipeSyncedAt && new Date(recipeUpdatedAt) > new Date(recipeSyncedAt);
+  const recipeUpdatedSinceSnapshot = recipeOutdated;
 
   if (!canUpdate && !canDelete) {
     return (

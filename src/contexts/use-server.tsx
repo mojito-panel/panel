@@ -58,12 +58,10 @@ export function ServerProvider({ serverId, children }: { serverId: string; child
   }, []);
 
   const server = detail.data;
-  // The recipe row changed after the server's snapshot was synced — the
-  // Variables tab pings (same signal as the settings page reload button).
-  const recipeUpdatePending =
-    !!server?.recipe.updatedAt &&
-    !!server.recipe.syncedAt &&
-    new Date(server.recipe.updatedAt) > new Date(server.recipe.syncedAt);
+  // The recipe CONTENT changed after the server's snapshot was synced — the
+  // Variables tab pings (same signal as the settings page reload button,
+  // computed server-side by hash).
+  const recipeUpdatePending = !!server?.recipe.outdated;
 
   return (
     <ServerContext

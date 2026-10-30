@@ -32,7 +32,11 @@ import {
   releaseServerAllocation,
   promoteServerAllocation,
 } from '../nodes';
-import { serverRecipeSnapshot, recipeGraphUpdatedAt } from '../recipe-snapshot';
+import {
+  serverRecipeSnapshot,
+  recipeGraphUpdatedAt,
+  isRecipeSnapshotOutdated,
+} from '../recipe-snapshot';
 import { signConsoleToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { toConsolePermissions } from '~/lib/permissions';
@@ -292,10 +296,17 @@ export const getServerFn = createServerFn({ method: 'GET' })
         name: recipe.name,
         slug: recipe.slug,
         // Latest edit of the WHOLE recipe graph (app + required runtimes)
-        // — "updated since snapshot" drives the reload-recipe button: an
-        // edit of the java runtime matters as much as one of the app
-        // recipe.
+        // — informational only (the recipes list shows it).
         updatedAt: await recipeGraphUpdatedAt(
+          recipe.json as Record<string, unknown>,
+          recipe.updatedAt,
+        ),
+        // The reload-recipe signal: the CURRENT graph content differs from
+        // the snapshot's stored hash (an edit of the java runtime matters
+        // as much as one of the app recipe). A sync or a no-op re-import
+        // moves `updatedAt` but not the content — no false positive.
+        outdated: await isRecipeSnapshotOutdated(
+          server,
           recipe.json as Record<string, unknown>,
           recipe.updatedAt,
         ),

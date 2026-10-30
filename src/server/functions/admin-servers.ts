@@ -25,7 +25,11 @@ import {
   releaseServerAllocation,
   promoteServerAllocation,
 } from '../nodes';
-import { recipeGraphUpdatedAt } from '../recipe-snapshot';
+import {
+  recipeGraphUpdatedAt,
+  serverRecipeSnapshot,
+  isRecipeSnapshotOutdated,
+} from '../recipe-snapshot';
 import {
   adminServerIdSchema,
   adminDeleteServerSchema,
@@ -124,6 +128,9 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
 
     const subuserCount = await em.count(ServerUser, { serverId: server.id });
     const backupCount = await em.count(Backup, { serverId: server.id });
+    // The snapshot the reload gating compares against (backfilled when the
+    // server predates snapshots).
+    const snapshot = await serverRecipeSnapshot(server);
 
     return {
       id: server.id,
@@ -142,9 +149,17 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
         id: recipe.id,
         name: recipe.name,
         slug: recipe.slug,
-        // Reload-recipe gating: latest edit of the WHOLE recipe graph
-        // (app + required runtimes) vs the server's snapshot date
+        // Latest edit of the WHOLE recipe graph (app + required runtimes)
+        // — informational only.
         updatedAt: await recipeGraphUpdatedAt(
+          recipe.json as Record<string, unknown>,
+          recipe.updatedAt,
+        ),
+        // Reload-recipe gating: the current graph content vs the snapshot's
+        // stored hash (never the `updated_at` dates — a sync moves them
+        // without changing anything).
+        outdated: await isRecipeSnapshotOutdated(
+          server,
           recipe.json as Record<string, unknown>,
           recipe.updatedAt,
         ),

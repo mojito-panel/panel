@@ -2,6 +2,7 @@ import '@tanstack/react-start/server-only';
 import { mergeVariableValues } from '~/lib/recipe-merge';
 import {
   buildRecipeSnapshot,
+  isServerRecipeSnapshot,
   serverRecipeSnapshot,
   type ServerRecipeSnapshot,
 } from './recipe-snapshot';
@@ -271,7 +272,11 @@ export async function reinstallServerFromPanel(
   const node = await requireNodeOf(server);
 
   let snapshot: ServerRecipeSnapshot;
-  if (options.refreshSnapshot || options.recipeId || !server.recipeSnapshot) {
+  if (
+    options.refreshSnapshot ||
+    options.recipeId ||
+    !isServerRecipeSnapshot(server.recipeSnapshot)
+  ) {
     // Persisted BEFORE the agent call (own flush inside) — a refused
     // reinstall must not lose the reloaded snapshot nor leave the server
     // marked as outdated.

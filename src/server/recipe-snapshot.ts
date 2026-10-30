@@ -6,6 +6,7 @@ import { orm } from './orm';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import { mergeVariableDefinitions } from '~/lib/recipe-merge';
 import { resolveRuntimeRecipes } from './runtimes';
+import { canonicalRecipeHash } from './registry-entries';
 
 /**
  * Per-server recipe snapshot (self-contained server side).
@@ -23,6 +24,16 @@ export interface ServerRecipeSnapshot {
   recipe: RecipeContract;
   /** Resolved runtime recipes of the requires graph (normalized, v4). */
   runtimes: Record<string, unknown>[];
+  /**
+   * Content hash of the whole graph as snapshotted — the app recipe plus
+   * every runtime, `{ id, sha }` per recipe (canonical JSON hash, the same
+   * identity the marketplace uses). The "recipe updated since the
+   * snapshot" check compares it against the CURRENT graph (`recipeGraphHash`)
+   * instead of dates: `updated_at` moves on every write (a sync stamping
+   * the upstream hash is not an edit), the hash moves only on a real
+   * content change. Null on a legacy snapshot taken before it existed.
+   */
+  sha?: string | null;
 }
 
 /**
@@ -53,7 +64,7 @@ export async function buildRecipeSnapshot(
     ...app,
     variables: mergeVariableDefinitions(app.variables ?? [], runtimeVariables),
   };
-  return { recipe, runtimes };
+  return { recipe, runtimes, sha: recipeGraphHashOf(recipe, runtimes) };
 }
 
 /**
@@ -87,9 +98,10 @@ async function runtimeSlugs(
 
 /**
  * The latest edit of the recipe GRAPH — the app recipe row and every
- * resolved runtime row. The reload-recipe button compares this against
- * the server's snapshot date: editing the java RUNTIME matters as much
- * as editing the app recipe itself.
+ * resolved runtime row. Informational (the recipes list shows it): it is
+ * NOT the "server is outdated" signal, which compares content hashes
+ * (`isRecipeSnapshotOutdated`) — `updated_at` moves on every write, a
+ * marketplace sync included.
  */
 export async function recipeGraphUpdatedAt(
   recipeJson: Record<string, unknown> | null | undefined,
@@ -107,6 +119,96 @@ export async function recipeGraphUpdatedAt(
 }
 
 /**
+ * The CURRENT content hash of a recipe graph — the app recipe row plus
+ * every resolved runtime row, in the exact shape `buildRecipeSnapshot`
+ * would snapshot them (normalized, runtime variable definitions merged into
+ * the app recipe). Compared against the snapshot's stored `sha`: equal
+ * means the server runs the current version, whatever `updated_at` says.
+ *
+ * `updated_at` is a plain automatic column (it moves on every write — a
+ * sync stamping the upstream hash, a no-op re-import), so it is NOT the
+ * change signal; the content hash is.
+ */
+export async function recipeGraphHash(
+  recipeJson: Record<string, unknown> | null | undefined,
+): Promise<string> {
+  const em = orm.em;
+  const slugs = await runtimeSlugs(recipeJson);
+  const rows = slugs.length > 0 ? await em.find(Recipe, { slug: { $in: slugs } }) : [];
+
+  const app = normalizeStoredRecipe((recipeJson ?? {}) as Record<string, unknown>) as RecipeContract;
+  const runtimes = rows.map((row) => normalizeStoredRecipe(row.json as Record<string, unknown>));
+  const recipe = {
+    ...app,
+    variables: mergeVariableDefinitions(
+      app.variables ?? [],
+      runtimes.map((runtime) => ((runtime.variables as RecipeVariable[] | undefined) ?? [])),
+    ),
+  };
+  return recipeGraphHashOf(recipe, runtimes);
+}
+
+/** The graph hash of an already-built snapshot (see `recipeGraphHash`). */
+export function recipeGraphHashOf(appRecipe: unknown, runtimes: unknown[]): string {
+  const entries = [appRecipe, ...runtimes].map((recipe) => ({
+    id: (recipe as { id?: unknown } | null)?.id ?? null,
+    sha: canonicalRecipeHash(recipe),
+  }));
+  entries.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return canonicalRecipeHash(entries);
+}
+
+/**
+ * Whether the server's snapshot is BEHIND the current recipe graph — the
+ * signal of the reload-recipe button and the sidebar dot.
+ *
+ * - the snapshot stores its graph hash (`sha`): a pure content comparison —
+ *   a marketplace sync or a no-op re-import that only moved `updated_at`
+ *   never flags the server;
+ * - a legacy snapshot without one: the date comparison (best effort until
+ *   the next reload stamps the hash).
+ */
+export async function isRecipeSnapshotOutdated(
+  server: IServer,
+  recipeJson: Record<string, unknown> | null | undefined,
+  appUpdatedAt: Date,
+): Promise<boolean> {
+  const stored = server.recipeSnapshot as unknown;
+  const snapshot = isServerRecipeSnapshot(stored) ? stored : null;
+
+  if (snapshot?.sha) {
+    return snapshot.sha !== (await recipeGraphHash(recipeJson));
+  }
+
+  const em = orm.em;
+  const slugs = await runtimeSlugs(recipeJson);
+  const rows = slugs.length > 0 ? await em.find(Recipe, { slug: { $in: slugs } }) : [];
+  let latest = appUpdatedAt;
+  for (const row of rows) {
+    if (row.updatedAt > latest) latest = row.updatedAt;
+  }
+  return !!server.recipeSyncedAt && latest > server.recipeSyncedAt;
+}
+
+/**
+ * Whether the server's stored snapshot document is usable. The check is
+ * deep on purpose: a legacy row (or a half-written document) must be
+ * re-snapshotted, not served — the snapshot is what the agent installs
+ * with, so a malformed one has to fail closed.
+ */
+export function isServerRecipeSnapshot(
+  stored: unknown,
+): stored is ServerRecipeSnapshot {
+  if (!stored || typeof stored !== 'object') return false;
+  const document = stored as { recipe?: unknown; runtimes?: unknown };
+  if (!document.recipe || typeof document.recipe !== 'object') return false;
+  if (!Array.isArray(document.runtimes)) return false;
+  // The app recipe is identified by its id — a document without one is a
+  // folded legacy row, not a snapshot.
+  return typeof (document.recipe as { id?: unknown }).id === 'string';
+}
+
+/**
  * The snapshot of a server — the stored one when it exists, a fresh build
  * from the current recipe row otherwise (legacy pre-snapshot servers are
  * backfilled on first touch, dated now: the recipe they run is the one
@@ -114,8 +216,8 @@ export async function recipeGraphUpdatedAt(
  */
 export async function serverRecipeSnapshot(server: IServer): Promise<ServerRecipeSnapshot> {
   const em = orm.em;
-  const stored = server.recipeSnapshot as unknown as ServerRecipeSnapshot | null | undefined;
-  if (stored && stored.recipe && Array.isArray(stored.runtimes)) {
+  const stored = server.recipeSnapshot as unknown;
+  if (isServerRecipeSnapshot(stored)) {
     return stored;
   }
   const recipe = await em.findOne(Recipe, { id: server.recipeId });
