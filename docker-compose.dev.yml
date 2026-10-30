@@ -10,11 +10,11 @@ services:
       POSTGRES_PASSWORD: mojito
       POSTGRES_DB: mojito
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - mojito-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mojito -d mojito"]
+      test: ['CMD-SHELL', 'pg_isready -U mojito -d mojito']
       interval: 5s
       timeout: 5s
       retries: 5

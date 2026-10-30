@@ -2,15 +2,15 @@
 
 > Reference for the communication flows between the three actors of the system.
 > The shared Zod schemas (`src/contract`) are authoritative: this document describes
-> the *workflows*, not the exact types (see `src/contract/api.ts`).
+> the _workflows_, not the exact types (see `src/contract/api.ts`).
 
 ## Actors
 
-| Actor | Role |
-|---|---|
-| **Web client** (browser) | React 19 + TanStack Router/Query. NEVER talks to game servers directly: it calls TanStack Start *server functions* (SSR-aware), or the agent directly for the console (short-lived JWT). |
-| **Panel** (this repo) | TanStack Start (Node SSR). Sole owner of the DB (Postgres/MikroORM) and of sessions (better-auth). Talks to the agent over HTTP `Bearer <node token>` (token encrypted AES-256-GCM at rest). |
-| **Agent** (**shard**, external, one per machine) | Go daemon (`net/http`), 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB. |
+| Actor                                            | Role                                                                                                                                                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Web client** (browser)                         | React 19 + TanStack Router/Query. NEVER talks to game servers directly: it calls TanStack Start _server functions_ (SSR-aware), or the agent directly for the console (short-lived JWT).     |
+| **Panel** (this repo)                            | TanStack Start (Node SSR). Sole owner of the DB (Postgres/MikroORM) and of sessions (better-auth). Talks to the agent over HTTP `Bearer <node token>` (token encrypted AES-256-GCM at rest). |
+| **Agent** (**shard**, external, one per machine) | Go daemon (`net/http`), 1 per machine. Generic daemon: runs the recipe installation runner, manages game processes, exposes the WS console. Knows nothing about players or the DB.           |
 
 ```mermaid
 graph LR
@@ -45,6 +45,7 @@ graph LR
 ```
 
 **Golden rules**
+
 - The panel never touches game servers: everything goes through the agent.
 - The client talks to the agent ONLY via the WS console, with a short-lived JWT signed by the panel using the node token (panel ↔ agent shared secret, 1 per node — Pelican style).
 - The agent token is never logged, nor sent to the browser.
@@ -110,13 +111,14 @@ sequenceDiagram
 ```
 
 **Key points**
+
 - The panel persists **before** calling the agent: the user is immediately redirected to the server console.
 - Fast validation (unknown/invalid variables) is rejected **before** the 202 → the form displays the error and the DB rows are removed.
 - A runner failure (404 download, failing script…) is NOT an HTTP error: it shows up in the installation status (`failed` + `error`), the store is not modified, the DB switches to `install_failed`.
 - **WS-only console**: install lines and runtime lines share ONE chronological stream (see §3) — install steps arrive as coded `event` messages, command output as `log` lines. There is no polling fallback.
 - **Tools silent on a pipe**: some console programs (steamcmd) print their progress only on a real terminal — on a pipe they stay silent. A `command` action can declare `tail` (`file` + regex `filter` + `intervalMs`): the agent tails the log file written during execution (e.g. steamcmd's `logs/content_log.txt`) and streams the new lines live.
 - A `command` action can declare `successCodes` (exit codes treated as success) — steamcmd exits with code 7 after its self-update (`Update complete, launching...`) even though the job succeeded.
-- The install STATUS (step/percent/error — the banner) lives in the agent's registry, in memory: lost if the agent restarts, the DB status stays `install_failed` with the *Réessayer* button.
+- The install STATUS (step/percent/error — the banner) lives in the agent's registry, in memory: lost if the agent restarts, the DB status stays `install_failed` with the _Réessayer_ button.
 
 ---
 
@@ -164,6 +166,7 @@ sequenceDiagram
 ```
 
 **Console security**
+
 - Short-lived JWT (300 s), refreshed via re-`auth` — never a token in the URL/query string.
 - `scope: websocket`, `serverId` locked to the WS route parameter.
 - Every message is re-checked (permissions + expiry); the agent can rate-limit (`error: rate-limited`).
@@ -256,6 +259,7 @@ sequenceDiagram
 ```
 
 **Key points**
+
 - Validation in **three layers** sharing the same contract function:
   form schema (TanStack Form, messages mapped per field), server function (422),
   agent (422). No divergence possible between the rules.
@@ -333,76 +337,76 @@ sequenceDiagram
 
 ### Panel ↔ Agent (node Bearer token — `AGENT_ROUTES`)
 
-| Route | Usage |
-|---|---|
-| `GET /health` | Public — healthcheck (version, uptime) |
-| `POST /servers/install` | Start an installation (202) — sync validation 400/422 |
-| `POST /servers/:serverId/reinstall` | Reinstall in place (202, stops the server first) |
-| `GET /servers/:serverId/install` | Installation status (end-of-install DB sync) |
-| `POST /servers/:serverId/variables` | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6 |
-| `POST /servers/:serverId/resources` | Resources sync (port/ip/ports/memory/cpu of the next start, refused if an install is in progress) — see §6 |
-| `GET /servers` | List of the agent's servers |
-| `GET /servers/:serverId` | Runtime info (status, recent log lines) |
-| `POST /servers/:serverId/action` | start / stop / restart / kill |
-| `POST /servers/:serverId/command` | stdin command |
-| `DELETE /servers/:serverId` | Deletion (refused if an install or a process is active) |
-| `GET /servers/:serverId/logs` | Incremental runtime logs (legacy cursor — the console is WS-only, the panel does not use it) |
-| `GET /servers/:serverId/files` | File browser listing (paths relative to the installDir — see §8's sandbox) |
-| `GET /servers/:serverId/files/content` | Read a file (UTF-8 text — binary refused) |
-| `POST /servers/:serverId/files/content` | Write a file |
-| `POST /servers/:serverId/files/create` | Create a file/directory |
-| `POST /servers/:serverId/files/rename` | Rename an entry |
-| `POST /servers/:serverId/files/delete` | Delete entries (bulk) |
-| `POST /servers/:serverId/files/upload` | Upload (base64) |
-| `GET /servers/:serverId/files/download` | File download — panel token OR file-download JWT (browser link) |
-| `POST /servers/:serverId/backups` | Create a backup (async archive, 202) |
-| `GET /servers/:serverId/backups/:backupId` | Backup operation status (polled by the list) |
-| `GET /servers/:serverId/backups/:backupId/download` | Archive download — panel token OR backup-download JWT (browser link) |
-| `DELETE /servers/:serverId/backups/:backupId` | Delete an archive |
-| `POST /servers/:serverId/backups/:backupId/restore` | Restore (merge or truncate) |
-| `GET /servers/:serverId/ws` | Browser console WS — console JWT sent as the first `auth` message (see §3) |
-| `GET /stats` | Node system snapshot (panel token) |
-| `GET /health/ws` | Browser node-health WS — health JWT sent as the first `auth` message |
+| Route                                               | Usage                                                                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `GET /health`                                       | Public — healthcheck (version, uptime)                                                                     |
+| `POST /servers/install`                             | Start an installation (202) — sync validation 400/422                                                      |
+| `POST /servers/:serverId/reinstall`                 | Reinstall in place (202, stops the server first)                                                           |
+| `GET /servers/:serverId/install`                    | Installation status (end-of-install DB sync)                                                               |
+| `POST /servers/:serverId/variables`                 | Variable cache sync (merge + re-validation, refused if an install is in progress) — see §6                 |
+| `POST /servers/:serverId/resources`                 | Resources sync (port/ip/ports/memory/cpu of the next start, refused if an install is in progress) — see §6 |
+| `GET /servers`                                      | List of the agent's servers                                                                                |
+| `GET /servers/:serverId`                            | Runtime info (status, recent log lines)                                                                    |
+| `POST /servers/:serverId/action`                    | start / stop / restart / kill                                                                              |
+| `POST /servers/:serverId/command`                   | stdin command                                                                                              |
+| `DELETE /servers/:serverId`                         | Deletion (refused if an install or a process is active)                                                    |
+| `GET /servers/:serverId/logs`                       | Incremental runtime logs (legacy cursor — the console is WS-only, the panel does not use it)               |
+| `GET /servers/:serverId/files`                      | File browser listing (paths relative to the installDir — see §8's sandbox)                                 |
+| `GET /servers/:serverId/files/content`              | Read a file (UTF-8 text — binary refused)                                                                  |
+| `POST /servers/:serverId/files/content`             | Write a file                                                                                               |
+| `POST /servers/:serverId/files/create`              | Create a file/directory                                                                                    |
+| `POST /servers/:serverId/files/rename`              | Rename an entry                                                                                            |
+| `POST /servers/:serverId/files/delete`              | Delete entries (bulk)                                                                                      |
+| `POST /servers/:serverId/files/upload`              | Upload (base64)                                                                                            |
+| `GET /servers/:serverId/files/download`             | File download — panel token OR file-download JWT (browser link)                                            |
+| `POST /servers/:serverId/backups`                   | Create a backup (async archive, 202)                                                                       |
+| `GET /servers/:serverId/backups/:backupId`          | Backup operation status (polled by the list)                                                               |
+| `GET /servers/:serverId/backups/:backupId/download` | Archive download — panel token OR backup-download JWT (browser link)                                       |
+| `DELETE /servers/:serverId/backups/:backupId`       | Delete an archive                                                                                          |
+| `POST /servers/:serverId/backups/:backupId/restore` | Restore (merge or truncate)                                                                                |
+| `GET /servers/:serverId/ws`                         | Browser console WS — console JWT sent as the first `auth` message (see §3)                                 |
+| `GET /stats`                                        | Node system snapshot (panel token)                                                                         |
+| `GET /health/ws`                                    | Browser node-health WS — health JWT sent as the first `auth` message                                       |
 
 ### Agent → Panel (node Bearer token — `PANEL_ROUTES`)
 
-| Route | Usage |
-|---|---|
-| `POST /api/sftp/auth` | SFTP credential validation (see §8) |
+| Route                    | Usage                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `POST /api/sftp/auth`    | SFTP credential validation (see §8)                                              |
 | `GET /api/agent/servers` | Agent boot GC — the ids of the servers the panel still knows on the calling node |
 
 ### Browser ↔ Agent (WS, JWT — console and health sockets)
 
 The browser→agent messages are only `auth` (the JWT handshake, re-sent to refresh) and `command` (console stdin) — power actions go through the panel path (§4).
 
-| Message (→ agent) | Message (← agent) |
-|---|---|
-| `{ type: "auth", token }` | `{ type: "auth-ok" }` |
-| `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime AND install output — one chronological stream) |
-| | `{ type: "status", status }` |
-| | `{ type: "install-status", status, step, totalSteps, percent, message, error }` |
-| | `{ type: "event", code, params, at }` — coded lines: power/watchdog AND install (start, steps, done/failed); `at` = original emission time (replay) |
-| | `{ type: "stats", stats }` — console socket: CPU/RAM frame, ring replay on connect then one per sampling tick |
-| | `{ type: "error", code }` |
+| Message (→ agent)              | Message (← agent)                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ type: "auth", token }`      | `{ type: "auth-ok" }`                                                                                                                               |
+| `{ type: "command", command }` | `{ type: "log", lines[] }` (runtime AND install output — one chronological stream)                                                                  |
+|                                | `{ type: "status", status }`                                                                                                                        |
+|                                | `{ type: "install-status", status, step, totalSteps, percent, message, error }`                                                                     |
+|                                | `{ type: "event", code, params, at }` — coded lines: power/watchdog AND install (start, steps, done/failed); `at` = original emission time (replay) |
+|                                | `{ type: "stats", stats }` — console socket: CPU/RAM frame, ring replay on connect then one per sampling tick                                       |
+|                                | `{ type: "error", code }`                                                                                                                           |
 
 ### Server functions exposed to the browser (`src/server/functions/`)
 
-| Function | Method | Role |
-|---|---|---|
-| `installServerFn` | POST | Create + start the installation |
-| `getInstallStatusFn` | GET | Installation status (end-of-install DB sync) |
-| `retryInstallFn` | POST | Relaunch a failed installation |
-| `listServersFn` | POST | List (admin: everything, otherwise own + shared servers) |
-| `listServerOptionsFn` | GET | Picker options (full `{ id, name }` set, optional `nodeId`) |
-| `getServerFn` | GET | Detail + runtime sync |
-| `createConsoleTokenFn` | POST | Console JWT + wsUrl |
-| `serverActionFn` | POST | start/stop/restart/kill |
-| `sendCommandFn` | POST | stdin command via panel |
-| `reinstallServerFn` | POST | In-place reinstallation |
-| `updateServerVariablesFn` | POST | Variable editing (userEditable merge + agent sync) — see §6 |
-| `listServerAllocationsFn` | POST | Server allocations (list query: filters/sort/pagination) — Network page |
-| `listServerFreeAllocationsFn` | GET | Free allocations of the server's node (full set, for the add form / assign picker) |
-| `addServerAllocationFn` | POST | Claim a free allocation on the node |
-| `removeServerAllocationFn` | POST | Release a non-primary allocation |
-| `setPrimaryServerAllocationFn` | POST | Set the primary allocation + agent sync (next start) |
-| `deleteServerFn` | POST | Deletion (agent + DB, allocations returned to the node pool) |
+| Function                       | Method | Role                                                                               |
+| ------------------------------ | ------ | ---------------------------------------------------------------------------------- |
+| `installServerFn`              | POST   | Create + start the installation                                                    |
+| `getInstallStatusFn`           | GET    | Installation status (end-of-install DB sync)                                       |
+| `retryInstallFn`               | POST   | Relaunch a failed installation                                                     |
+| `listServersFn`                | POST   | List (admin: everything, otherwise own + shared servers)                           |
+| `listServerOptionsFn`          | GET    | Picker options (full `{ id, name }` set, optional `nodeId`)                        |
+| `getServerFn`                  | GET    | Detail + runtime sync                                                              |
+| `createConsoleTokenFn`         | POST   | Console JWT + wsUrl                                                                |
+| `serverActionFn`               | POST   | start/stop/restart/kill                                                            |
+| `sendCommandFn`                | POST   | stdin command via panel                                                            |
+| `reinstallServerFn`            | POST   | In-place reinstallation                                                            |
+| `updateServerVariablesFn`      | POST   | Variable editing (userEditable merge + agent sync) — see §6                        |
+| `listServerAllocationsFn`      | POST   | Server allocations (list query: filters/sort/pagination) — Network page            |
+| `listServerFreeAllocationsFn`  | GET    | Free allocations of the server's node (full set, for the add form / assign picker) |
+| `addServerAllocationFn`        | POST   | Claim a free allocation on the node                                                |
+| `removeServerAllocationFn`     | POST   | Release a non-primary allocation                                                   |
+| `setPrimaryServerAllocationFn` | POST   | Set the primary allocation + agent sync (next start)                               |
+| `deleteServerFn`               | POST   | Deletion (agent + DB, allocations returned to the node pool)                       |

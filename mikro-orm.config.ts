@@ -1,5 +1,6 @@
-import { defineConfig } from '@mikro-orm/postgresql';
 import { Migrator } from '@mikro-orm/migrations';
+import { defineConfig } from '@mikro-orm/postgresql';
+
 import {
   User,
   Session,

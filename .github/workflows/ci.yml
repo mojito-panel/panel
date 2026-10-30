@@ -37,22 +37,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # Node and npm come from mise.toml (pinned versions), not setup-node.
+      - uses: jdx/mise-action@v5
         with:
-          node-version: 24
-          cache: npm
+          cache: true
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint (oxlint)
-        run: npm run lint
-
-      - name: Format check (oxfmt)
-        run: npm run fmt:check
-
-      - name: Typecheck (src + tests)
-        run: npx tsc --noEmit
+      # Same steps as the local Git hook (hk.pkl): oxfmt, oxlint, tsc.
+      - name: Check (hk)
+        run: mise exec -- hk check --all
 
       - name: Tests
         run: npx vitest run

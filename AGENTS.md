@@ -7,6 +7,7 @@ Single project (TanStack Start). The agent (**shard**, Go daemon, one per machin
 
 ```bash
 npm install                    # Dependencies (Node 24 required)
+mise install                   # Toolchain from mise.toml (node, npm, hk)
 mise run setup:dev             # Docker Postgres + copy .env.default → .env
 npm run db:migrate             # Generate a MikroORM migration (applied at boot by src/server.ts)
 npm run dev                    # Panel — http://localhost:5173 (strictPort)
@@ -14,9 +15,28 @@ npm test                       # All tests
 npm run build                  # Panel build (vite, client + SSR)
 npm run lint                   # oxlint (src + tests) — CI fails on any finding
 npm run lint:fix               # oxlint --fix (safe autofixes only)
-npm run fmt                    # oxfmt — rewrite src + tests
+npm run fmt                    # oxfmt — rewrite the whole repo
 npm run fmt:check              # oxfmt --check — CI fails if a file is unformatted
+mise run check                 # lint + fmt:check + typecheck + test (what CI runs)
+hk check --all                 # the CI gate: same steps as the Git hook
+hk fix                         # apply every available fix to the working tree
 ```
+
+## Git hooks (hk)
+
+`hk` (pinned in `mise.toml`, configured in `hk.pkl`) runs the checks before every commit — the SAME step list CI runs, so a commit that passes locally passes CI:
+
+| Step                              | Command                         |
+| --------------------------------- | ------------------------------- |
+| `oxfmt`                           | `oxfmt --check`                 |
+| `ox_lint`                         | `oxlint --deny-warnings --fix`  |
+| `tsc`                             | `tsc --noEmit -p tsconfig.json` |
+| `trailing_whitespace`, `newlines` | `hk util` fixers                |
+
+- **The pre-commit hook fixes and STAGES the staged files** (format + autofix), stashing unstaged work first and restoring it afterwards. A finding it cannot fix (an unused variable, a type error) BLOCKS the commit.
+- **`hk check --all` is the CI gate** — read-only, whole repository.
+- Install the hook once per clone: `hk install --mise`. Skip a single commit with `HK=0 git commit …` (CI still enforces it).
+- `hk` runs its steps from `PATH`; `mise.toml` exposes `node_modules/.bin` (`_.path`) so `oxlint`/`oxfmt`/`tsc` resolve. Run project commands through `mise exec --` (or with mise activated) or the hook will not find them.
 
 ## Lint & format (oxlint + oxfmt)
 
@@ -29,7 +49,7 @@ npm run fmt:check              # oxfmt --check — CI fails if a file is unforma
   - a blank line before a group of declarations that follows a statement,
   - a blank line before and after an `if` / `for` / `while` block that is NOT the first or last statement of its block,
   - a blank line before a `return` that follows other statements.
-  Consecutive `const`/`let` declarations stay packed on consecutive lines (no blank line between them). Do not add blank lines at the very start or end of a block.
+    Consecutive `const`/`let` declarations stay packed on consecutive lines (no blank line between them). Do not add blank lines at the very start or end of a block.
 
 ## Architecture
 
@@ -46,15 +66,15 @@ npm run fmt:check              # oxfmt --check — CI fails if a file is unforma
 
 ## Stack & versions
 
-| Technology | Constraint |
-|---|---|
-| Node.js 24 | `pg` (Postgres) — NO better-sqlite3 (does not compile on Windows) |
-| TypeScript | `erasableSyntaxOnly: true` everywhere — NO parameter properties, enums, namespaces |
-| Visibility | Private fields/methods with `#` (native JS syntax) — NEVER `private`/`public`/`protected` |
-| React 19.3 | NO `useCallback`/`useMemo`/`forwardRef` — React Compiler enabled |
-| MikroORM v7 | `defineEntity`/`p` (decorator-less) — NO EntitySchema, NO decorators |
+| Technology  | Constraint                                                                                                      |
+| ----------- | --------------------------------------------------------------------------------------------------------------- |
+| Node.js 24  | `pg` (Postgres) — NO better-sqlite3 (does not compile on Windows)                                               |
+| TypeScript  | `erasableSyntaxOnly: true` everywhere — NO parameter properties, enums, namespaces                              |
+| Visibility  | Private fields/methods with `#` (native JS syntax) — NEVER `private`/`public`/`protected`                       |
+| React 19.3  | NO `useCallback`/`useMemo`/`forwardRef` — React Compiler enabled                                                |
+| MikroORM v7 | `defineEntity`/`p` (decorator-less) — NO EntitySchema, NO decorators                                            |
 | better-auth | `pg` Pool + snake_case mapping (`user.fields` etc.), `tanstackStartCookies` plugin — tables managed by MikroORM |
-| Zod 4 | Standard Schema — TanStack Form's native validator (no adapter) |
+| Zod 4       | Standard Schema — TanStack Form's native validator (no adapter)                                                 |
 
 ## Panel conventions
 
@@ -142,7 +162,7 @@ src/
 
 - Vitest (`tests/` next to `src/`).
 - After any change: `npm test` must pass.
-- Before finishing: `npm run lint` and `npm run fmt:check` must pass too (CI runs both).
+- Before finishing: `hk check --all` (or `mise run check`) must pass — it runs oxfmt, oxlint, tsc and the tests, exactly like CI.
 - List contract: `tests/list-query.test.ts` (query schema + the SQL each declaration generates, via a metadata-only Postgres ORM with `connect: false`), `tests/search-params.test.ts` (URL round-trip) and `tests/list-query.postgres.test.ts` (the same spec executed against the dev database — it skips itself when none is reachable, so `npm test` stays green without the dev stack).
 
 ## Deferred to V2 (do NOT do in V1)

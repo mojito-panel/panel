@@ -1,5 +1,6 @@
 // One-off: regenerate src/routeTree.gen.ts (same generator the vite plugin runs)
 import { fileURLToPath } from 'node:url';
+
 import { Generator, getConfig } from '@tanstack/router-generator';
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));

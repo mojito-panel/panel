@@ -5,14 +5,14 @@ Pelican/Pterodactyl-style architecture: **Panel** (TanStack Start) + **shard** (
 
 ## Stack
 
-| Component | Technology |
-|---|---|
-| Panel front | TanStack Start + shadcn/ui + TanStack Table |
-| Auth | better-auth (email/password; three built-in roles — admin / moderator / user — plus custom roles managed from a permission matrix at `/admin/roles`) |
-| DB | Postgres 17 (docker compose) — MikroORM v7 manages all tables (including better-auth) |
-| Panel ↔ agent contract | Shared Zod schemas (`src/contract`) |
-| Agent | **shard** — external Go daemon (Bearer token, one per machine): servers run as native Windows processes under Job Objects + dedicated local users — separate repository |
-| Tests | Vitest |
+| Component              | Technology                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Panel front            | TanStack Start + shadcn/ui + TanStack Table                                                                                                                             |
+| Auth                   | better-auth (email/password; three built-in roles — admin / moderator / user — plus custom roles managed from a permission matrix at `/admin/roles`)                    |
+| DB                     | Postgres 17 (docker compose) — MikroORM v7 manages all tables (including better-auth)                                                                                   |
+| Panel ↔ agent contract | Shared Zod schemas (`src/contract`)                                                                                                                                     |
+| Agent                  | **shard** — external Go daemon (Bearer token, one per machine): servers run as native Windows processes under Job Objects + dedicated local users — separate repository |
+| Tests                  | Vitest                                                                                                                                                                  |
 
 ## Prerequisites
 
@@ -108,11 +108,11 @@ The `.env.default` file is copied to `.env` by `mise run setup:dev` (or `node sc
 
 ### Panel (`.env`)
 
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | `postgres://mojito:mojito@localhost:5432/mojito` | Postgres connection (shared by better-auth + MikroORM) |
-| `PANEL_URL` | `http://localhost:5173` | Public panel URL |
-| `BETTER_AUTH_SECRET` | — | better-auth secret (32+ characters) — **also** the at-rest encryption key for agent tokens |
+| Variable             | Default                                          | Description                                                                                |
+| -------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`       | `postgres://mojito:mojito@localhost:5432/mojito` | Postgres connection (shared by better-auth + MikroORM)                                     |
+| `PANEL_URL`          | `http://localhost:5173`                          | Public panel URL                                                                           |
+| `BETTER_AUTH_SECRET` | —                                                | better-auth secret (32+ characters) — **also** the at-rest encryption key for agent tokens |
 
 ### Live console & JWT (browser ↔ direct agent)
 
@@ -150,8 +150,8 @@ details on the server Files page. Full flow: [docs/communications.md](docs/commu
 
 `docker-compose.dev.yml` starts a Postgres 17 for dev:
 
-| Service | Port | Credentials |
-|---|---|---|
+| Service  | Port   | Credentials                       |
+| -------- | ------ | --------------------------------- |
 | Postgres | `5432` | `mojito` / `mojito` / db `mojito` |
 
 ## Migrations

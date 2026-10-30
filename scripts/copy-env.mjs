@@ -9,9 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const envFiles = [
-  '.env.default',
-];
+const envFiles = ['.env.default'];
 
 let copied = 0;
 let skipped = 0;

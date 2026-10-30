@@ -1,9 +1,10 @@
-import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
-import { tanstackStart } from '@tanstack/react-start/plugin/vite';
-import { nitro } from 'nitro/vite';
-import viteReact from '@vitejs/plugin-react';
+
 import tailwindcss from '@tailwindcss/vite';
+import { tanstackStart } from '@tanstack/react-start/plugin/vite';
+import viteReact from '@vitejs/plugin-react';
+import { nitro } from 'nitro/vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [
@@ -33,7 +34,11 @@ export default defineConfig({
           // worker chunks the panel can never use (the file editor whitelist
           // only opens json/yaml/xml/ini/txt) — dropping their registration
           // side effects removes ~8 MB of dead worker chunks from the deploy.
-          if (/[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]languages[\\/](features|definitions)[\\/](css|html|typescript)[\\/]/.test(id)) {
+          if (
+            /[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]languages[\\/](features|definitions)[\\/](css|html|typescript)[\\/]/.test(
+              id,
+            )
+          ) {
             return false;
           }
           return undefined;

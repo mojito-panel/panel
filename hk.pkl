@@ -1,0 +1,18 @@
+/// Mojito panel — Git hooks and CI checks, one set of steps.
+///
+/// `pre-commit` fixes the staged files (format + autofix) before the commit
+/// lands; `check` is read-only and runs the same steps in CI (`hk check --all`).
+amends "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Config.pkl"
+
+import "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Builtins.pkl"
+
+steps {
+  ["oxfmt"] = Builtins.oxfmt
+  ["ox_lint"] = (Builtins.ox_lint) {
+    // oxlint --fix rewrites imports; let the formatter settle the result.
+    depends = "oxfmt"
+  }
+  ["tsc"] = Builtins.tsc
+  ["trailing_whitespace"] = Builtins.trailing_whitespace
+  ["newlines"] = Builtins.newlines
+}

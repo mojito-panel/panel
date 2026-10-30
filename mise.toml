@@ -1,9 +1,13 @@
 [tools]
+hk = { version = "2.9.0", workflow = "release.yml" }
 node = "24.22.1"
 npm = "12.2.0"
 
 [env]
 _.file = ".env"
+# hk runs its steps from PATH — expose the project's own binaries (oxlint,
+# oxfmt, tsc, vitest) so the Git hooks and `hk check --all` find them.
+_.path = ["node_modules/.bin"]
 
 [tasks.setup]
 description = "Installation complète du projet (npm install)"
@@ -11,10 +15,7 @@ run = "npm install"
 
 [tasks."setup:dev"]
 description = "Setup dev : démarre les services Docker (Postgres) et copie le .env.default en .env"
-run = [
-  "docker compose -f docker-compose.dev.yml up -d",
-  "node scripts/copy-env.mjs",
-]
+run = ["docker compose -f docker-compose.dev.yml up -d", "node scripts/copy-env.mjs"]
 
 [tasks.migrate]
 description = "Génère une migration MikroORM (appliquée au boot par src/server.ts)"
@@ -27,6 +28,22 @@ run = "npm run dev"
 [tasks.test]
 depends = ["setup"]
 run = "npm test"
+
+[tasks.lint]
+description = "oxlint (src + tests)"
+run = "npm run lint"
+
+[tasks.fmt]
+description = "oxfmt — réécrit tout le dépôt"
+run = "npm run fmt"
+
+[tasks."fmt:check"]
+description = "oxfmt --check (tout le dépôt)"
+run = "npm run fmt:check"
+
+[tasks.check]
+description = "Toutes les vérifications CI (lint + format + types + tests)"
+run = ["npm run lint", "npm run fmt:check", "npm run typecheck", "npm test"]
 
 [tasks."docker:down"]
 run = "docker compose -f docker-compose.dev.yml down"

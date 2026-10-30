@@ -2,11 +2,8 @@
   "name": "mojito-panel",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "description": "Panel d'hébergement de serveurs de jeux, natif Windows, sans Docker",
-  "engines": {
-    "node": ">=24.0.0"
-  },
+  "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -16,8 +13,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src tests",
     "lint:fix": "oxlint src tests --fix",
-    "fmt": "oxfmt src tests",
-    "fmt:check": "oxfmt --check src tests",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check .",
     "db:migrate": "mikro-orm migration:create",
     "db:migrate:up": "mikro-orm migration:up"
   },
@@ -71,5 +68,8 @@
     "typescript": "^5.9.2",
     "vite": "^8.3.4",
     "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }
