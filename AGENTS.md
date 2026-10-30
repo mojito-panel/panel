@@ -12,7 +12,24 @@ npm run db:migrate             # Generate a MikroORM migration (applied at boot 
 npm run dev                    # Panel — http://localhost:5173 (strictPort)
 npm test                       # All tests
 npm run build                  # Panel build (vite, client + SSR)
+npm run lint                   # oxlint (src + tests) — CI fails on any finding
+npm run lint:fix               # oxlint --fix (safe autofixes only)
+npm run fmt                    # oxfmt — rewrite src + tests
+npm run fmt:check              # oxfmt --check — CI fails if a file is unformatted
 ```
+
+## Lint & format (oxlint + oxfmt)
+
+`oxlint` and `oxfmt` are the ONLY lint/format tools (no ESLint, no Prettier, no Biome). Configs: `.oxlintrc.json` and `.oxfmtrc.json` at the panel root.
+
+- **oxlint**: default correctness rules, plus `no-unused-vars` as an ERROR — no unused imports, types, variables or parameters (prefix a deliberately unused parameter with `_`). A deliberate rule violation is silenced inline with `// oxlint-disable-next-line <rule> -- <reason>`, never by weakening the config.
+- **oxfmt**: `singleQuote`, import sorting (`sortImports`) and Tailwind class sorting (`sortTailwindcss`, `cn`/`cva` calls included). `src/components/ui/` (shadcn-generated) and `src/routeTree.gen.ts` (generated) are NOT formatted — never hand-edit them, they are regenerated.
+- **Never fight the formatter**: write code, then run `npm run fmt`. Do not hand-align or hand-wrap code — oxfmt owns layout (line breaks, wrapping, quotes, class order).
+- **Blank lines are YOURS, not oxfmt's**: oxfmt PRESERVES the blank lines you write (collapsing runs to one) but never inserts them. There is no option for it, so it is a hand-written convention, not an enforced rule:
+  - a blank line before a group of declarations that follows a statement,
+  - a blank line before and after an `if` / `for` / `while` block that is NOT the first or last statement of its block,
+  - a blank line before a `return` that follows other statements.
+  Consecutive `const`/`let` declarations stay packed on consecutive lines (no blank line between them). Do not add blank lines at the very start or end of a block.
 
 ## Architecture
 
@@ -125,6 +142,7 @@ src/
 
 - Vitest (`tests/` next to `src/`).
 - After any change: `npm test` must pass.
+- Before finishing: `npm run lint` and `npm run fmt:check` must pass too (CI runs both).
 - List contract: `tests/list-query.test.ts` (query schema + the SQL each declaration generates, via a metadata-only Postgres ORM with `connect: false`), `tests/search-params.test.ts` (URL round-trip) and `tests/list-query.postgres.test.ts` (the same spec executed against the dev database — it skips itself when none is reachable, so `npm test` stays green without the dev stack).
 
 ## Deferred to V2 (do NOT do in V1)

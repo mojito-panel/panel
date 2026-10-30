@@ -1,9 +1,9 @@
 import '@tanstack/react-start/server-only';
 import type { Job } from 'pg-boss';
-import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
-import type { IRecipe, IRegistry, IRegistryEntry, ISshKey } from '~/db/types';
+
 import { parseRecipeJson } from '~/contract';
-import { parseRegistryManifest } from '~/lib/registry-manifest';
+import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
+import type { IRecipe, IRegistry, ISshKey } from '~/db/types';
 import {
   canonicalGitUrl,
   formatGitSource,
@@ -11,19 +11,12 @@ import {
   parseRecipeSource,
   type GitRecipeSource,
 } from '~/lib/recipe-source';
-import { orm, runWithOrmContext } from './orm';
-import { HttpError } from './session';
+import { parseRegistryManifest } from '~/lib/registry-manifest';
+
 import { decryptSecret } from './crypto';
-import { requireSshKey } from './ssh-keys';
-import { getQueue, startQueue } from './queue';
-import { getSettingValue, writeSettings } from './settings';
-import {
-  buildRegistryEntries,
-  canonicalRecipeHash,
-  sha256Text,
-  type RegistryEntryDraft,
-} from './registry-entries';
 import { cloneRecipeFiles, readGitFile } from './git-source';
+import { orm, runWithOrmContext } from './orm';
+import { getQueue, startQueue } from './queue';
 import {
   assertValidRecipeJson,
   fetchRecipeJsonFromUrl,
@@ -32,6 +25,15 @@ import {
   updateRecipe,
   upsertRecipe,
 } from './recipes';
+import {
+  buildRegistryEntries,
+  canonicalRecipeHash,
+  sha256Text,
+  type RegistryEntryDraft,
+} from './registry-entries';
+import { HttpError } from './session';
+import { getSettingValue, writeSettings } from './settings';
+import { requireSshKey } from './ssh-keys';
 
 /**
  * Recipe marketplace service (server-only) — registries, syncs and the
@@ -179,11 +181,15 @@ export async function deleteRegistry(registryId: string): Promise<void> {
 
 /** Enqueues a manual sync of one registry (collapsed by a 60 s singleton key). */
 export async function enqueueRegistrySync(registryId: string): Promise<void> {
-  await getQueue().send(MARKETPLACE_QUEUE, { registryId }, {
-    ...JOB_OPTIONS,
-    singletonKey: `registry-sync-${registryId}`,
-    singletonSeconds: 60,
-  });
+  await getQueue().send(
+    MARKETPLACE_QUEUE,
+    { registryId },
+    {
+      ...JOB_OPTIONS,
+      singletonKey: `registry-sync-${registryId}`,
+      singletonSeconds: 60,
+    },
+  );
 }
 
 // ─── Sync ─────────────────────────────────────────────────────────────────────
@@ -223,19 +229,23 @@ async function syncRegistryRow(registry: IRegistry): Promise<void> {
     // never persist a success stamp for a catalog that failed to replace.
     const now = new Date();
     await em.transactional(async (tem) => {
-      await tem.nativeUpdate(Registry, { id: registry.id }, {
-        cover,
-        // Manifest metadata — stamped at every sync, the repo is the source
-        // of truth (a field the manifest drops reads as null again).
-        description: parsedManifest.description,
-        author: parsedManifest.author ?? null,
-        license: parsedManifest.license ?? null,
-        headSha,
-        branchName: branch,
-        lastSyncedAt: now,
-        lastError: null,
-        updatedAt: now,
-      });
+      await tem.nativeUpdate(
+        Registry,
+        { id: registry.id },
+        {
+          cover,
+          // Manifest metadata — stamped at every sync, the repo is the source
+          // of truth (a field the manifest drops reads as null again).
+          description: parsedManifest.description,
+          author: parsedManifest.author ?? null,
+          license: parsedManifest.license ?? null,
+          headSha,
+          branchName: branch,
+          lastSyncedAt: now,
+          lastError: null,
+          updatedAt: now,
+        },
+      );
       // Inside the callback `orm.em` resolves to the transaction fork, so
       // the delete + bulk insert join the same unit.
       await replaceRegistryEntries(registry.id, drafts);
@@ -244,11 +254,15 @@ async function syncRegistryRow(registry: IRegistry): Promise<void> {
     await stampRegistryRecipes(registry, branch, drafts);
   } catch (err) {
     // Previous catalog kept (rolled back), error recorded on the row.
-    await em.nativeUpdate(Registry, { id: registry.id }, {
-      lastSyncedAt: new Date(),
-      lastError: (err as Error).message,
-      updatedAt: new Date(),
-    });
+    await em.nativeUpdate(
+      Registry,
+      { id: registry.id },
+      {
+        lastSyncedAt: new Date(),
+        lastError: (err as Error).message,
+        updatedAt: new Date(),
+      },
+    );
   }
 }
 
@@ -261,7 +275,10 @@ async function syncRegistryRow(registry: IRegistry): Promise<void> {
  * thousands) and the sync is never hot — a wholesale replace keeps the
  * table strictly equal to the last clone, with no diff logic to get wrong.
  */
-async function replaceRegistryEntries(registryId: string, drafts: RegistryEntryDraft[]): Promise<void> {
+async function replaceRegistryEntries(
+  registryId: string,
+  drafts: RegistryEntryDraft[],
+): Promise<void> {
   const em = orm.em;
   await em.nativeDelete(RegistryEntry, { registryId });
 
@@ -399,7 +416,9 @@ export async function importRegistryEntry(
    * cached file content) — slug resolution never reads the contents;
    * each imported entry fetches its own on demand below.
    */
-  const entries: LightRegistryEntry[] = (await em.find(RegistryEntry, { registryId }, { exclude: ['content'] })).map((entry) => ({
+  const entries: LightRegistryEntry[] = (
+    await em.find(RegistryEntry, { registryId }, { exclude: ['content'] })
+  ).map((entry) => ({
     path: entry.path,
     sha: entry.sha,
     slug: entry.slug ?? null,
@@ -641,11 +660,15 @@ async function maybeEnqueueSweep(): Promise<void> {
     // per registry: a sweep and a manual sync of the same registry can no
     // longer race each other into a unique-constraint violation, and two
     // sweeps cannot stack within the collapse window either.
-    await getQueue().send(MARKETPLACE_QUEUE, {}, {
-      ...JOB_OPTIONS,
-      singletonKey: 'marketplace-sweep',
-      singletonSeconds: 60,
-    });
+    await getQueue().send(
+      MARKETPLACE_QUEUE,
+      {},
+      {
+        ...JOB_OPTIONS,
+        singletonKey: 'marketplace-sweep',
+        singletonSeconds: 60,
+      },
+    );
   } catch (err) {
     sweepPending = false;
     throw err;
@@ -714,11 +737,7 @@ async function checkUncoveredRecipeSources(): Promise<void> {
     let files: Array<{ path: string; content: string }>;
     try {
       const privateKey = keyByUrl.get(repoUrl) ?? null;
-      ({ files } = await cloneRecipeFiles(
-        repoUrl,
-        branch === 'HEAD' ? '' : branch,
-        privateKey,
-      ));
+      ({ files } = await cloneRecipeFiles(repoUrl, branch === 'HEAD' ? '' : branch, privateKey));
     } catch {
       continue; // Clone failed — keep the previous stamps.
     }

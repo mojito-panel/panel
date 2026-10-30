@@ -1,16 +1,18 @@
 import '@tanstack/react-start/server-only';
 import type { Job } from 'pg-boss';
+
+import type { ServerAction } from '~/contract';
 import { Node, Schedule, ScheduleTask, Server } from '~/db/entities';
 import type { INode, ISchedule, IScheduleTask, IServer } from '~/db/types';
-import type { ServerAction } from '~/contract';
 import { nextCronRun } from '~/lib/cron';
-import { orm, runWithOrmContext } from './orm';
-import { HttpError } from './session';
+
 import { logActivity } from './activity';
+import { agentGetServer, agentSendCommand } from './agent/client';
+import { createBackup, waitForBackupCompletion } from './backups';
+import { orm, runWithOrmContext } from './orm';
 import { getQueue, startQueue } from './queue';
 import { executeServerAction, requireNodeOf } from './servers';
-import { agentGetServer, agentSendCommand } from './agent/client';
-import { BACKUP_MAX_WAIT_MS, createBackup, waitForBackupCompletion } from './backups';
+import { HttpError } from './session';
 
 /**
  * Schedules service (Pelican "Schedules" parity, server-only):
@@ -196,7 +198,11 @@ async function claimRun(schedule: ISchedule): Promise<boolean> {
   const affected = await orm.em.nativeUpdate(
     Schedule,
     { id: schedule.id, isProcessing: false },
-    { isProcessing: true, nextRunAt: computeNextRun(schedule.cron, schedule.timezone), updatedAt: new Date() },
+    {
+      isProcessing: true,
+      nextRunAt: computeNextRun(schedule.cron, schedule.timezone),
+      updatedAt: new Date(),
+    },
   );
   return affected === 1;
 }
@@ -250,7 +256,7 @@ async function fireSchedule(
   const tasks = await findScheduleTasks(schedule.id);
   if (tasks.length === 0) return false;
 
-  if (!await claimRun(schedule)) return false;
+  if (!(await claimRun(schedule))) return false;
 
   // The occurrence is consumed either way once claimed — an offline
   // server skips it (Pelican marks the run complete on the skip).
@@ -283,7 +289,7 @@ export async function runScheduleNow(schedule: ISchedule, server: IServer): Prom
   if (tasks.length === 0) {
     throw new HttpError(422, 'Ajoute au moins une tâche avant d’exécuter cette planification');
   }
-  if (!await claimRun(schedule)) {
+  if (!(await claimRun(schedule))) {
     throw new HttpError(409, 'Cette planification est déjà en cours d’exécution');
   }
   if (schedule.onlyWhenOnline) {
@@ -336,9 +342,7 @@ export async function tickSchedules(): Promise<void> {
     servers
       .filter(
         (server) =>
-          !server.suspended &&
-          server.status !== 'installing' &&
-          server.status !== 'install_failed',
+          !server.suspended && server.status !== 'installing' && server.status !== 'install_failed',
       )
       .map((server) => [server.id, server]),
   );
@@ -391,22 +395,12 @@ async function runScheduleTask(data: ScheduleTaskJobData): Promise<void> {
   // chain cleanly (Pelican's RunTaskJob does the same on the first two
   // conditions). A (re)install wipes the install dir — firing a power
   // action or a console command into it must never happen.
-  const reinstalling =
-    server.status === 'installing' || server.status === 'install_failed';
+  const reinstalling = server.status === 'installing' || server.status === 'install_failed';
   if (!schedule.isActive || server.suspended || reinstalling) {
     await completeRun(schedule.id);
-    await logScheduleRun(
-      schedule,
-      server,
-      'failed',
-      {
-        reason: !schedule.isActive
-          ? 'deactivated'
-          : server.suspended
-            ? 'suspended'
-            : 'reinstalling',
-      },
-    );
+    await logScheduleRun(schedule, server, 'failed', {
+      reason: !schedule.isActive ? 'deactivated' : server.suspended ? 'suspended' : 'reinstalling',
+    });
     return;
   }
 

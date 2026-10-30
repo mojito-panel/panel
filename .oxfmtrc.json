@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "sortImports": true,
+  "sortTailwindcss": {
+    "functions": ["cn", "cva"]
+  },
+  "ignorePatterns": [
+    ".output/",
+    ".tanstack/",
+    "node_modules/",
+    "src/components/ui/",
+    "src/routeTree.gen.ts"
+  ]
+}

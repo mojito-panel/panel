@@ -36,10 +36,9 @@ export const recipeVariableSchema = z.object({
   env: z
     .string()
     .regex(/^[A-Z][A-Z0-9_]*$/, 'Nom de variable invalide (UPPERCASE uniquement)')
-    .refine(
-      (v) => !RESERVED_ENV_NAMES.includes(v as ReservedEnvName),
-      { message: 'Nom de variable systeme reservee' },
-    ),
+    .refine((v) => !RESERVED_ENV_NAMES.includes(v as ReservedEnvName), {
+      message: 'Nom de variable systeme reservee',
+    }),
   /** Label shown in the panel. */
   name: z.string().min(1),
   description: z.string().optional(),
@@ -253,6 +252,7 @@ export type LogsConfig = z.infer<typeof logsConfigSchema>;
  */
 
 /** Characters forbidden in a glob pattern: control chars, Windows-illegal chars and glob negation — `\`, `!`, `"`, `|`, `<`, `>` are NOT glob metacharacters we support. */
+// oxlint-disable-next-line no-control-regex -- control characters are rejected on purpose
 const GLOB_FORBIDDEN_CHARS = /[\x00-\x1f<>:"|!\\]/;
 
 /** Max length of one include pattern. */
@@ -280,10 +280,11 @@ export function validateBackupIncludePattern(pattern: string): string | null {
   return null;
 }
 
-export const backupIncludePatternSchema = z.string().refine(
-  (v) => validateBackupIncludePattern(v) === null,
-  { message: 'Motif d’inclusion de sauvegarde invalide' },
-);
+export const backupIncludePatternSchema = z
+  .string()
+  .refine((v) => validateBackupIncludePattern(v) === null, {
+    message: 'Motif d’inclusion de sauvegarde invalide',
+  });
 
 export const backupConfigSchema = z.object({
   /**
@@ -312,7 +313,10 @@ export type StartConfig = z.infer<typeof startConfigSchema>;
 export const recipeSchema = z.object({
   /** Recipe format version — v4 is the only supported one. */
   schema_version: z.literal(4),
-  id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
+  id: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
   /**
    * Recipe kind: 'app' (a game server, with start/backup) or 'runtime'
    * (a tool like java/steamcmd installed inside the app's install, no
@@ -395,7 +399,10 @@ export type RuntimeExport = z.infer<typeof runtimeExportSchema>;
 export const runtimeRecipeSchema = z.object({
   schema_version: z.literal(4),
   type: z.literal('runtime'),
-  id: z.string().min(1).regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
+  id: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/, 'ID invalide (minuscules, chiffres, tirets)'),
   name: z.string().min(1),
   author: z.string().min(1),
   description: z.string().optional(),

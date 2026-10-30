@@ -1,48 +1,16 @@
-import { createServerFn } from '@tanstack/react-start';
 import { lookup } from 'node:dns/promises';
-import { z } from 'zod';
+
+import { createServerFn } from '@tanstack/react-start';
+
+import { type RecipeVariable } from '~/contract';
+import { importEgg } from '~/contract/egg-import';
 import { Node, Recipe, Server, User, Allocation } from '~/db/entities';
-import { adminNodesList } from '~/lists/nodes';
-import { nodeAllocationsList } from '~/lists/allocations';
-import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
-import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import { requireUser, requirePanelPermission, HttpError } from '../session';
-import { withOrmContext } from '../middleware';
-import { logActivity } from '../activity';
-import { orm } from '../orm';
-import { decryptSecret } from '../crypto';
-import { agentHealth, agentGetStats } from '../agent/client';
-import { isPublicAddress } from '../assert-public-host';
-import { signHealthToken } from '../jwt';
-import {
-  createNode,
-  requireNode,
-  deleteNode,
-  agentVersionOf,
-  resetNodeToken,
-  findFreeAllocations,
-  createAllocations,
-  deleteAllocation,
-  deleteAllocations,
-  assignAllocation,
-  revokeAllocation,
-} from '../nodes';
-import {
-  recipeErrorMessage,
-  assertValidRecipeJson,
-  fetchRecipeJsonFromUrl,
-  normalizeRecipeUrl,
-  upsertRecipe,
-  createRecipe,
-  updateRecipe,
-  requireRecipe,
-  deleteRecipe,
-  storedRecipeVariables,
-  type RecipeSourceStamp,
-} from '../recipes';
-import { canonicalRecipeHash } from '../registry-entries';
 import { computeRecipeStatus, type RecipeSourceStatus } from '~/lib/recipe-source';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
+import { nodeAllocationsList } from '~/lists/allocations';
+import { adminNodesList } from '~/lists/nodes';
+import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import {
   createNodeSchema,
   deleteNodeSchema,
@@ -65,8 +33,42 @@ import {
   updateRecipeSchema,
   deleteRecipeSchema,
 } from '~/validators/recipe';
-import { importEgg } from '~/contract/egg-import';
-import { type RecipeVariable } from '~/contract';
+
+import { logActivity } from '../activity';
+import { agentHealth, agentGetStats } from '../agent/client';
+import { isPublicAddress } from '../assert-public-host';
+import { decryptSecret } from '../crypto';
+import { signHealthToken } from '../jwt';
+import { withOrmContext } from '../middleware';
+import {
+  createNode,
+  requireNode,
+  deleteNode,
+  agentVersionOf,
+  resetNodeToken,
+  findFreeAllocations,
+  createAllocations,
+  deleteAllocation,
+  deleteAllocations,
+  assignAllocation,
+  revokeAllocation,
+} from '../nodes';
+import { orm } from '../orm';
+import {
+  recipeErrorMessage,
+  assertValidRecipeJson,
+  fetchRecipeJsonFromUrl,
+  normalizeRecipeUrl,
+  upsertRecipe,
+  createRecipe,
+  updateRecipe,
+  requireRecipe,
+  deleteRecipe,
+  storedRecipeVariables,
+  type RecipeSourceStamp,
+} from '../recipes';
+import { canonicalRecipeHash } from '../registry-entries';
+import { requireUser, requirePanelPermission, HttpError } from '../session';
 
 // ─── Nodes (admin) ─────────────────────────────────────────────────────────────
 
@@ -129,11 +131,16 @@ export const createNodeFn = createServerFn({ method: 'POST' })
   .validator(createNodeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.nodes':['create']});
+    const user = await requirePanelPermission({ 'panel.nodes': ['create'] });
     const { id, agentToken } = await createNode(data);
 
     // Audit trail before the row goes any further.
-    await logActivity({ event: 'node:create', description: `Node « ${data.name} » créé (${data.fqdn})`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: id } });
+    await logActivity({
+      event: 'node:create',
+      description: `Node « ${data.name} » créé (${data.fqdn})`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { nodeId: id },
+    });
 
     // The token is returned ONCE — the admin copies the generated shard.yml
     // (below) onto the node and it will never be replayable in clear again.
@@ -177,10 +184,15 @@ export const deleteNodeFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.nodes':['delete']});
+    const user = await requirePanelPermission({ 'panel.nodes': ['delete'] });
     const node = await requireNode(data.nodeId);
     await deleteNode(node);
-    await logActivity({ event: 'node:delete', description: `Node « ${node.name} » supprimé`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: node.id } });
+    await logActivity({
+      event: 'node:delete',
+      description: `Node « ${node.name} » supprimé`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { nodeId: node.id },
+    });
     return { deleted: true };
   });
 
@@ -195,7 +207,7 @@ export const getNodeFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['read']});
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
     const node = await requireNode(data.nodeId);
     const serverCount = await orm.em.count(Server, { nodeId: node.id });
 
@@ -226,7 +238,7 @@ export const getNodeHealthFn = createServerFn({ method: 'GET' })
   .validator(nodeIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['read']});
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
     const node = await requireNode(data.nodeId);
 
     const agentVersion = await agentVersionOf(node);
@@ -252,7 +264,7 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
   .validator(updateNodeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({ 'panel.nodes': ['update'] });
     const node = await requireNode(data.nodeId);
 
     node.name = data.name;
@@ -262,7 +274,12 @@ export const updateNodeFn = createServerFn({ method: 'POST' })
     node.scheme = data.scheme;
     node.sftpPort = data.sftpPort;
     await orm.em.flush();
-    await logActivity({ event: 'node:update', description: `Node « ${node.name} » mis à jour`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: node.id } });
+    await logActivity({
+      event: 'node:update',
+      description: `Node « ${node.name} » mis à jour`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { nodeId: node.id },
+    });
 
     return { updated: true };
   });
@@ -276,10 +293,15 @@ export const resetNodeTokenFn = createServerFn({ method: 'POST' })
   .validator(nodeIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({ 'panel.nodes': ['update'] });
     const node = await requireNode(data.nodeId);
     const agentToken = await resetNodeToken(node);
-    await logActivity({ event: 'node:reset_token', description: `Token du node « ${node.name} » régénéré`, actor: { id: user.id, name: user.name, email: user.email }, properties: { nodeId: node.id } });
+    await logActivity({
+      event: 'node:reset_token',
+      description: `Token du node « ${node.name} » régénéré`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { nodeId: node.id },
+    });
 
     return {
       agentToken,
@@ -319,7 +341,7 @@ export const listNodeAllocationsFn = createServerFn({ method: 'POST' })
   .validator(nodeAllocationsList.querySchema.and(nodeIdSchema))
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['read']});
+    await requirePanelPermission({ 'panel.nodes': ['read'] });
     const em = orm.em;
 
     const qb = listQueryBuilder(em, Allocation, nodeAllocationsList);
@@ -331,8 +353,7 @@ export const listNodeAllocationsFn = createServerFn({ method: 'POST' })
     const serverIds = [
       ...new Set(rows.map((row) => row.serverId).filter((id): id is string => id !== null)),
     ];
-    const servers =
-      serverIds.length > 0 ? await em.find(Server, { id: { $in: serverIds } }) : [];
+    const servers = serverIds.length > 0 ? await em.find(Server, { id: { $in: serverIds } }) : [];
     const names = new Map(servers.map((server) => [server.id, server.name]));
 
     return {
@@ -345,7 +366,7 @@ export const listNodeAllocationsFn = createServerFn({ method: 'POST' })
           port: allocation.port,
           alias: allocation.alias ?? null,
           serverId,
-          serverName: serverId === null ? null : names.get(serverId) ?? null,
+          serverName: serverId === null ? null : (names.get(serverId) ?? null),
           primary: allocation.primary ?? false,
         };
       }),
@@ -361,7 +382,7 @@ export const createNodeAllocationsFn = createServerFn({ method: 'POST' })
   .validator(createAllocationsSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['create']});
+    await requirePanelPermission({ 'panel.nodes': ['create'] });
     await requireNode(data.nodeId);
 
     const ports = parsePortsSpec(data.ports);
@@ -376,7 +397,7 @@ export const deleteAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['delete']});
+    await requirePanelPermission({ 'panel.nodes': ['delete'] });
     const allocation = await orm.em.findOne(Allocation, { id: data.allocationId });
     if (!allocation) throw new HttpError(404, 'Allocation introuvable');
     await deleteAllocation(allocation);
@@ -392,7 +413,7 @@ export const deleteAllocationsFn = createServerFn({ method: 'POST' })
   .validator(deleteAllocationsSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.nodes':['delete']});
+    await requirePanelPermission({ 'panel.nodes': ['delete'] });
     const allocations = await orm.em.find(Allocation, { id: { $in: data.allocationIds } });
     return deleteAllocations(allocations);
   });
@@ -406,7 +427,7 @@ export const assignAllocationFn = createServerFn({ method: 'POST' })
   .validator(assignAllocationSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({ 'panel.nodes': ['update'] });
     const em = orm.em;
 
     const allocation = await em.findOne(Allocation, { id: data.allocationId });
@@ -415,7 +436,13 @@ export const assignAllocationFn = createServerFn({ method: 'POST' })
     if (!server) throw new HttpError(404, 'Serveur introuvable');
 
     await assignAllocation(allocation, server);
-    await logActivity({ event: 'allocation:assign', description: `Allocation ${allocation.ip}:${allocation.port} affectée à « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'allocation:assign',
+      description: `Allocation ${allocation.ip}:${allocation.port} affectée à « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });
 
@@ -429,7 +456,7 @@ export const revokeAllocationFn = createServerFn({ method: 'POST' })
   .validator(allocationIdSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.nodes':['update']});
+    const user = await requirePanelPermission({ 'panel.nodes': ['update'] });
     const allocation = await orm.em.findOne(Allocation, { id: data.allocationId });
     if (!allocation || allocation.serverId === null) {
       throw new HttpError(404, 'Allocation libre introuvable');
@@ -437,7 +464,12 @@ export const revokeAllocationFn = createServerFn({ method: 'POST' })
     const serverId = allocation.serverId;
 
     await revokeAllocation(allocation);
-    await logActivity({ event: 'allocation:revoke', description: `Allocation ${allocation.ip}:${allocation.port} révoquée (retour au pool libre)`, actor: { id: user.id, name: user.name, email: user.email }, properties: { allocationId: allocation.id, serverId } });
+    await logActivity({
+      event: 'allocation:revoke',
+      description: `Allocation ${allocation.ip}:${allocation.port} révoquée (retour au pool libre)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { allocationId: allocation.id, serverId },
+    });
     return { id: allocation.id };
   });
 
@@ -503,7 +535,9 @@ export const listRecipeOptionsFn = createServerFn({ method: 'GET' })
     await requireUser();
     const recipes = await orm.em.find(Recipe, {});
     return recipes.map(
-      (recipe): {
+      (
+        recipe,
+      ): {
         id: string;
         slug: string;
         name: string;
@@ -526,7 +560,7 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
   .validator(importRecipesSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.recipes':['create']});
+    const user = await requirePanelPermission({ 'panel.recipes': ['create'] });
 
     const imported: Array<{ slug: string; name: string; created: boolean; source: string }> = [];
     const failed: Array<{ source: string; error: string }> = [];
@@ -549,7 +583,12 @@ export const importRecipesFn = createServerFn({ method: 'POST' })
       }
     }
 
-    await logActivity({ event: 'recipe:import', description: `${imported.length} recette(s) importée(s), ${failed.length} échec(s)`, actor: { id: user.id, name: user.name, email: user.email }, properties: { imported: imported.map((r) => r.slug), failed: failed.map((f) => f.source) } });
+    await logActivity({
+      event: 'recipe:import',
+      description: `${imported.length} recette(s) importée(s), ${failed.length} échec(s)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { imported: imported.map((r) => r.slug), failed: failed.map((f) => f.source) },
+    });
 
     return { imported, failed };
   });
@@ -602,7 +641,12 @@ export const importEggFn = createServerFn({ method: 'POST' })
 
     // The mapped egg keeps its update_url — it becomes the recipe's source.
     const saved = await upsertRecipe(recipeJson, recipeSourceStamp(recipeJson));
-    await logActivity({ event: 'recipe:import_egg', description: `Œuf importé : recette « ${saved.slug} »`, actor: { id: user.id, name: user.name, email: user.email }, properties: { warnings: warnings.length } });
+    await logActivity({
+      event: 'recipe:import_egg',
+      description: `Œuf importé : recette « ${saved.slug} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { warnings: warnings.length },
+    });
     return { ...saved, warnings };
   });
 
@@ -610,7 +654,7 @@ export const getRecipeFn = createServerFn({ method: 'POST' })
   .validator(getRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    await requirePanelPermission({'panel.recipes':['read']});
+    await requirePanelPermission({ 'panel.recipes': ['read'] });
     const recipe = await requireRecipe(data.recipeId);
 
     return {
@@ -632,9 +676,14 @@ export const createRecipeFn = createServerFn({ method: 'POST' })
   .validator(createRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.recipes':['create']});
+    const user = await requirePanelPermission({ 'panel.recipes': ['create'] });
     const recipe = await createRecipe(assertValidRecipeJson(data.json));
-    await logActivity({ event: 'recipe:create', description: `Recette « ${recipe.slug} » créée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: recipe.id } });
+    await logActivity({
+      event: 'recipe:create',
+      description: `Recette « ${recipe.slug} » créée`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { recipeId: recipe.id },
+    });
     return recipe;
   });
 
@@ -646,9 +695,14 @@ export const updateRecipeFn = createServerFn({ method: 'POST' })
   .validator(updateRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.recipes':['update']});
+    const user = await requirePanelPermission({ 'panel.recipes': ['update'] });
     const recipe = await updateRecipe(data.recipeId, assertValidRecipeJson(data.json));
-    await logActivity({ event: 'recipe:update', description: `Recette « ${recipe.slug} » modifiée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: recipe.id } });
+    await logActivity({
+      event: 'recipe:update',
+      description: `Recette « ${recipe.slug} » modifiée`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { recipeId: recipe.id },
+    });
     return recipe;
   });
 
@@ -656,10 +710,15 @@ export const deleteRecipeFn = createServerFn({ method: 'POST' })
   .validator(deleteRecipeSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.recipes':['delete']});
+    const user = await requirePanelPermission({ 'panel.recipes': ['delete'] });
     const recipe = await requireRecipe(data.recipeId);
     await deleteRecipe(recipe.id);
-    await logActivity({ event: 'recipe:delete', description: `Recette « ${recipe.name} » supprimée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { recipeId: recipe.id } });
+    await logActivity({
+      event: 'recipe:delete',
+      description: `Recette « ${recipe.name} » supprimée`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { recipeId: recipe.id },
+    });
     return { deleted: true };
   });
 
@@ -708,7 +767,7 @@ async function pingNodes(nodes: Parameters<typeof agentHealth>[0][]) {
 export const getAdminOverviewFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async () => {
-    await requirePanelPermission({'panel.overview':['read']});
+    await requirePanelPermission({ 'panel.overview': ['read'] });
     const em = orm.em;
 
     const [serverCount, runningCount, installingCount, nodeCount, userCount, recipeCount] =
@@ -727,9 +786,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' })
     ]);
 
     // Per-node server count — one bounded count per node (nodes are few).
-    const counts = await Promise.all(
-      nodes.map((node) => em.count(Server, { nodeId: node.id })),
-    );
+    const counts = await Promise.all(nodes.map((node) => em.count(Server, { nodeId: node.id })));
 
     // Display rows of the recent 5 only (queries stay bounded).
     const recipeIds = [...new Set(recentRows.map((server) => server.recipeId))];
@@ -785,7 +842,7 @@ export const getAdminOverviewFn = createServerFn({ method: 'GET' })
 export const getAdminOverviewHealthFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async () => {
-    await requirePanelPermission({'panel.overview':['read']});
+    await requirePanelPermission({ 'panel.overview': ['read'] });
     const nodes = await orm.em.find(Node, {});
     const pings = await pingNodes(nodes);
     return nodes.map((node, index) => ({
@@ -808,7 +865,7 @@ export const getAdminOverviewHealthFn = createServerFn({ method: 'GET' })
 export const getHealthNodesFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async () => {
-    await requirePanelPermission({'panel.overview':['read']});
+    await requirePanelPermission({ 'panel.overview': ['read'] });
     const nodes = await orm.em.find(Node, {});
 
     // Parallel ping — an offline node must not slow the page down
@@ -846,7 +903,7 @@ export const createNodeHealthTokenFn = createServerFn({ method: 'POST' })
   .validator(deleteNodeSchema) // { nodeId } — same shape as the other node fns
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
-    const user = await requirePanelPermission({'panel.overview':['read']});
+    const user = await requirePanelPermission({ 'panel.overview': ['read'] });
     const node = await requireNode(data.nodeId);
 
     const { token, expiresAt } = signHealthToken(

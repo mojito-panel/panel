@@ -1,20 +1,9 @@
 import '@tanstack/react-start/server-only';
-import { mergeVariableValues } from '~/lib/recipe-merge';
-import {
-  buildRecipeSnapshot,
-  isServerRecipeSnapshot,
-  serverRecipeSnapshot,
-  type ServerRecipeSnapshot,
-} from './recipe-snapshot';
-import type {
-  Recipe as RecipeContract,
-  ServerAction as ServerActionContract,
-  ServerStatus,
-} from '~/contract';
+import type { ServerAction as ServerActionContract, ServerStatus } from '~/contract';
 import { Node, Recipe, Server, Allocation, ServerUser, Backup } from '~/db/entities';
 import type { INode, IServer, IUser } from '~/db/types';
-import { orm } from './orm';
-import { HttpError } from './session';
+import { mergeVariableValues } from '~/lib/recipe-merge';
+
 import { logActivity } from './activity';
 import {
   agentInstallServer,
@@ -25,6 +14,14 @@ import {
   agentServerAction,
   AgentError,
 } from './agent/client';
+import { orm } from './orm';
+import {
+  buildRecipeSnapshot,
+  isServerRecipeSnapshot,
+  serverRecipeSnapshot,
+  type ServerRecipeSnapshot,
+} from './recipe-snapshot';
+import { HttpError } from './session';
 
 /**
  * Server business service (server-only, like session.ts / settings.ts):
@@ -63,7 +60,9 @@ export async function findPrimaryAllocation(serverId: string) {
  * the resources record so the agent knows the FULL allowed port set
  * (its watchdog attributes listening sockets against it).
  */
-export function secondaryPorts(allocations: { primary?: boolean | null; port: number }[]): number[] {
+export function secondaryPorts(
+  allocations: { primary?: boolean | null; port: number }[],
+): number[] {
   return allocations
     .filter((a) => !a.primary)
     .map((a) => Number(a.port))
@@ -156,10 +155,7 @@ export async function installServer(
   // (runtime variables like JAVA_VERSION included). A recipe edited
   // later never impacts this server.
   const snapshot = await buildRecipeSnapshot(recipe.json as Record<string, unknown>);
-  const variables = mergeVariableValues(
-    snapshot.recipe.variables ?? [],
-    input.variables,
-  );
+  const variables = mergeVariableValues(snapshot.recipe.variables ?? [], input.variables);
 
   // 1. Persist FIRST with status 'installing' — the user is redirected to
   //    the server console right away and follows the install live.

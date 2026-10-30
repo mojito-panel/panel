@@ -1,24 +1,14 @@
-import { useState } from 'react';
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
+import { Copy, KeySquare } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, KeySquare, Trash2 } from 'lucide-react';
-import {
-  listSshKeysFn,
-  createSshKeyFn,
-  deleteSshKeyFn,
-} from '~/server/functions/ssh-keys';
-import { DataTable } from '~/components/data-table/data-table';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
-import { createSshKeySchema, type CreateSshKeyDto } from '~/validators/ssh-keys';
+import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
-import { Textarea } from '~/components/ui/textarea';
 import {
   Card,
   CardAction,
@@ -34,7 +24,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Textarea } from '~/components/ui/textarea';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
+import { listSshKeysFn, createSshKeyFn, deleteSshKeyFn } from '~/server/functions/ssh-keys';
+import { createSshKeySchema, type CreateSshKeyDto } from '~/validators/ssh-keys';
 
 export const Route = createFileRoute('/admin/keys/')({
   validateSearch: (search: Record<string, unknown>): ListQuery =>
@@ -86,9 +83,8 @@ function AdminSshKeysPage() {
         <CardHeader>
           <CardTitle>Clés SSH</CardTitle>
           <CardDescription>
-            Paires de clés du panel — générées ou importées — utilisées pour
-            cloner les dépôts privés (recettes). La clé privée est chiffrée en
-            base et n’est jamais affichée.
+            Paires de clés du panel — générées ou importées — utilisées pour cloner les dépôts
+            privés (recettes). La clé privée est chiffrée en base et n’est jamais affichée.
           </CardDescription>
           <CardAction>
             <Button onClick={() => setCreateOpen(true)}>
@@ -159,7 +155,9 @@ function CreateSshKeyDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  createKey: (args: { data: CreateSshKeyDto }) => Promise<{ id: string; publicKey: string; fingerprint: string }>;
+  createKey: (args: {
+    data: CreateSshKeyDto;
+  }) => Promise<{ id: string; publicKey: string; fingerprint: string }>;
   onCreated: () => Promise<void>;
 }) {
   // After a GENERATION, the dialog switches to the public-key result view
@@ -214,10 +212,9 @@ function CreateSshKeyDialog({
             <DialogHeader>
               <DialogTitle>Clé « {created.name} » générée</DialogTitle>
               <DialogDescription>
-                Autorise cette clé publique sur ton dépôt privé (deploy key
-                GitHub/GitLab, authorized_keys…) — la lecture seule suffit. La
-                clé privée est stockée chiffrée par le panel et ne sera plus
-                jamais affichée.
+                Autorise cette clé publique sur ton dépôt privé (deploy key GitHub/GitLab,
+                authorized_keys…) — la lecture seule suffit. La clé privée est stockée chiffrée par
+                le panel et ne sera plus jamais affichée.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
@@ -231,7 +228,7 @@ function CreateSshKeyDialog({
                   onFocus={(e) => e.currentTarget.select()}
                 />
               </div>
-              <p className="font-mono text-xs text-muted-foreground">
+              <p className="text-muted-foreground font-mono text-xs">
                 Empreinte : {created.fingerprint}
               </p>
               <div className="flex justify-end gap-2">
@@ -251,8 +248,8 @@ function CreateSshKeyDialog({
             <DialogHeader>
               <DialogTitle>Ajouter une clé SSH</DialogTitle>
               <DialogDescription>
-                Génère une paire ou importe une clé de déploiement existante —
-                elle servira à cloner les dépôts privés depuis le panel.
+                Génère une paire ou importe une clé de déploiement existante — elle servira à cloner
+                les dépôts privés depuis le panel.
               </DialogDescription>
             </DialogHeader>
             <form
@@ -282,10 +279,9 @@ function CreateSshKeyDialog({
                       </TabsList>
 
                       <TabsContent value="generate" className="space-y-4 pt-2">
-                        <p className="text-sm text-muted-foreground">
-                          Une paire Ed25519 est générée par le panel
-                          (ssh-keygen). La clé privée est stockée chiffrée et
-                          ne sera plus jamais affichée — seule la clé publique
+                        <p className="text-muted-foreground text-sm">
+                          Une paire Ed25519 est générée par le panel (ssh-keygen). La clé privée est
+                          stockée chiffrée et ne sera plus jamais affichée — seule la clé publique
                           sera à autoriser sur ton dépôt.
                         </p>
                         <form.Field name="comment">
@@ -300,7 +296,7 @@ function CreateSshKeyDialog({
                                 onBlur={field.handleBlur}
                               />
                               {field.state.meta.errors.length > 0 && (
-                                <p className="text-sm text-destructive">
+                                <p className="text-destructive text-sm">
                                   {field.state.meta.errors[0]?.message}
                                 </p>
                               )}
@@ -324,7 +320,7 @@ function CreateSshKeyDialog({
                                 onBlur={field.handleBlur}
                               />
                               {field.state.meta.errors.length > 0 && (
-                                <p className="text-sm text-destructive">
+                                <p className="text-destructive text-sm">
                                   {field.state.meta.errors[0]?.message}
                                 </p>
                               )}
@@ -345,14 +341,13 @@ function CreateSshKeyDialog({
                                 onBlur={field.handleBlur}
                               />
                               {field.state.meta.errors.length > 0 && (
-                                <p className="text-sm text-destructive">
+                                <p className="text-destructive text-sm">
                                   {field.state.meta.errors[0]?.message}
                                 </p>
                               )}
-                              <p className="text-xs text-muted-foreground">
-                                Laisser vide : la clé publique est déduite de la
-                                clé privée. Si elle est fournie, elle est
-                                vérifiée contre la clé privée.
+                              <p className="text-muted-foreground text-xs">
+                                Laisser vide : la clé publique est déduite de la clé privée. Si elle
+                                est fournie, elle est vérifiée contre la clé privée.
                               </p>
                             </div>
                           )}
@@ -372,7 +367,7 @@ function CreateSshKeyDialog({
                             onBlur={field.handleBlur}
                           />
                           {field.state.meta.errors.length > 0 && (
-                            <p className="text-sm text-destructive">
+                            <p className="text-destructive text-sm">
                               {field.state.meta.errors[0]?.message}
                             </p>
                           )}

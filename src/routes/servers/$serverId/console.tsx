@@ -1,18 +1,35 @@
-import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
+import { Play, Square, RotateCw, Skull, Send } from 'lucide-react';
 import { useState } from 'react';
 import { useRef } from 'react';
 import type { FormEvent } from 'react';
-import { Play, Square, RotateCw, Skull, Send } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
+import { InstallNotice } from '~/components/console/install-panel';
+import { ServerStatsCards } from '~/components/console/server-stats';
+import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
+import { ErrorState } from '~/components/error/error-state';
+import type { PanelServerStatus } from '~/components/status-badge';
+import { Button } from '~/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
+import { Input } from '~/components/ui/input';
 import type {
   ConsoleClientMessage,
   ConsoleInstallStatus,
   ServerStatus,
   ServerStats,
 } from '~/contract';
-import type { PanelServerStatus } from '~/components/status-badge';
+import { hasServerPermissions } from '~/lib/permissions';
 import {
   getServerFn,
   getServerRuntimeFn,
@@ -21,15 +38,6 @@ import {
   serverActionFn,
   sendCommandFn,
 } from '~/server/functions/servers';
-import { Button } from '~/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '~/components/ui/card';
-import { Input } from '~/components/ui/input';
-import { XtermConsole, type ConsoleMode } from '~/components/console/xterm-console';
-import { InstallNotice } from '~/components/console/install-panel';
-import { ServerStatsCards } from '~/components/console/server-stats';
-import { ErrorState } from '~/components/error/error-state';
-import { ConfirmDialog } from '~/components/confirm-dialog';
-import { hasServerPermissions } from '~/lib/permissions';
 
 export const Route = createFileRoute('/servers/$serverId/console')({
   component: ServerConsolePage,
@@ -70,13 +78,11 @@ function ServerConsolePage() {
   // go DIRECTLY to the agent (JWT-gated); otherwise via the panel.
   const wsSendRef = useRef<((message: ConsoleClientMessage) => void) | null>(null);
 
-  const handleConsoleConnection = (
-    send: ((message: ConsoleClientMessage) => void) | null,
-  ) => {
+  const handleConsoleConnection = (send: ((message: ConsoleClientMessage) => void) | null) => {
     wsSendRef.current = send;
   };
 
-  const handleConsoleStatus = (status: ServerStatus) => {
+  const handleConsoleStatus = (_status: ServerStatus) => {
     // Runtime status pushed by the agent → refresh the queries (DB sync)
     void queryClient.invalidateQueries({ queryKey: ['server', serverId] });
     void queryClient.invalidateQueries({ queryKey: ['server-runtime', serverId] });
@@ -219,10 +225,7 @@ function ServerConsolePage() {
       {!installActive && (
         <div className="flex flex-wrap gap-2">
           {canStart && (
-            <Button
-              onClick={() => runAction('start')}
-              disabled={action.isPending || isAlive}
-            >
+            <Button onClick={() => runAction('start')} disabled={action.isPending || isAlive}>
               <Play />
               Démarrer
             </Button>
@@ -259,9 +262,7 @@ function ServerConsolePage() {
           )}
         </div>
       )}
-      {action.isError && (
-        <p className="text-sm text-destructive">{action.error.message}</p>
-      )}
+      {action.isError && <p className="text-destructive text-sm">{action.error.message}</p>}
 
       {/* Console card — full width, exactly as before; the resource cards
           below are the only thing that makes the page taller. */}
@@ -286,12 +287,17 @@ function ServerConsolePage() {
           <CardFooter>
             <form onSubmit={handleCommand} className="flex w-full gap-2">
               <Input
-                placeholder={isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'}
+                placeholder={
+                  isAlive ? 'Commande à envoyer (ex : stop, say hello…)' : 'Serveur arrêté'
+                }
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 disabled={!isAlive || submitCommand.isPending}
               />
-              <Button type="submit" disabled={!isAlive || submitCommand.isPending || !command.trim()}>
+              <Button
+                type="submit"
+                disabled={!isAlive || submitCommand.isPending || !command.trim()}
+              >
                 <Send />
                 Envoyer
               </Button>
@@ -303,7 +309,7 @@ function ServerConsolePage() {
       {/* Live resource cards (CPU / RAM) — under the console. */}
       <ServerStatsCards stats={stats} hint={statsEmptyHint} />
       {submitCommand.isError && (
-        <p className="text-sm text-destructive">{submitCommand.error.message}</p>
+        <p className="text-destructive text-sm">{submitCommand.error.message}</p>
       )}
       <ConfirmDialog
         open={askKill}
@@ -325,4 +331,3 @@ function ServerConsolePage() {
     </div>
   );
 }
-

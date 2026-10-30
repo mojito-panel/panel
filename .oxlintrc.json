@@ -1,0 +1,7 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [".output/", ".tanstack/", "node_modules/", "src/routeTree.gen.ts"],
+  "rules": {
+    "no-unused-vars": "error"
+  }
+}

@@ -1,36 +1,20 @@
-import { useState } from 'react';
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
-import { toast } from 'sonner';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { UserPlus } from 'lucide-react';
-import { DataTable } from '~/components/data-table/data-table';
-import {
-  listUsersFn,
-  createUserFn,
-  setUserRoleFn,
-  banUserFn,
-  unbanUserFn,
-  deleteUserFn,
-} from '~/server/functions/users';
-import { listRolesFn } from '~/server/functions/roles';
-import { createUserFormSchema, type CreateUserFormDto } from '~/validators/user';
-import { useAuth } from '~/contexts/use-auth';
-import { hasPermissions } from '~/lib/permissions';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { adminUsersList, type AdminUserRow, type AdminUsersContext } from '~/lists/users';
-import type { RoleDto } from '~/lists/roles';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { z } from 'zod';
-import { Button } from '~/components/ui/button';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
-import { Input } from '~/components/ui/input';
+import { DataTable } from '~/components/data-table/data-table';
+import { Button } from '~/components/ui/button';
 import {
   Card,
   CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
@@ -41,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { Input } from '~/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -48,6 +33,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { useAuth } from '~/contexts/use-auth';
+import { hasPermissions } from '~/lib/permissions';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import type { RoleDto } from '~/lists/roles';
+import { adminUsersList, type AdminUserRow, type AdminUsersContext } from '~/lists/users';
+import { listRolesFn } from '~/server/functions/roles';
+import {
+  listUsersFn,
+  createUserFn,
+  setUserRoleFn,
+  banUserFn,
+  unbanUserFn,
+  deleteUserFn,
+} from '~/server/functions/users';
+import { createUserFormSchema, type CreateUserFormDto } from '~/validators/user';
 
 /**
  * /admin/users — the panel accounts: roles, suspension, deletion.
@@ -111,12 +111,10 @@ function AdminUsersPage() {
     placeholderData: keepPreviousData,
   });
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-users'] });
 
   const changeRole = useMutation({
-    mutationFn: (input: { userId: string; role: string }) =>
-      setUserRole({ data: input }),
+    mutationFn: (input: { userId: string; role: string }) => setUserRole({ data: input }),
     onSuccess: async (result) => {
       await invalidate();
       const label = roles.find((r) => r.id === result.role)?.name ?? result.role;
@@ -126,8 +124,7 @@ function AdminUsersPage() {
   });
 
   const ban = useMutation({
-    mutationFn: (input: { userId: string; banReason?: string }) =>
-      banUser({ data: input }),
+    mutationFn: (input: { userId: string; banReason?: string }) => banUser({ data: input }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Compte suspendu', {
@@ -184,8 +181,7 @@ function AdminUsersPage() {
   const onSearchChange = (patch: Partial<ListQuery>) =>
     navigate({ search: mergeQuery(search, patch), replace: true });
 
-  const busy =
-    changeRole.isPending || ban.isPending || unban.isPending || remove.isPending;
+  const busy = changeRole.isPending || ban.isPending || unban.isPending || remove.isPending;
 
   const rowContext: AdminUsersContext = {
     canSetRole,
@@ -207,9 +203,8 @@ function AdminUsersPage() {
         <CardHeader>
           <CardTitle>Utilisateurs</CardTitle>
           <CardDescription>
-            Comptes du panel : rôles (administrateur / modérateur /
-            utilisateur), suspension et suppression. La suspension révoque
-            immédiatement les sessions actives.
+            Comptes du panel : rôles (administrateur / modérateur / utilisateur), suspension et
+            suppression. La suspension révoque immédiatement les sessions actives.
           </CardDescription>
           {canCreate && (
             <CardAction>
@@ -275,9 +270,7 @@ function AdminUsersPage() {
                 disabled={ban.isPending}
               />
               {field.state.meta.errors.length > 0 && (
-                <p className="text-sm text-destructive">
-                  {field.state.meta.errors[0]?.message}
-                </p>
+                <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
               )}
             </div>
           )}
@@ -318,7 +311,9 @@ function CreateUserDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  createUser: (args: { data: CreateUserFormDto }) => Promise<{ id: string; email: string; role: string }>;
+  createUser: (args: {
+    data: CreateUserFormDto;
+  }) => Promise<{ id: string; email: string; role: string }>;
   onCreated: () => Promise<void>;
   roles: RoleDto[];
 }) {
@@ -351,8 +346,8 @@ function CreateUserDialog({
         <DialogHeader>
           <DialogTitle>Créer un utilisateur</DialogTitle>
           <DialogDescription>
-            Le mot de passe est défini directement — l’utilisateur pourra se
-            connecter immédiatement.
+            Le mot de passe est défini directement — l’utilisateur pourra se connecter
+            immédiatement.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -373,7 +368,7 @@ function CreateUserDialog({
                     onBlur={field.handleBlur}
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -390,7 +385,7 @@ function CreateUserDialog({
                     onBlur={field.handleBlur}
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -408,7 +403,7 @@ function CreateUserDialog({
                     onBlur={field.handleBlur}
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -426,7 +421,7 @@ function CreateUserDialog({
                     onBlur={field.handleBlur}
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -460,7 +455,7 @@ function CreateUserDialog({
                       </SelectContent>
                     </Select>
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}

@@ -1,35 +1,9 @@
 import { createServerFn } from '@tanstack/react-start';
-import { withOrmContext } from '../middleware';
-import { orm } from '../orm';
+
 import { Node, Recipe, Server, Allocation, ServerUser, User, Backup } from '~/db/entities';
-import { adminServersList } from '~/lists/servers';
 import { serverAllocationsList } from '~/lists/allocations';
+import { adminServersList } from '~/lists/servers';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import {
-  requirePanelPermission,
-  HttpError,
-} from '../session';
-import { logActivity } from '../activity';
-import {
-  agentGetServer,
-  agentServerAction,
-} from '../agent/client';
-import {
-  deleteServer,
-  reinstallServerFromPanel,
-  refreshServerRecipeSnapshot,
-  pushServerResources,
-} from '../servers';
-import {
-  claimServerAllocation,
-  releaseServerAllocation,
-  promoteServerAllocation,
-} from '../nodes';
-import {
-  recipeGraphUpdatedAt,
-  serverRecipeSnapshot,
-  isRecipeSnapshotOutdated,
-} from '../recipe-snapshot';
 import {
   adminServerIdSchema,
   adminDeleteServerSchema,
@@ -38,6 +12,24 @@ import {
   setAdminServerSuspendedSchema,
   adminServerAllocationActionSchema,
 } from '~/validators/admin-server';
+
+import { logActivity } from '../activity';
+import { agentGetServer, agentServerAction } from '../agent/client';
+import { withOrmContext } from '../middleware';
+import { claimServerAllocation, releaseServerAllocation, promoteServerAllocation } from '../nodes';
+import { orm } from '../orm';
+import {
+  recipeGraphUpdatedAt,
+  serverRecipeSnapshot,
+  isRecipeSnapshotOutdated,
+} from '../recipe-snapshot';
+import {
+  deleteServer,
+  reinstallServerFromPanel,
+  refreshServerRecipeSnapshot,
+  pushServerResources,
+} from '../servers';
+import { requirePanelPermission, HttpError } from '../session';
 
 /**
  * Admin-area server management (/admin/servers — Pelican admin "Servers"
@@ -129,8 +121,8 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
     const subuserCount = await em.count(ServerUser, { serverId: server.id });
     const backupCount = await em.count(Backup, { serverId: server.id });
     // The snapshot the reload gating compares against (backfilled when the
-    // server predates snapshots).
-    const snapshot = await serverRecipeSnapshot(server);
+    // server predates snapshots) — isRecipeSnapshotOutdated re-reads it.
+    await serverRecipeSnapshot(server);
 
     return {
       id: server.id,
@@ -165,9 +157,7 @@ export const getAdminServerFn = createServerFn({ method: 'GET' })
         ),
         syncedAt: server.recipeSyncedAt,
       },
-      owner: owner
-        ? { id: owner.id, name: owner.name, email: owner.email }
-        : null,
+      owner: owner ? { id: owner.id, name: owner.name, email: owner.email } : null,
       allocations,
       subuserCount,
       backupCount,
@@ -243,7 +233,18 @@ export const updateAdminServerFn = createServerFn({ method: 'POST' })
       // Agent unreachable — tolerated, the next start re-syncs.
     }
 
-    await logActivity({ event: 'server:update', description: `Serveur « ${server.name} » mis à jour (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { ownerId: server.ownerId, memoryMb: server.memoryMb, cpuCores: Number(server.cpuCores), backupLimit: server.backupLimit } });
+    await logActivity({
+      event: 'server:update',
+      description: `Serveur « ${server.name} » mis à jour (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: {
+        ownerId: server.ownerId,
+        memoryMb: server.memoryMb,
+        cpuCores: Number(server.cpuCores),
+        backupLimit: server.backupLimit,
+      },
+    });
 
     // NOTE: memory/CPU are enforced by the agent through its stored
     // allocation — the power start/restart flow pushes the current
@@ -285,7 +286,15 @@ export const setAdminServerSuspendedFn = createServerFn({ method: 'POST' })
     }
 
     await em.flush();
-    await logActivity({ event: 'server:suspend', description: data.suspended ? `Serveur « ${server.name} » suspendu` : `Serveur « ${server.name} » réactivé`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { suspended: data.suspended } });
+    await logActivity({
+      event: 'server:suspend',
+      description: data.suspended
+        ? `Serveur « ${server.name} » suspendu`
+        : `Serveur « ${server.name} » réactivé`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { suspended: data.suspended },
+    });
 
     return { id: server.id, suspended: server.suspended };
   });
@@ -305,7 +314,13 @@ export const reinstallAdminServerFn = createServerFn({ method: 'POST' })
     const result = await reinstallServerFromPanel(server);
     server.status = 'installing';
     await orm.em.flush();
-    await logActivity({ event: 'server:reinstall', description: `Réinstallation de « ${server.name} » lancée (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { admin: true } });
+    await logActivity({
+      event: 'server:reinstall',
+      description: `Réinstallation de « ${server.name} » lancée (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { admin: true },
+    });
     return { id: server.id, status: 'installing', message: result.message };
   });
 
@@ -326,7 +341,13 @@ export const reloadAdminServerRecipeFn = createServerFn({ method: 'POST' })
     const { server } = await loadServer(data.serverId);
 
     await refreshServerRecipeSnapshot(server);
-    await logActivity({ event: 'server:reload_recipe', description: `Recette de « ${server.name} » rechargée (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { admin: true } });
+    await logActivity({
+      event: 'server:reload_recipe',
+      description: `Recette de « ${server.name} » rechargée (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { admin: true },
+    });
     return {
       id: server.id,
       status: server.status,
@@ -353,7 +374,13 @@ export const changeAdminServerRecipeFn = createServerFn({ method: 'POST' })
     });
     server.status = 'installing';
     await orm.em.flush();
-    await logActivity({ event: 'server:change_recipe', description: `Recette de « ${server.name} » changée puis réinstallation lancée`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { recipeId: data.recipeId } });
+    await logActivity({
+      event: 'server:change_recipe',
+      description: `Recette de « ${server.name} » changée puis réinstallation lancée`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { recipeId: data.recipeId },
+    });
     return { id: server.id, status: 'installing', message: result.message };
   });
 
@@ -366,7 +393,13 @@ export const deleteAdminServerFn = createServerFn({ method: 'POST' })
     const user = await requirePanelPermission({ 'panel.servers': ['delete'] });
     const { server } = await loadServer(data.serverId);
     await deleteServer(server, { force: data.force });
-    await logActivity({ event: 'server:delete', description: `Serveur « ${server.name} » supprimé (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { force: data.force ?? false } });
+    await logActivity({
+      event: 'server:delete',
+      description: `Serveur « ${server.name} » supprimé (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { force: data.force ?? false },
+    });
     return { deleted: true };
   });
 
@@ -460,7 +493,13 @@ export const addAdminServerAllocationFn = createServerFn({ method: 'POST' })
     const { server } = await loadServer(data.serverId);
 
     const allocation = await claimServerAllocation(server, data.allocationId);
-    await logActivity({ event: 'server:allocation_add', description: `Allocation ${allocation.ip}:${allocation.port} ajoutée à « ${server.name} » (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'server:allocation_add',
+      description: `Allocation ${allocation.ip}:${allocation.port} ajoutée à « ${server.name} » (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });
 
@@ -476,7 +515,13 @@ export const removeAdminServerAllocationFn = createServerFn({ method: 'POST' })
     const { server } = await loadServer(data.serverId);
 
     const allocation = await releaseServerAllocation(server, data.allocationId);
-    await logActivity({ event: 'server:allocation_remove', description: `Allocation ${allocation.ip}:${allocation.port} retirée de « ${server.name} » (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'server:allocation_remove',
+      description: `Allocation ${allocation.ip}:${allocation.port} retirée de « ${server.name} » (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });
 
@@ -492,6 +537,12 @@ export const setPrimaryAdminServerAllocationFn = createServerFn({ method: 'POST'
     const { server } = await loadServer(data.serverId);
 
     const allocation = await promoteServerAllocation(server, data.allocationId);
-    await logActivity({ event: 'server:allocation_primary', description: `Allocation ${allocation.ip}:${allocation.port} définie principale sur « ${server.name} » (administration)`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'server:allocation_primary',
+      description: `Allocation ${allocation.ip}:${allocation.port} définie principale sur « ${server.name} » (administration)`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });

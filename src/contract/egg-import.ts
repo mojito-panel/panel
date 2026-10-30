@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import {
   recipeSchema,
   recipeVariableSchema,
@@ -82,7 +83,6 @@ const eggSchema = z.object({
 });
 
 type EggVariable = z.infer<typeof eggVariableSchema>;
-type Egg = z.infer<typeof eggSchema>;
 
 // ─── Variable mapping (EggVariable → recipeVariableSchema, 1:1) ─────────────
 
@@ -213,9 +213,7 @@ export function importEgg(raw: unknown): { recipe: Recipe; warnings: string[] } 
   }
 
   // Variables — EggVariable maps 1:1 to the recipe variable schema.
-  const variables = (egg.variables ?? []).map((variable, index) =>
-    mapVariable(variable, index),
-  );
+  const variables = (egg.variables ?? []).map((variable, index) => mapVariable(variable, index));
 
   // config.files → configFile actions (unsupported parsers are skipped).
   const install: z.input<typeof recipeSchema>['install'] = [];
@@ -258,9 +256,7 @@ export function importEgg(raw: unknown): { recipe: Recipe; warnings: string[] } 
     install,
     start: {
       command: startup,
-      stop: stopCommand
-        ? { type: 'command', value: stopCommand, timeout_ms: 30000 }
-        : undefined,
+      stop: stopCommand ? { type: 'command', value: stopCommand, timeout_ms: 30000 } : undefined,
       ready: done ? { pattern: done, strip: stripFrom || undefined } : undefined,
     },
     logs: logsConfig ? { mode: 'file', file: logsConfig, strip_ansi: true } : undefined,

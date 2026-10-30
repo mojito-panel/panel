@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
 import { useTheme } from 'next-themes';
+import { useEffect, useRef, useState } from 'react';
 
 import { ErrorState } from '~/components/error/error-state';
 import { Skeleton } from '~/components/ui/skeleton';
 
-import type { CodeEditorHandle, CreateCodeEditorOptions } from './monaco';
+import type { CodeEditorHandle } from './monaco';
 
 /**
  * Monaco code editor wrapper — the editor itself is loaded dynamically in a
@@ -116,7 +116,7 @@ export function CodeEditor({
     <div className="relative h-[60vh] min-h-[320px] overflow-hidden rounded-md border">
       <div ref={containerRef} className="absolute inset-0" />
       {!ready && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col gap-2.5 bg-background p-4">
+        <div className="bg-background pointer-events-none absolute inset-0 flex flex-col gap-2.5 p-4">
           <Skeleton className="w-1/3" />
           <Skeleton className="w-2/3" />
           <Skeleton className="w-1/2" />

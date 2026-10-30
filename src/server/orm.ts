@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only';
 import { RequestContext } from '@mikro-orm/core';
-import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
+
 import { initOrm } from '~/db';
 
 /**
@@ -17,7 +17,6 @@ import { initOrm } from '~/db';
 
 /** The initialized ORM singleton (its `em` resolves the request fork). */
 export const orm = await initOrm();
-
 
 /**
  * Runs `fn` inside one MikroORM request context (one shared request-scoped

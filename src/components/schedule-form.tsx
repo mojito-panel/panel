@@ -1,11 +1,10 @@
-import { useForm, type ReactFormExtendedApi } from '@tanstack/react-form';
-import { useState } from 'react';
+import { type ReactFormExtendedApi } from '@tanstack/react-form';
 import { Plus, Trash2 } from 'lucide-react';
-import { nanoid } from '~/lib/nanoid';
+import { useState } from 'react';
+
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Switch } from '~/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -13,7 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Switch } from '~/components/ui/switch';
 import { cronToHuman } from '~/lib/cron';
+import { nanoid } from '~/lib/nanoid';
 import { type ScheduleEditFormDto } from '~/validators/schedules';
 
 /**
@@ -22,7 +23,20 @@ import { type ScheduleEditFormDto } from '~/validators/schedules';
  * carrying its onChange schema (only the DATA shape matters here).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ScheduleEditFormApi = ReactFormExtendedApi<ScheduleEditFormDto, any, any, any, any, any, any, any, any, any, any, any>;
+type ScheduleEditFormApi = ReactFormExtendedApi<
+  ScheduleEditFormDto,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any
+>;
 
 /**
  * Shared schedule form (create dialog + detail page render the SAME
@@ -99,7 +113,7 @@ const POWER_OPTIONS = [
 function FieldError({ errors }: { errors: unknown[] }) {
   if (errors.length === 0) return null;
   return (
-    <p className="text-sm text-destructive">
+    <p className="text-destructive text-sm">
       {typeof errors[0] === 'object' && errors[0] && 'message' in errors[0]
         ? String((errors[0] as { message: unknown }).message)
         : String(errors[0])}
@@ -129,7 +143,7 @@ function TaskRow({
       {(action) => (
         <div className="space-y-4 rounded-lg border p-4">
           <div className="flex items-start gap-4">
-            <span className="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+            <span className="bg-muted mt-2 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium">
               {index + 1}
             </span>
             <form.Field name={`${base}.action`}>
@@ -197,9 +211,9 @@ function TaskRow({
                   ) : action === 'backup' ? (
                     <div className="space-y-2">
                       <Label>Contenu</Label>
-                      <p className="flex min-h-9 items-center text-sm text-muted-foreground">
-                        Sauvegarde du serveur (contenu défini par la recette) — attendue avant
-                        la tâche suivante.
+                      <p className="text-muted-foreground flex min-h-9 items-center text-sm">
+                        Sauvegarde du serveur (contenu défini par la recette) — attendue avant la
+                        tâche suivante.
                       </p>
                     </div>
                   ) : (
@@ -328,7 +342,7 @@ export function ScheduleFormFields({
                   </Button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">{cronToHuman(field.state.value)}</p>
+              <p className="text-muted-foreground text-xs">{cronToHuman(field.state.value)}</p>
               <FieldError errors={field.state.meta.errors} />
             </div>
           )}
@@ -393,9 +407,9 @@ export function ScheduleFormFields({
       <div className="space-y-4">
         <div>
           <h3 className="text-sm font-medium">Tâches</h3>
-          <p className="text-xs text-muted-foreground">
-            Exécutées l’une après l’autre — le délai de chaque tâche s’écoule
-            après la précédente (0 à 900 s).
+          <p className="text-muted-foreground text-xs">
+            Exécutées l’une après l’autre — le délai de chaque tâche s’écoule après la précédente (0
+            à 900 s).
           </p>
         </div>
 
