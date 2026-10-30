@@ -436,4 +436,35 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     expect(tasks).toHaveLength(1);
     expect(tasks[0]?.payload).toBe('restart');
   });
+
+  it('generates nanoid ids at em.create() time via onCreate (no explicit id)', async () => {
+    const em = orm.em.fork();
+    const schedule = em.create(Schedule, {
+      serverId: 'server-1',
+      name: 'Auto id',
+      cron: '0 5 * * *',
+      updatedAt: new Date(),
+    });
+    // onCreate runs inside em.create() (processOnCreateHooksEarly), BEFORE any
+    // flush — services rely on entity.id being available immediately.
+    expect(schedule.id).toMatch(/^[A-Za-z0-9_-]{21}$/);
+
+    const task = em.create(ScheduleTask, {
+      scheduleId: schedule.id,
+      sequenceId: 1,
+      action: 'command',
+      payload: 'say hi',
+      updatedAt: new Date(),
+    });
+    expect(task.id).toMatch(/^[A-Za-z0-9_-]{21}$/);
+
+    em.persist(schedule);
+    em.persist(task);
+    await em.flush();
+
+    const found = await em.findOne(Schedule, { id: schedule.id });
+    expect(found?.name).toBe('Auto id');
+    const tasks = await em.find(ScheduleTask, { scheduleId: schedule.id });
+    expect(tasks).toHaveLength(1);
+  });
 });

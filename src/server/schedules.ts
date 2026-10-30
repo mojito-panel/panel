@@ -3,7 +3,6 @@ import type { Job } from 'pg-boss';
 import { Node, Schedule, ScheduleTask, Server } from '~/db/entities';
 import type { INode, ISchedule, IScheduleTask, IServer } from '~/db/types';
 import type { ServerAction } from '~/contract';
-import { nanoid } from '~/lib/nanoid';
 import { nextCronRun } from '~/lib/cron';
 import { orm, runWithOrmContext } from './orm';
 import { HttpError } from './session';
@@ -112,7 +111,6 @@ async function replaceTasks(scheduleId: string, tasks: ScheduleTaskInput[]): Pro
   for (const task of tasks) {
     em.persist(
       em.create(ScheduleTask, {
-        id: nanoid(),
         scheduleId,
         sequenceId: sequenceId++,
         action: task.action,
@@ -131,7 +129,6 @@ export async function createSchedule(server: IServer, input: ScheduleInput): Pro
   const em = orm.em;
   const now = new Date();
   const schedule = em.create(Schedule, {
-    id: nanoid(),
     serverId: server.id,
     name: input.name,
     cron: input.cron,

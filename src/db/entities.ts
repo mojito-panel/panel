@@ -1,4 +1,5 @@
 import { defineEntity, p } from '@mikro-orm/core';
+import { nanoid } from '~/lib/nanoid';
 
 // ─── better-auth (migrations managed by MikroORM like everything else) ──────
 
@@ -74,7 +75,8 @@ export const Verification = defineEntity({
 export const Node = defineEntity({
   name: 'node',
   properties: {
-    id: p.string().primary(),
+    /** nanoid generated at insert time (onCreate) — see ~/lib/nanoid. */
+    id: p.string().primary().onCreate(() => nanoid()),
     name: p.string().length(128),
     fqdn: p.string().length(255),
     /** Scheme the panel and browsers use to reach the agent — Pelican
@@ -103,7 +105,7 @@ export const Node = defineEntity({
 export const Recipe = defineEntity({
   name: 'recipe',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     slug: p.string().length(128).unique(),
     name: p.string().length(128),
     schemaVersion: p.integer().fieldName('schema_version').default(1),
@@ -138,7 +140,7 @@ export const Recipe = defineEntity({
 export const Registry = defineEntity({
   name: 'registry',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     name: p.string().length(128),
     /** Canonical https git URL of the repository (~/lib/recipe-source). */
     url: p.text(),
@@ -187,7 +189,7 @@ export const Registry = defineEntity({
 export const RegistryEntry = defineEntity({
   name: 'registry_entry',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     registryId: p.string().fieldName('registry_id'),
     /** POSIX path inside the repo — "steamcmd/enshrouded/recipe-enshrouded.json". */
     path: p.string().length(512),
@@ -222,7 +224,7 @@ export const RegistryEntry = defineEntity({
 export const SshKey = defineEntity({
   name: 'ssh_key',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     name: p.string().length(128),
     /** OpenSSH public key line — "ssh-ed25519 AAAA… comment". */
     publicKey: p.text().fieldName('public_key'),
@@ -238,7 +240,7 @@ export const SshKey = defineEntity({
 export const Server = defineEntity({
   name: 'server',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     name: p.string().length(128),
     nodeId: p.string().fieldName('node_id'),
     recipeId: p.string().fieldName('recipe_id'),
@@ -272,7 +274,7 @@ export const Server = defineEntity({
 export const Allocation = defineEntity({
   name: 'allocation',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     /** Owning node — the IP:port pool is per node (Pelican semantics). */
     nodeId: p.string().fieldName('node_id'),
     /** Assigned server — null = free allocation in the node pool. */
@@ -290,7 +292,7 @@ export const Allocation = defineEntity({
 export const ServerUser = defineEntity({
   name: 'server_user',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     serverId: p.string().fieldName('server_id'),
     userId: p.string().fieldName('user_id'),
     /**
@@ -330,8 +332,8 @@ export const PanelRole = defineEntity({
 export const Backup = defineEntity({
   name: 'backup',
   properties: {
-    /** nanoid() — also the archive file name on the agent. */
-    id: p.string().primary(),
+    /** nanoid generated at insert time (onCreate) — also the archive file name on the agent. */
+    id: p.string().primary().onCreate(() => nanoid()),
     serverId: p.text().fieldName('server_id'),
     name: p.string().length(128),
     /** pending → running → completed | failed (`restoring` while a restore runs). */
@@ -365,7 +367,7 @@ export const Backup = defineEntity({
 export const Schedule = defineEntity({
   name: 'schedule',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     serverId: p.string().fieldName('server_id'),
     name: p.string().length(128),
     /** 5-field unix cron expression — "30 4 * * *". */
@@ -399,7 +401,7 @@ export const Schedule = defineEntity({
 export const ScheduleTask = defineEntity({
   name: 'schedule_task',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     scheduleId: p.string().fieldName('schedule_id'),
     /** Execution order within the chain — 1..n, renumbered on every edit. */
     sequenceId: p.integer().fieldName('sequence_id'),
@@ -439,7 +441,7 @@ export const Setting = defineEntity({
 export const ActivityLog = defineEntity({
   name: 'activity_log',
   properties: {
-    id: p.string().primary(),
+    id: p.string().primary().onCreate(() => nanoid()),
     /** Namespaced event — "server:power", "backup:create", "subuser:add"… */
     event: p.string().length(128),
     /** Human-readable summary of the action (what happened, to what). */

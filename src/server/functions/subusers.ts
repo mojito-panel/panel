@@ -2,7 +2,6 @@ import { createServerFn } from '@tanstack/react-start';
 import { withOrmContext } from '../middleware';
 import { z } from 'zod';
 import { ServerUser, User } from '~/db/entities';
-import { nanoid } from '~/lib/nanoid';
 import { serverSubusersList } from '~/lists/subusers';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
@@ -135,7 +134,6 @@ export const addServerUserFn = createServerFn({ method: 'POST' })
     const now = new Date();
     em.persist(
       em.create(ServerUser, {
-        id: nanoid(),
         serverId: server.id,
         userId: target.id,
         permissions: statements,

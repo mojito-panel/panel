@@ -5,7 +5,6 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { nanoid } from '~/lib/nanoid';
 import { looksLikePrivateKey, parsePublicKey } from '~/lib/ssh-key';
 import { SshKey, Registry } from '~/db/entities';
 import type { ISshKey } from '~/db/types';
@@ -103,7 +102,6 @@ async function persistSshKey(input: {
 
   const now = new Date();
   const key = em.create(SshKey, {
-    id: nanoid(),
     name: input.name,
     publicKey: input.publicKey,
     // Encrypted at rest — never selectable in full by a client read.

@@ -3,7 +3,6 @@ import type { Job } from 'pg-boss';
 import { Recipe, Registry, RegistryEntry, SshKey } from '~/db/entities';
 import type { IRecipe, IRegistry, IRegistryEntry, ISshKey } from '~/db/types';
 import { parseRecipeJson } from '~/contract';
-import { nanoid } from '~/lib/nanoid';
 import { parseRegistryManifest } from '~/lib/registry-manifest';
 import {
   canonicalGitUrl,
@@ -107,7 +106,6 @@ export async function addRegistry(input: {
   const sshKeyId = input.sshKeyId ? (await requireSshKey(input.sshKeyId)).id : null;
 
   const registry = em.create(Registry, {
-    id: nanoid(),
     name: input.name,
     url,
     branch: input.branch,
@@ -271,7 +269,6 @@ async function replaceRegistryEntries(registryId: string, drafts: RegistryEntryD
   for (const draft of drafts) {
     em.persist(
       em.create(RegistryEntry, {
-        id: nanoid(),
         registryId,
         path: draft.path,
         sha: draft.sha,

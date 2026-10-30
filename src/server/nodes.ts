@@ -1,6 +1,5 @@
 import '@tanstack/react-start/server-only';
 import { randomBytes } from 'node:crypto';
-import { nanoid } from '~/lib/nanoid';
 import { Node, Server, Allocation } from '~/db/entities';
 import type { INode, IServer, IAllocation } from '~/db/types';
 import { orm } from './orm';
@@ -33,7 +32,6 @@ export async function createNode(input: {
   const token = randomBytes(32).toString('hex');
   const now = new Date();
   const node = em.create(Node, {
-    id: nanoid(),
     name: input.name,
     fqdn: input.fqdn,
     scheme: input.scheme,
@@ -123,7 +121,6 @@ export async function createAllocations(
     if (takenPorts.has(port)) continue;
     em.persist(
       em.create(Allocation, {
-        id: nanoid(),
         nodeId,
         serverId: null,
         ip,

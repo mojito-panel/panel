@@ -4,7 +4,6 @@ import { getRequestHeaders } from '@tanstack/react-start/server';
 
 import { orm } from './orm';
 import { ActivityLog } from '~/db/entities';
-import { nanoid } from '~/lib/nanoid';
 
 /**
  * Audit trail writer — Pelican-style `ActivityLog` rows (event, ip, actor,
@@ -51,7 +50,6 @@ export async function logActivity(input: ActivityInput): Promise<void> {
     const em = orm.em.fork();
     em.persist(
       em.create(ActivityLog, {
-        id: nanoid(),
         event: input.event,
         description: input.description,
         ip,

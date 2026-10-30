@@ -10,7 +10,6 @@ import {
   type RuntimeRecipe,
 } from '~/contract';
 import { z } from 'zod';
-import { nanoid } from '~/lib/nanoid';
 import { recipeErrorMessage } from '~/lib/recipe-source';
 import { Recipe, Server } from '~/db/entities';
 import { orm } from './orm';
@@ -124,7 +123,6 @@ export async function upsertRecipe(
   }
 
   const recipe = em.create(Recipe, {
-    id: nanoid(),
     slug: recipeJson.id,
     name: recipeJson.name,
     schemaVersion: recipeJson.schema_version,
@@ -157,7 +155,6 @@ export async function createRecipe(
 
   const now = new Date();
   const recipe = em.create(Recipe, {
-    id: nanoid(),
     slug: recipeJson.id,
     name: recipeJson.name,
     schemaVersion: recipeJson.schema_version,
