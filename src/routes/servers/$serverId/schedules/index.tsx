@@ -229,7 +229,7 @@ function ServerSchedulesPage() {
               form.handleSubmit();
             }}
           >
-            <div className="space-y-4">
+            <div className="space-y-6">
               <ScheduleFormFields form={form} />
               <form.Subscribe selector={(s) => [s.isSubmitting, create.isPending]}>
                 {([isSubmitting, pending]) => (

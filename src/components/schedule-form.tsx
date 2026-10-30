@@ -127,8 +127,8 @@ function TaskRow({
   return (
     <form.Subscribe selector={(s) => s.values.tasks[index]?.action}>
       {(action) => (
-        <div className="space-y-3 rounded-lg border p-3">
-          <div className="flex items-start gap-3">
+        <div className="space-y-4 rounded-lg border p-4">
+          <div className="flex items-start gap-4">
             <span className="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
               {index + 1}
             </span>
@@ -195,10 +195,13 @@ function TaskRow({
                       <FieldError errors={field.state.meta.errors} />
                     </div>
                   ) : action === 'backup' ? (
-                    <p className="flex h-9 items-center text-sm text-muted-foreground">
-                      Sauvegarde du serveur (contenu défini par la recette) — attendue avant la
-                      tâche suivante.
-                    </p>
+                    <div className="space-y-2">
+                      <Label>Contenu</Label>
+                      <p className="flex min-h-9 items-center text-sm text-muted-foreground">
+                        Sauvegarde du serveur (contenu défini par la recette) — attendue avant
+                        la tâche suivante.
+                      </p>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       <Label>Commande console</Label>
@@ -226,7 +229,7 @@ function TaskRow({
               </Button>
             )}
           </div>
-          <div className="flex items-end gap-6 pl-9">
+          <div className="flex items-end gap-6 pl-10">
             <form.Field name={`${base}.timeOffset`}>
               {(field) => (
                 <div className="w-36 space-y-2">
@@ -286,7 +289,7 @@ export function ScheduleFormFields({
   return (
     <div className="space-y-6">
       {/* ─── Identity + cron ─── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-6 sm:grid-cols-2">
         <form.Field name="name">
           {(field) => (
             <div className="space-y-2">
@@ -312,7 +315,7 @@ export function ScheduleFormFields({
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
               />
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 {CRON_PRESETS.map((preset) => (
                   <Button
                     key={preset.cron}
@@ -387,7 +390,7 @@ export function ScheduleFormFields({
       </div>
 
       {/* ─── Task chain ─── */}
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
           <h3 className="text-sm font-medium">Tâches</h3>
           <p className="text-xs text-muted-foreground">
