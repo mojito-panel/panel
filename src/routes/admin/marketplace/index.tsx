@@ -446,9 +446,13 @@ function RegistryCardView({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           <span className="text-muted-foreground">{registry.entryCount} recette(s)</span>
           {registry.updateAvailable > 0 && (
-            <span className="font-medium text-primary">
+            <Badge
+              variant="secondary"
+              className="font-medium text-primary"
+              title="Recettes dont une nouvelle version est disponible dans le dépôt"
+            >
               {registry.updateAvailable} à mettre à jour
-            </span>
+            </Badge>
           )}
           {registry.modifiedLocally > 0 && (
             <span className="text-amber-600 dark:text-amber-400">
