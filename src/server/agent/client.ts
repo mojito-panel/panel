@@ -1,4 +1,5 @@
-import type { INode } from '~/db/types';
+import { z } from 'zod';
+
 import type {
   HealthResponse,
   InstallStatus,
@@ -16,9 +17,10 @@ import {
   nodeStatsSchema,
   serverInfoSchema,
 } from '~/contract';
-import { z } from 'zod';
-import { decryptSecret } from '../crypto';
+import type { INode } from '~/db/types';
 import { isHttpsScheme } from '~/validators/node';
+
+import { decryptSecret } from '../crypto';
 
 /**
  * Panel-to-agent HTTP client (Bearer token).
@@ -154,10 +156,7 @@ export async function agentGetServer(
 }
 
 /** Live (re)install status + step logs (poll while status === 'installing'). */
-export async function agentGetInstallStatus(
-  node: INode,
-  serverId: string,
-): Promise<InstallStatus> {
+export async function agentGetInstallStatus(node: INode, serverId: string): Promise<InstallStatus> {
   return agentCall(node, `/servers/${serverId}/install`, { schema: installStatusSchema });
 }
 
@@ -283,10 +282,7 @@ export async function agentReadFile(
   serverId: string,
   path: string,
 ): Promise<{ path: string; content: string; size: number }> {
-  return agentCall(
-    node,
-    `/servers/${serverId}/files/content?path=${encodeURIComponent(path)}`,
-  );
+  return agentCall(node, `/servers/${serverId}/files/content?path=${encodeURIComponent(path)}`);
 }
 
 export async function agentWriteFile(

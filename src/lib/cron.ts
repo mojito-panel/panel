@@ -50,15 +50,7 @@ export function nextCronRun(cron: string, timezone: string, from: Date = new Dat
   }
 }
 
-const WEEKDAYS = [
-  'dimanche',
-  'lundi',
-  'mardi',
-  'mercredi',
-  'jeudi',
-  'vendredi',
-  'samedi',
-] as const;
+const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'] as const;
 
 /** A field is PLAIN when it is a single non-negative integer (`14`, `5`…) — no star, step, list or range. */
 const PLAIN_NUMBER = /^\d+$/;

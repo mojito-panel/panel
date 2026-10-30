@@ -1,22 +1,15 @@
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { toast } from 'sonner';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { CalendarClock } from 'lucide-react';
-import { DataTable } from '~/components/data-table/data-table';
-import { Button } from '~/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '~/components/ui/dialog';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
+import { DataTable } from '~/components/data-table/data-table';
 import { ScheduleFormFields } from '~/components/schedule-form';
+import { Button } from '~/components/ui/button';
 import {
   Card,
   CardAction,
@@ -25,16 +18,24 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
+import { hasServerPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { serverSchedulesList, type ServerScheduleRow } from '~/lists/schedules';
-import { getServerFn } from '~/server/functions/servers';
 import {
   listSchedulesFn,
   createScheduleFn,
   deleteScheduleFn,
   runScheduleNowFn,
 } from '~/server/functions/schedules';
-import { hasServerPermissions } from '~/lib/permissions';
+import { getServerFn } from '~/server/functions/servers';
 import { scheduleEditFormSchema, type ScheduleEditFormDto } from '~/validators/schedules';
 
 /**
@@ -105,8 +106,7 @@ function ServerSchedulesPage() {
   };
 
   const create = useMutation({
-    mutationFn: (value: ScheduleEditFormDto) =>
-      createSchedule({ data: { ...value, serverId } }),
+    mutationFn: (value: ScheduleEditFormDto) => createSchedule({ data: { ...value, serverId } }),
     onSuccess: async (schedule) => {
       setCreateOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['server-schedules', serverId] });
@@ -152,7 +152,7 @@ function ServerSchedulesPage() {
 
   if (serverQuery.isSuccess && !canRead) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Tu n’as pas la permission de gérer les planifications de ce serveur.
       </p>
     );
@@ -164,8 +164,8 @@ function ServerSchedulesPage() {
         <CardHeader>
           <CardTitle>Planifications</CardTitle>
           <CardDescription>
-            Déclenche des actions (alimentation, commandes) à des moments
-            planifiés — les tâches s’enchaînent avec un délai entre chacune.
+            Déclenche des actions (alimentation, commandes) à des moments planifiés — les tâches
+            s’enchaînent avec un délai entre chacune.
           </CardDescription>
           {canCreate && (
             <CardAction>
@@ -218,8 +218,8 @@ function ServerSchedulesPage() {
           <DialogHeader>
             <DialogTitle>Créer une planification</DialogTitle>
             <DialogDescription>
-              L’expression cron est évaluée dans le fuseau horaire choisi — la
-              prochaine exécution est calculée à la sauvegarde.
+              L’expression cron est évaluée dans le fuseau horaire choisi — la prochaine exécution
+              est calculée à la sauvegarde.
             </DialogDescription>
           </DialogHeader>
           <form

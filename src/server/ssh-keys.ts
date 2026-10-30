@@ -5,12 +5,14 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { looksLikePrivateKey, parsePublicKey } from '~/lib/ssh-key';
+
 import { SshKey, Registry } from '~/db/entities';
 import type { ISshKey } from '~/db/types';
+import { looksLikePrivateKey, parsePublicKey } from '~/lib/ssh-key';
+
+import { encryptSecret } from './crypto';
 import { orm } from './orm';
 import { HttpError } from './session';
-import { encryptSecret } from './crypto';
 
 /**
  * SSH key pair service (server-only) — /admin/keys: key pairs are GENERATED
@@ -95,7 +97,8 @@ async function persistSshKey(input: {
   const em = orm.em;
 
   const clash = await em.findOne(SshKey, { name: input.name });
-  if (clash) throw new HttpError(409, `Le nom « ${input.name} » est déjà utilisé par une autre clé`);
+  if (clash)
+    throw new HttpError(409, `Le nom « ${input.name} » est déjà utilisé par une autre clé`);
 
   const fingerprint = fingerprintOf(input.publicKey);
   if (!fingerprint) throw new HttpError(422, 'Clé publique invalide');
@@ -185,7 +188,12 @@ export async function importSshKey(input: {
   if (input.publicKey?.trim()) {
     const provided = parsePublicKey(input.publicKey);
     const derivedKey = parsePublicKey(derived);
-    if (!provided || !derivedKey || provided.type !== derivedKey.type || provided.blobBase64 !== derivedKey.blobBase64) {
+    if (
+      !provided ||
+      !derivedKey ||
+      provided.type !== derivedKey.type ||
+      provided.blobBase64 !== derivedKey.blobBase64
+    ) {
       throw new HttpError(422, 'La clé publique fournie ne correspond pas à la clé privée');
     }
   }

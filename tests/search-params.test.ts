@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseSearch, stringifySearch } from '~/lib/search-params';
 
 /**

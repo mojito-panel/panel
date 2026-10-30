@@ -56,11 +56,19 @@ export function decryptSecret(value: string): string {
   if (!value.startsWith(PREFIX)) return value;
   const [ivB64, tagB64, dataB64] = value.slice(PREFIX.length).split(':');
   try {
-    const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivB64, 'base64'), {
-      authTagLength: 16,
-    });
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      encryptionKey(),
+      Buffer.from(ivB64, 'base64'),
+      {
+        authTagLength: 16,
+      },
+    );
     decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
+    return Buffer.concat([
+      decipher.update(Buffer.from(dataB64, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
   } catch {
     throw new Error('Token agent illisible (déchiffrement échoué)');
   }

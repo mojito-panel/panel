@@ -1,9 +1,10 @@
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
+
+import { AppShell } from '~/components/app-shell';
+import { AppSidebar } from '~/components/app-sidebar';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { AppSidebar } from '~/components/app-sidebar';
-import { AppShell } from '~/components/app-shell';
 import { getBrandingFn } from '~/server/functions/settings';
 
 /**
@@ -36,7 +37,7 @@ function AppLayout() {
         <AppSidebar />
         <AppShell
           header={
-            <span className="text-sm font-medium text-muted-foreground">
+            <span className="text-muted-foreground text-sm font-medium">
               {brandingQuery.data?.appName ?? 'Mojito Panel'}
             </span>
           }

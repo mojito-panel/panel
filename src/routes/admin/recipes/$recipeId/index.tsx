@@ -1,16 +1,16 @@
-import { useState } from 'react';
-import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
-import { ConfirmDialog } from '~/components/confirm-dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
+import { Download, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { Download, Trash2 } from 'lucide-react';
-import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract';
-import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
-import { adminRecipesList } from '~/lists/recipes';
-import { Button } from '~/components/ui/button';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { RecipeEditor } from '~/components/recipe-editor/recipe-editor';
+import { Button } from '~/components/ui/button';
+import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract';
+import { adminRecipesList } from '~/lists/recipes';
+import { getRecipeFn, updateRecipeFn, deleteRecipeFn } from '~/server/functions/admin';
 import {
   recipeEditorValueToRecipe,
   recipeToEditorValue,
@@ -75,7 +75,7 @@ function EditRecipePage() {
   if (query.isError) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
+        <p className="text-destructive text-sm">Erreur : {query.error.message}</p>
         <Button
           variant="ghost"
           render={<Link to="/admin/recipes" search={adminRecipesList.defaultSearch} />}

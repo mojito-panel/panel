@@ -6,13 +6,8 @@ import {
   type QueryOrderMap,
   type SelectQueryBuilder,
 } from '@mikro-orm/postgresql';
-import type {
-  ListFilterSpec,
-  ListPath,
-  ListQuery,
-  ListResult,
-  ListSpec,
-} from '~/lists/define';
+
+import type { ListFilterSpec, ListPath, ListQuery, ListResult, ListSpec } from '~/lists/define';
 
 /**
  * Server-side half of the list contract: turns a validated `ListQuery` into a
@@ -60,10 +55,7 @@ function joinAliasOf(target: ListPath): string | null {
 }
 
 /** ORM condition of one active filter value. */
-function filterCondition(
-  spec: ListFilterSpec,
-  value: unknown,
-): Record<string, unknown> {
+function filterCondition(spec: ListFilterSpec, value: unknown): Record<string, unknown> {
   const key = targetKey(spec.filter.target);
 
   switch (spec.filter.control) {
@@ -83,7 +75,13 @@ function filterCondition(
       // A multiple-choice filter travels as `'a,b'` in every direction (URL,
       // server payload) — the IN list is rebuilt here.
       return spec.filter.multiple
-        ? { [key]: { $in: String(value).split(',').filter((token) => token !== '') } }
+        ? {
+            [key]: {
+              $in: String(value)
+                .split(',')
+                .filter((token) => token !== ''),
+            },
+          }
         : { [key]: { $eq: value } };
   }
 }

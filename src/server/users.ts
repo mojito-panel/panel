@@ -1,10 +1,11 @@
 import '@tanstack/react-start/server-only';
 import { Session, Account, Server, ServerUser, User, PanelRole } from '~/db/entities';
+import type { IUser } from '~/db/types';
+import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, isSubset, type PanelRoleName } from '~/lib/permissions';
+
 import { orm } from './orm';
 import { HttpError } from './session';
 import { resolvePanelPermissions } from './session';
-import { BUILT_IN_ROLE_LABELS, PANEL_ROLES, isSubset, type PanelRoleName } from '~/lib/permissions';
-import type { IUser } from '~/db/types';
 
 /**
  * Panel user + role business service (server-only): plain functions doing
@@ -55,10 +56,7 @@ export function roleLabel(roleId: string, customRoles: { id: string; name: strin
  * Bans a user: sets the admin-plugin columns (checked at session creation)
  * and revokes every active session immediately. Permanent until lifted.
  */
-export async function banUser(
-  target: IUser,
-  banReason?: string,
-): Promise<void> {
+export async function banUser(target: IUser, banReason?: string): Promise<void> {
   const em = orm.em;
   // The admin plugin checks these columns at session creation
   target.banned = true;
@@ -124,16 +122,10 @@ export async function assertNoClash(id: string, name: string): Promise<void> {
 }
 
 /** A custom role may only grant a subset of the actor's own permissions. */
-export async function assertWithinActorCeiling(
-  grant: string[],
-  actorRole: string,
-): Promise<void> {
+export async function assertWithinActorCeiling(grant: string[], actorRole: string): Promise<void> {
   const actorPermissions = await resolvePanelPermissions(actorRole);
   if (!isSubset(grant, actorPermissions)) {
-    throw new HttpError(
-      403,
-      'Tu ne peux accorder que les permissions que tu possèdes toi-même',
-    );
+    throw new HttpError(403, 'Tu ne peux accorder que les permissions que tu possèdes toi-même');
   }
 }
 

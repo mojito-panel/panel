@@ -66,7 +66,10 @@ export const uploadFileSchema = z.object({
   serverId: z.string().min(1),
   directory: z.string().max(1024).default(''),
   filename: z.string().min(1).max(255),
-  contentBase64: z.string().min(1).max(16 * 1024 * 1024), // ~10 MB decoded
+  contentBase64: z
+    .string()
+    .min(1)
+    .max(16 * 1024 * 1024), // ~10 MB decoded
 });
 
 export type UploadFileDto = z.output<typeof uploadFileSchema>;

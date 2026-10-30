@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   createScheduleSchema,
   updateScheduleSchema,
@@ -15,7 +16,12 @@ const BASE = {
   onlyWhenOnline: false,
   isActive: true,
   tasks: [
-    { action: 'command', payload: 'say Restart in 1 minute', timeOffset: 0, continueOnFailure: false },
+    {
+      action: 'command',
+      payload: 'say Restart in 1 minute',
+      timeOffset: 0,
+      continueOnFailure: false,
+    },
     { action: 'power', payload: 'restart', timeOffset: 60, continueOnFailure: true },
   ],
 };
@@ -113,8 +119,8 @@ describe('schedule validators', () => {
 
   it('requires both ids on a schedule action request', () => {
     expect(scheduleActionSchema.safeParse({ serverId: 's' }).success).toBe(false);
-    expect(
-      scheduleActionSchema.safeParse({ serverId: 's', scheduleId: 'sc-1' }).success,
-    ).toBe(true);
+    expect(scheduleActionSchema.safeParse({ serverId: 's', scheduleId: 'sc-1' }).success).toBe(
+      true,
+    );
   });
 });

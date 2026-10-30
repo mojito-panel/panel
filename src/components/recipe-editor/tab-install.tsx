@@ -10,15 +10,16 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
-import { CollapseCard, FieldShell, ItemActions, KvRows, TagsInput } from './fields';
-import type { RecipeForm } from './recipe-editor';
-import { pairErrors } from './tab-configuration';
 import {
   actionLabel,
   newActionValue,
   type ActionType,
   type ActionValue,
 } from '~/validators/recipe-editor';
+
+import { CollapseCard, FieldShell, ItemActions, KvRows, TagsInput } from './fields';
+import type { RecipeForm } from './recipe-editor';
+import { pairErrors } from './tab-configuration';
 
 /**
  * Tab « Installation » — the declarative equivalent of Pelican's install
@@ -130,13 +131,11 @@ function ActionCard({
           title={action ? actionLabel(action.action) : 'Action'}
           subtitle={action?.file || action?.command || action?.url || undefined}
           badge={
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
               #{index + 1}
             </span>
           }
-          actions={
-            <ItemActions onMoveUp={onMoveUp} onMoveDown={onMoveDown} onRemove={onRemove} />
-          }
+          actions={<ItemActions onMoveUp={onMoveUp} onMoveDown={onMoveDown} onRemove={onRemove} />}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <FieldShell id={`action-${index}-type`} label="Type d'action">
@@ -656,9 +655,7 @@ function TailSection({
               id={`action-${index}-tail-enabled`}
               checked={tailField.state.value !== null}
               onCheckedChange={(checked) =>
-                tailField.handleChange(
-                  checked ? { file: '', filter: '', intervalMs: 0 } : null,
-                )
+                tailField.handleChange(checked ? { file: '', filter: '', intervalMs: 0 } : null)
               }
             />
             <Label htmlFor={`action-${index}-tail-enabled`} className="text-sm font-medium">

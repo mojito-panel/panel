@@ -14,8 +14,7 @@ const GIT_REF_PATTERN = /^[A-Za-z0-9._/-]{0,128}$/;
  * The service (`canonicalGitUrl`) does the strict validation — this only
  * keeps obvious garbage out of the form.
  */
-const GIT_REMOTE_PATTERN =
-  /^(?:(?:https|ssh):\/\/\S+|[A-Za-z0-9._-]+@[A-Za-z0-9._-]+:\S+)$/;
+const GIT_REMOTE_PATTERN = /^(?:(?:https|ssh):\/\/\S+|[A-Za-z0-9._-]+@[A-Za-z0-9._-]+:\S+)$/;
 
 export const addRegistrySchema = z.object({
   name: z.string().min(2, 'Le nom doit faire au moins 2 caractères').max(128),
@@ -24,7 +23,10 @@ export const addRegistrySchema = z.object({
     .string()
     .min(5, 'URL du dépôt requise')
     .max(2048)
-    .refine((v) => GIT_REMOTE_PATTERN.test(v), 'Doit être une URL de dépôt git : https://…, ssh://… ou git@hôte:chemin'),
+    .refine(
+      (v) => GIT_REMOTE_PATTERN.test(v),
+      'Doit être une URL de dépôt git : https://…, ssh://… ou git@hôte:chemin',
+    ),
   /** Branch to track — empty = the repository's default branch. */
   branch: z
     .string()

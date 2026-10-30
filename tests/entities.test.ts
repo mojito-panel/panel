@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/sqlite';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import {
   User,
   Session,
@@ -60,9 +61,9 @@ describe('MikroORM entities (SQLite in-memory)', () => {
   });
 
   it('creates all tables', async () => {
-    const tables = await orm.em.getConnection().execute(
-      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-    );
+    const tables = await orm.em
+      .getConnection()
+      .execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
     const tableNames = tables.map((t) => (t as { name: string }).name);
     expect(tableNames).toContain('user');
     expect(tableNames).toContain('session');
@@ -262,7 +263,8 @@ describe('MikroORM entities (SQLite in-memory)', () => {
     await expect(em.flush()).rejects.toThrow();
   });
 
-  it('creates a suspended User (admin plugin columns)', async () => {    const em = orm.em.fork();
+  it('creates a suspended User (admin plugin columns)', async () => {
+    const em = orm.em.fork();
     const user = em.create(User, {
       id: 'user-2',
       name: 'Suspended',

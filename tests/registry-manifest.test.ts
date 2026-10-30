@@ -8,12 +8,14 @@ import {
 
 describe('parseRegistryManifest', () => {
   it('parses a full manifest', () => {
-    const manifest = parseRegistryManifest(JSON.stringify({
-      description: 'Official recipes of Mojito Panel',
-      author: 'Mojito Panel',
-      license: 'MIT',
-      cover: 'artwork/registry.png',
-    }));
+    const manifest = parseRegistryManifest(
+      JSON.stringify({
+        description: 'Official recipes of Mojito Panel',
+        author: 'Mojito Panel',
+        license: 'MIT',
+        cover: 'artwork/registry.png',
+      }),
+    );
     expect(manifest.description).toBe('Official recipes of Mojito Panel');
     expect(manifest.author).toBe('Mojito Panel');
     expect(manifest.license).toBe('MIT');

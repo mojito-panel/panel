@@ -7,13 +7,14 @@ import {
   type Updater,
 } from '@tanstack/react-table';
 import { useState } from 'react';
+
+import { DataTableFrame } from '~/components/data-table/data-table-frame';
+import { clientTableFeatures } from '~/components/data-table/features';
 import {
   buildColumns,
   columnFiltersChangeHandler,
   sortingChangeHandler,
 } from '~/components/data-table/table-wiring';
-import { DataTableFrame } from '~/components/data-table/data-table-frame';
-import { clientTableFeatures } from '~/components/data-table/features';
 import type { DefinedList, ListChoiceOption, ListQuery } from '~/lists/define';
 
 /**

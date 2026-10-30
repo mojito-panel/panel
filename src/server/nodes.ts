@@ -1,13 +1,15 @@
 import '@tanstack/react-start/server-only';
 import { randomBytes } from 'node:crypto';
+
+import { DEFAULT_SFTP_PORT } from '~/contract';
 import { Node, Server, Allocation } from '~/db/entities';
 import type { INode, IServer, IAllocation } from '~/db/types';
-import { orm } from './orm';
-import { HttpError } from './session';
-import { encryptSecret } from './crypto';
+
 import { agentHealth } from './agent/client';
+import { encryptSecret } from './crypto';
+import { orm } from './orm';
 import { pushServerResources } from './servers';
-import { DEFAULT_SFTP_PORT } from '~/contract';
+import { HttpError } from './session';
 
 /**
  * Node + allocation-pool business service (server-only): plain functions
@@ -168,10 +170,7 @@ export async function deleteAllocations(
  * action). A server without any primary promotes the newcomer and syncs the
  * agent cache — otherwise the primary is left untouched.
  */
-export async function assignAllocation(
-  allocation: IAllocation,
-  server: IServer,
-): Promise<void> {
+export async function assignAllocation(allocation: IAllocation, server: IServer): Promise<void> {
   const em = orm.em;
   if (allocation.serverId !== null) {
     throw new HttpError(409, 'Cette allocation est déjà affectée à un serveur');
@@ -180,9 +179,7 @@ export async function assignAllocation(
     throw new HttpError(422, 'Ce serveur n’est pas installé sur le node de l’allocation');
   }
 
-  const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
-    (a) => a.primary,
-  );
+  const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some((a) => a.primary);
   allocation.serverId = server.id;
   allocation.primary = !hadPrimary;
   await em.flush();
@@ -201,9 +198,7 @@ export async function assignAllocation(
 export async function revokeAllocation(allocation: IAllocation): Promise<void> {
   const em = orm.em;
   const assigned = await em.find(Allocation, { serverId: allocation.serverId });
-  const others = assigned
-    .filter((a) => a.id !== allocation.id)
-    .sort((a, b) => a.port - b.port);
+  const others = assigned.filter((a) => a.id !== allocation.id).sort((a, b) => a.port - b.port);
 
   if (allocation.primary && others.length === 0) {
     throw new HttpError(409, 'Un serveur doit conserver au moins une allocation principale');
@@ -244,9 +239,7 @@ export async function claimServerAllocation(
     throw new HttpError(422, 'Cette allocation n’appartient pas au node du serveur');
   }
 
-  const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some(
-    (a) => a.primary,
-  );
+  const hadPrimary = (await em.find(Allocation, { serverId: server.id })).some((a) => a.primary);
   allocation.serverId = server.id;
   allocation.primary = !hadPrimary;
   await em.flush();

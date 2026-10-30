@@ -1,4 +1,5 @@
 import { createMiddleware } from '@tanstack/react-start';
+
 import { runWithOrmContext } from './orm';
 
 /**
@@ -18,6 +19,4 @@ import { runWithOrmContext } from './orm';
  * other contexts (SFTP auth, better-auth hooks) can safely call functions
  * wrapped by this middleware.
  */
-export const withOrmContext = createMiddleware().server(({ next }) =>
-  runWithOrmContext(next),
-);
+export const withOrmContext = createMiddleware().server(({ next }) => runWithOrmContext(next));

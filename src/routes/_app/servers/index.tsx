@@ -1,19 +1,26 @@
-import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
-import { DataTable } from '~/components/data-table/data-table';
 
-import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/confirm-dialog';
+import { DataTable } from '~/components/data-table/data-table';
+import { Button } from '~/components/ui/button';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { useAuth } from '~/contexts/use-auth';
 import { hasAdminAreaAccess, hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
-import { userServersList, type UserServerRow } from '~/lists/user-servers';
 import { adminNodesList } from '~/lists/nodes';
 import { adminRecipesList } from '~/lists/recipes';
+import { userServersList, type UserServerRow } from '~/lists/user-servers';
 import { deleteServerFn, listServersFn } from '~/server/functions/servers';
 
 /**

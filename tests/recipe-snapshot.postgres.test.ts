@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/postgresql';
-import { ormConfig } from '../src/db/index';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { Recipe, Server } from '~/db/entities';
 import type { IServer } from '~/db/types';
+
+import { ormConfig } from '../src/db/index';
 import { databaseReachable } from './helpers/db-reachable';
 import { metadataOnly } from './helpers/metadata-orm';
 
@@ -21,8 +23,7 @@ import { metadataOnly } from './helpers/metadata-orm';
  * inside beforeAll: their module graph initializes a Postgres connection,
  * which must only happen once the probe has passed.
  */
-const DATABASE_URL =
-  process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
 const databaseUp = await databaseReachable(DATABASE_URL);
 
@@ -159,7 +160,10 @@ describe.skipIf(!databaseUp)('recipe snapshot against Postgres', () => {
     expect((snapshot.runtimes[0] as { id?: string }).id).toBe('java-snaptest');
 
     // The backfill persisted the ONE-document snapshot on the row.
-    expect(server.recipeSnapshot).toMatchObject({ recipe: { id: 'minecraft-snaptest' }, runtimes: [{ id: 'java-snaptest' }] });
+    expect(server.recipeSnapshot).toMatchObject({
+      recipe: { id: 'minecraft-snaptest' },
+      runtimes: [{ id: 'java-snaptest' }],
+    });
     expect(server.recipeSyncedAt).toBeDefined();
   });
 });

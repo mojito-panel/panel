@@ -1,33 +1,13 @@
-import { useState, type FormEvent } from 'react';
-import {
-  createFileRoute,
-  Link,
-  stripSearchParams,
-  useNavigate,
-} from '@tanstack/react-router';
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
-import { toast } from 'sonner';
 import { Plus, Upload } from 'lucide-react';
-import {
-  listRecipesFn,
-  importRecipesFn,
-  importEggFn,
-  getRecipeFn,
-  deleteRecipeFn,
-} from '~/server/functions/admin';
-import { updateRecipeFromSourceFn } from '~/server/functions/marketplace';
+import { useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
-import { Textarea } from '~/components/ui/textarea';
 import {
   Card,
   CardAction,
@@ -36,8 +16,19 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import { Textarea } from '~/components/ui/textarea';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { adminRecipesList, type AdminRecipeRow } from '~/lists/recipes';
+import {
+  listRecipesFn,
+  importRecipesFn,
+  importEggFn,
+  getRecipeFn,
+  deleteRecipeFn,
+} from '~/server/functions/admin';
+import { updateRecipeFromSourceFn } from '~/server/functions/marketplace';
 
 /**
  * /admin/recipes — every recipe imported in the panel. Filtering, sorting and
@@ -125,7 +116,6 @@ function AdminRecipesPage() {
     navigate({ search: mergeQuery(search, patch), replace: true });
 
   const [recipeToDelete, setRecipeToDelete] = useState<AdminRecipeRow | null>(null);
-
 
   /** Batch import: textarea + .json files + URL (each optional). */
   const onImportSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -300,7 +290,7 @@ function AdminRecipesPage() {
                   type="file"
                   multiple
                   accept=".json,application/json"
-                  className="flex w-full rounded-md border border-input bg-background p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-xs file:text-secondary-foreground"
+                  className="border-input bg-background file:bg-secondary file:text-secondary-foreground flex w-full rounded-md border p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1 file:text-xs"
                 />
               </div>
 
@@ -312,7 +302,7 @@ function AdminRecipesPage() {
                   type="url"
                   placeholder="https://github.com/…/blob/…/recipe.json"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Les URLs GitHub (blob) sont converties en raw automatiquement.
                 </p>
               </div>
@@ -334,26 +324,22 @@ function AdminRecipesPage() {
                   type="file"
                   multiple
                   accept=".json,application/json"
-                  className="flex w-full rounded-md border border-input bg-background p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-xs file:text-secondary-foreground"
+                  className="border-input bg-background file:bg-secondary file:text-secondary-foreground flex w-full rounded-md border p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:px-3 file:py-1 file:text-xs"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Variables, démarrage/arrêt, fichiers de config et image Docker sont
-                  importés — les scripts d'installation sont ignorés (la section
-                  Installation est à réécrire avec les actions déclaratives).
+                <p className="text-muted-foreground text-xs">
+                  Variables, démarrage/arrêt, fichiers de config et image Docker sont importés — les
+                  scripts d'installation sont ignorés (la section Installation est à réécrire avec
+                  les actions déclaratives).
                 </p>
               </div>
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={importMutation.isPending}
-              >
+              <Button type="submit" className="w-full" disabled={importMutation.isPending}>
                 {importMutation.isPending ? 'Import…' : 'Importer'}
               </Button>
             </form>
 
             {importMutation.isError && (
-              <p className="mt-2 text-sm text-destructive">{importMutation.error.message}</p>
+              <p className="text-destructive mt-2 text-sm">{importMutation.error.message}</p>
             )}
 
             {importMutation.data && (
@@ -368,7 +354,7 @@ function AdminRecipesPage() {
                   </ul>
                 )}
                 {importMutation.data.failed.length > 0 && (
-                  <ul className="space-y-1 text-destructive">
+                  <ul className="text-destructive space-y-1">
                     {importMutation.data.failed.map((f) => (
                       <li key={f.source}>
                         {f.source} : {f.error}

@@ -1,7 +1,8 @@
 import { Download, RotateCcw, Trash2 } from 'lucide-react';
+
+import { formatSize } from '~/components/files/format-size';
 import { InProgressBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
-import { formatSize } from '~/components/files/format-size';
 import { defineList, field } from '~/lists/define';
 
 /**
@@ -89,7 +90,7 @@ export const serverBackupsList = defineList<ServerBackupRow, ServerBackupsContex
       cell: (backup) => (
         <div>
           <p className="font-medium">{backup.name}</p>
-          {backup.error && <p className="text-xs text-destructive">{backup.error}</p>}
+          {backup.error && <p className="text-destructive text-xs">{backup.error}</p>}
         </div>
       ),
       filter: { control: 'text', target: field('name') },
@@ -116,9 +117,7 @@ export const serverBackupsList = defineList<ServerBackupRow, ServerBackupsContex
       header: 'Créée le',
       sort: field('createdAt'),
       cell: (backup) => (
-        <span className="text-muted-foreground">
-          {backup.createdAt.toLocaleString('fr-FR')}
-        </span>
+        <span className="text-muted-foreground">{backup.createdAt.toLocaleString('fr-FR')}</span>
       ),
     },
     completedAt: {
@@ -136,51 +135,51 @@ export const serverBackupsList = defineList<ServerBackupRow, ServerBackupsContex
       cell: (backup, context) =>
         // A picker renders this list without a page — nothing to act on.
         context === undefined ? null : (
-        <div className="flex justify-end gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={backup.status !== 'completed' || context.downloading}
-            onClick={() => context.onDownload(backup)}
-          >
-            <Download />
-            Télécharger
-          </Button>
-          {context.canRestore && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={backup.status !== 'completed' || context.restoring}
-                onClick={() => context.onRestore(backup, false)}
-              >
-                <RotateCcw />
-                Restaurer
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={backup.status !== 'completed' || context.restoring}
-                onClick={() => context.onRestore(backup, true)}
-              >
-                <RotateCcw />
-                Remplacer
-              </Button>
-            </>
-          )}
-          {context.canDelete && (
+          <div className="flex justify-end gap-2">
             <Button
               size="sm"
-              variant="destructive"
-              disabled={context.deleting}
-              onClick={() => context.onDelete(backup)}
+              variant="outline"
+              disabled={backup.status !== 'completed' || context.downloading}
+              onClick={() => context.onDownload(backup)}
             >
-              <Trash2 />
-              Supprimer
+              <Download />
+              Télécharger
             </Button>
-          )}
-        </div>
-      ),
+            {context.canRestore && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={backup.status !== 'completed' || context.restoring}
+                  onClick={() => context.onRestore(backup, false)}
+                >
+                  <RotateCcw />
+                  Restaurer
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={backup.status !== 'completed' || context.restoring}
+                  onClick={() => context.onRestore(backup, true)}
+                >
+                  <RotateCcw />
+                  Remplacer
+                </Button>
+              </>
+            )}
+            {context.canDelete && (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={context.deleting}
+                onClick={() => context.onDelete(backup)}
+              >
+                <Trash2 />
+                Supprimer
+              </Button>
+            )}
+          </div>
+        ),
     },
   },
 });

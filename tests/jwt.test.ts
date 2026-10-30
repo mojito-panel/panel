@@ -1,11 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import { createHmac } from 'node:crypto';
-import {
-  ALL_PERMISSIONS,
-  CONSOLE_TOKEN_TTL_SECONDS,
-  consoleTokenPayloadSchema,
-} from '~/contract';
+
+import { describe, it, expect } from 'vitest';
+
+import { ALL_PERMISSIONS, CONSOLE_TOKEN_TTL_SECONDS, consoleTokenPayloadSchema } from '~/contract';
 import { nanoid } from '~/lib/nanoid';
+
 import { signConsoleToken } from '../src/server/jwt';
 
 const SECRET = 'panel-secret-0123456789abcdef0123456789abcdef';
@@ -24,10 +23,7 @@ function expectedSignature(token: string): string {
 
 describe('signConsoleToken', () => {
   it('produces an HS256 token whose signature matches the secret (symmetry with the agent)', () => {
-    const { token } = signConsoleToken(
-      { userId: USER_ID, serverId: SERVER_ID },
-      SECRET,
-    );
+    const { token } = signConsoleToken({ userId: USER_ID, serverId: SERVER_ID }, SECRET);
     const [header, , signature] = token.split('.');
     expect(JSON.parse(Buffer.from(header, 'base64url').toString('utf8'))).toEqual({
       alg: 'HS256',

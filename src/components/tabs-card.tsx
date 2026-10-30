@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
 import { cn } from 'cn';
-import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import type { ReactNode } from 'react';
+
 import { buttonVariants } from '~/components/ui/button';
+import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 
 /**
@@ -15,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
  */
 const tabTriggerVariants = cn(
   buttonVariants({ variant: 'ghost', size: 'default' }),
-  'data-active:bg-primary! data-active:text-primary-foreground! data-active:hover:bg-primary/80! dark:data-active:bg-primary! dark:data-active:text-primary-foreground! dark:data-active:hover:bg-primary/80! dark:data-active:border-transparent! focus-visible:outline-none!',
+  'data-active:bg-primary! data-active:text-primary-foreground! data-active:hover:bg-primary/80! dark:data-active:bg-primary! dark:data-active:text-primary-foreground! dark:data-active:hover:bg-primary/80! focus-visible:outline-none! dark:data-active:border-transparent!',
 );
 
 /** One tab of a TabsCard: trigger label in the header + panel content. */
@@ -51,12 +52,7 @@ export function TabsCard({
   contentClassName?: string;
 }) {
   return (
-    <Tabs
-      defaultValue={defaultValue}
-      value={value}
-      onValueChange={onValueChange}
-      className="gap-0"
-    >
+    <Tabs defaultValue={defaultValue} value={value} onValueChange={onValueChange} className="gap-0">
       <Card className={className}>
         <CardHeader className="border-b">
           <TabsList className="gap-1 bg-transparent">
@@ -96,9 +92,7 @@ export function CardSection({
     <section className="space-y-4 py-6 first:pt-0 last:pb-0">
       <div>
         <p className="font-heading text-sm font-medium">{title}</p>
-        {description && (
-          <p className="text-xs/relaxed text-muted-foreground">{description}</p>
-        )}
+        {description && <p className="text-muted-foreground text-xs/relaxed">{description}</p>}
       </div>
       {children}
     </section>

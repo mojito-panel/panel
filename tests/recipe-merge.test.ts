@@ -38,9 +38,7 @@ describe('mergeVariableDefinitions', () => {
   });
 
   it('keeps the APP declaration when both recipes declare the same env', () => {
-    const app = [
-      variable('JAVA_VERSION', { default_value: '21', user_editable: true, sort: 0 }),
-    ];
+    const app = [variable('JAVA_VERSION', { default_value: '21', user_editable: true, sort: 0 })];
     const runtime = [
       variable('JAVA_VERSION', { default_value: '25', user_editable: false, sort: 0 }),
     ];
@@ -59,11 +57,7 @@ describe('mergeVariableDefinitions', () => {
 
     const merged = mergeVariableDefinitions(app, [first, second]);
 
-    expect(merged.map((v) => v.env).sort()).toEqual([
-      'JAVA_VERSION',
-      'SERVER_PORT',
-      'SHARED_ENV',
-    ]);
+    expect(merged.map((v) => v.env).sort()).toEqual(['JAVA_VERSION', 'SERVER_PORT', 'SHARED_ENV']);
   });
 });
 
@@ -85,10 +79,10 @@ describe('mergeVariableValues', () => {
   });
 
   it('drops values of envs that are no longer defined (reload/change)', () => {
-    const merged = mergeVariableValues(
-      definitions.slice(0, 2),
-      { JAVA_VERSION: '21', SERVER_PORT: '25565' },
-    );
+    const merged = mergeVariableValues(definitions.slice(0, 2), {
+      JAVA_VERSION: '21',
+      SERVER_PORT: '25565',
+    });
 
     expect(merged).toEqual({ SERVER_JAVA: '17', JAVA_VERSION: '21' });
   });

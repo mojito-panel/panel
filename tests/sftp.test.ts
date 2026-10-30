@@ -1,12 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-import { parseSftpUsername, buildSftpUsername } from '~/lib/sftp';
-
-import { toSftpPermissions } from '~/lib/permissions';
-
-import { buildAgentConfig } from '~/lib/agent-config';
-
 import { sftpAuthRequestSchema, sftpAuthResponseSchema } from '~/contract';
+import { buildAgentConfig } from '~/lib/agent-config';
+import { toSftpPermissions } from '~/lib/permissions';
+import { parseSftpUsername, buildSftpUsername } from '~/lib/sftp';
 
 describe('parseSftpUsername', () => {
   it('splits at the LAST dot — the username part never contains dots', () => {
@@ -40,11 +37,11 @@ describe('parseSftpUsername', () => {
 
   it('rejects malformed usernames', () => {
     const invalid = [
-      '',                                   // empty
-      'jdoe',                               // no server id
+      '', // empty
+      'jdoe', // no server id
       'jdoe@x.123e4567-e89b-12d3-a456-426614174000', // @ in the username
       '.123e4567-e89b-12d3-a456-426614174000', // empty username
-      'jdoe.',                              // empty server id
+      'jdoe.', // empty server id
       'jean.dupont.123e4567-e89b-12d3-a456-426614174000', // dots in the username
       'ab.123e4567-e89b-12d3-a456-426614174000', // username too short
     ];
@@ -63,7 +60,9 @@ describe('toSftpPermissions', () => {
         'server.files.create',
         'server.files.delete',
       ]).sort(),
-    ).toEqual(['file.create', 'file.delete', 'file.read', 'file.read-content', 'file.update'].sort());
+    ).toEqual(
+      ['file.create', 'file.delete', 'file.read', 'file.read-content', 'file.update'].sort(),
+    );
   });
 
   it('read alone grants read + read-content (download) but no write', () => {
@@ -110,7 +109,6 @@ describe('sftp contract schemas', () => {
     });
     expect(subuser.permissions).toHaveLength(2);
   });
-
 });
 
 describe('buildAgentConfig', () => {

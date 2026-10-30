@@ -1,12 +1,17 @@
-import { createServerFn } from '@tanstack/react-start';
 import { sql } from '@mikro-orm/postgresql';
+import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
+
 import { PanelRole, User } from '~/db/entities';
+import { auth } from '~/lib/auth';
 import { adminUsersList } from '~/lists/users';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import { requireUser, requirePanelPermission, HttpError } from '../session';
+import { usernameSchema } from '~/validators/auth';
+
+import { logActivity } from '../activity';
 import { withOrmContext } from '../middleware';
 import { orm } from '../orm';
+import { requireUser, requirePanelPermission, HttpError } from '../session';
 import {
   assertNotSelf,
   assertNotLastAdmin,
@@ -17,9 +22,6 @@ import {
   unbanUser,
   deleteUser,
 } from '../users';
-import { auth } from '~/lib/auth';
-import { logActivity } from '../activity';
-import { usernameSchema } from '~/validators/auth';
 
 /**
  * Admin panel user management. Roles and per-server grants live in the
@@ -52,9 +54,11 @@ export const listUsersFn = createServerFn({ method: 'POST' })
     const [customRoles, serverCounts] = await Promise.all([
       em.find(PanelRole, {}),
       ids.length > 0
-        ? em.getConnection().execute<{ owner_id: string; count: number }[]>(
-            sql`select owner_id, count(*)::int as count from "server" where owner_id in (${ids}) group by owner_id`,
-          )
+        ? em
+            .getConnection()
+            .execute<{ owner_id: string; count: number }[]>(
+              sql`select owner_id, count(*)::int as count from "server" where owner_id in (${ids}) group by owner_id`,
+            )
         : Promise.resolve<{ owner_id: string; count: number }[]>([]),
     ]);
 
@@ -145,7 +149,12 @@ export const createUserFn = createServerFn({ method: 'POST' })
     target.role = data.role;
     await em.flush();
 
-    await logActivity({ event: 'user:create', description: `Compte « ${data.email} » créé (rôle « ${data.role} »)`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id, role: data.role } });
+    await logActivity({
+      event: 'user:create',
+      description: `Compte « ${data.email} » créé (rôle « ${data.role} »)`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { targetUserId: target.id, role: data.role },
+    });
 
     return { id: user.id, email: user.email, role: data.role };
   });
@@ -165,7 +174,12 @@ export const setUserRoleFn = createServerFn({ method: 'POST' })
 
     target.role = data.role;
     await orm.em.flush();
-    await logActivity({ event: 'user:set_role', description: `Rôle de « ${target.email} » changé en « ${data.role} »`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id, role: data.role } });
+    await logActivity({
+      event: 'user:set_role',
+      description: `Rôle de « ${target.email} » changé en « ${data.role} »`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { targetUserId: target.id, role: data.role },
+    });
 
     return { userId: data.userId, role: data.role };
   });
@@ -187,7 +201,12 @@ export const banUserFn = createServerFn({ method: 'POST' })
     const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
     await banUser(target, data.banReason);
-    await logActivity({ event: 'user:ban', description: `Compte « ${target.email} » suspendu`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id, banReason: data.banReason ?? null } });
+    await logActivity({
+      event: 'user:ban',
+      description: `Compte « ${target.email} » suspendu`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { targetUserId: target.id, banReason: data.banReason ?? null },
+    });
 
     return { userId: target.id, banned: true };
   });
@@ -199,7 +218,12 @@ export const unbanUserFn = createServerFn({ method: 'POST' })
     const actor = await requirePanelPermission({ user: ['ban'] });
     const target = await requireUserById(data.userId);
     await unbanUser(target);
-    await logActivity({ event: 'user:unban', description: `Compte « ${target.email} » réactivé`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id } });
+    await logActivity({
+      event: 'user:unban',
+      description: `Compte « ${target.email} » réactivé`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { targetUserId: target.id },
+    });
     return { userId: target.id, banned: false };
   });
 
@@ -216,7 +240,12 @@ export const deleteUserFn = createServerFn({ method: 'POST' })
     const target = await requireUserById(data.userId);
     await assertNotLastAdmin(target.role ?? 'user');
     await deleteUser(target);
-    await logActivity({ event: 'user:delete', description: `Compte « ${target.email} » supprimé`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { targetUserId: target.id } });
+    await logActivity({
+      event: 'user:delete',
+      description: `Compte « ${target.email} » supprimé`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { targetUserId: target.id },
+    });
 
     return { deleted: true };
   });

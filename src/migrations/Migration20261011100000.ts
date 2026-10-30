@@ -1,7 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
 export class Migration20261011100000 extends Migration {
-
   override name = 'Migration20261011100000';
 
   override up(): void | Promise<void> {
@@ -13,8 +12,12 @@ export class Migration20261011100000 extends Migration {
     this.addSql(`alter table "session" add column "impersonated_by" varchar(255) null;`);
 
     // Pelican-style sub-users: per-server permission grant
-    this.addSql(`create table "server_user" ("id" varchar(255) not null, "server_id" varchar(255) not null, "user_id" varchar(255) not null, "permissions" jsonb not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, primary key ("id"));`);
-    this.addSql(`alter table "server_user" add constraint "server_user_server_id_user_id_unique" unique ("server_id", "user_id");`);
+    this.addSql(
+      `create table "server_user" ("id" varchar(255) not null, "server_id" varchar(255) not null, "user_id" varchar(255) not null, "permissions" jsonb not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, primary key ("id"));`,
+    );
+    this.addSql(
+      `alter table "server_user" add constraint "server_user_server_id_user_id_unique" unique ("server_id", "user_id");`,
+    );
   }
 
   override down(): void | Promise<void> {
@@ -24,5 +27,4 @@ export class Migration20261011100000 extends Migration {
     this.addSql(`alter table "user" drop column "ban_reason";`);
     this.addSql(`alter table "user" drop column "banned";`);
   }
-
 }

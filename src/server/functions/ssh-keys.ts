@@ -1,17 +1,15 @@
 import { createServerFn } from '@tanstack/react-start';
+
 import { SshKey } from '~/db/entities';
+import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
+import { createSshKeySchema, sshKeyIdSchema } from '~/validators/ssh-keys';
+
+import { logActivity } from '../activity';
 import { listQueryBuilder, runListQuery } from '../list/query';
-import { requirePanelPermission } from '../session';
 import { withOrmContext } from '../middleware';
 import { orm } from '../orm';
-import {
-  deleteSshKey,
-  generateSshKey,
-  importSshKey,
-} from '../ssh-keys';
-import { logActivity } from '../activity';
-import { createSshKeySchema, sshKeyIdSchema } from '~/validators/ssh-keys';
-import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
+import { requirePanelPermission } from '../session';
+import { deleteSshKey, generateSshKey, importSshKey } from '../ssh-keys';
 
 /**
  * SSH keys server functions (/admin/keys + the DataPicker of the marketplace
@@ -77,7 +75,12 @@ export const createSshKeyFn = createServerFn({ method: 'POST' })
             publicKey: data.publicKey || null,
           });
 
-    await logActivity({ event: 'sshkey:create', description: `Clé SSH « ${data.name} » créée (${data.mode === 'generate' ? 'générée' : 'importée'})`, actor: { id: user.id, name: user.name, email: user.email }, properties: { keyId: created.id } });
+    await logActivity({
+      event: 'sshkey:create',
+      description: `Clé SSH « ${data.name} » créée (${data.mode === 'generate' ? 'générée' : 'importée'})`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { keyId: created.id },
+    });
     return created;
   });
 
@@ -87,6 +90,11 @@ export const deleteSshKeyFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const user = await requirePanelPermission({ 'panel.keys': ['delete'] });
     await deleteSshKey(data.sshKeyId);
-    await logActivity({ event: 'sshkey:delete', description: `Clé SSH ${data.sshKeyId} supprimée`, actor: { id: user.id, name: user.name, email: user.email }, properties: { keyId: data.sshKeyId } });
+    await logActivity({
+      event: 'sshkey:delete',
+      description: `Clé SSH ${data.sshKeyId} supprimée`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { keyId: data.sshKeyId },
+    });
     return { deleted: true };
   });

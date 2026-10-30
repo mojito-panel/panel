@@ -1,10 +1,11 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+
 import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { signIn } from '~/lib/auth-client';
 import { getBrandingFn } from '~/server/functions/settings';
 import { loginSchema, type LoginDto } from '~/validators/auth';
@@ -72,7 +73,7 @@ function LoginPage() {
                     autoComplete="email"
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -93,7 +94,7 @@ function LoginPage() {
                     autoComplete="current-password"
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -102,7 +103,7 @@ function LoginPage() {
             </form.Field>
 
             {mutation.isError && (
-              <p className="text-sm text-destructive">{mutation.error.message}</p>
+              <p className="text-destructive text-sm">{mutation.error.message}</p>
             )}
 
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
@@ -110,7 +111,7 @@ function LoginPage() {
             </Button>
           </form>
           {(brandingQuery.data?.registrationEnabled ?? true) && (
-            <p className="mt-4 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-4 text-center text-sm">
               Pas encore de compte ?{' '}
               <Link to="/register" className="text-primary underline-offset-4 hover:underline">
                 S'inscrire

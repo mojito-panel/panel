@@ -1,21 +1,13 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
 import { RefreshCw, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
-import {
-  getServerFn,
-  reinstallServerFn,
-  reloadRecipeFn,
-  deleteServerFn,
-} from '~/server/functions/servers';
-import { userServersList } from '~/lists/user-servers';
-import { hasServerPermissions } from '~/lib/permissions';
-import { Button } from '~/components/ui/button';
-import { Separator } from '~/components/ui/separator';
-import { ErrorState, PageSkeleton } from '~/components/error/error-state';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
+import { ErrorState, PageSkeleton } from '~/components/error/error-state';
+import { Button } from '~/components/ui/button';
 import {
   Card,
   CardContent,
@@ -24,6 +16,15 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import { Separator } from '~/components/ui/separator';
+import { hasServerPermissions } from '~/lib/permissions';
+import { userServersList } from '~/lists/user-servers';
+import {
+  getServerFn,
+  reinstallServerFn,
+  reloadRecipeFn,
+  deleteServerFn,
+} from '~/server/functions/servers';
 
 export const Route = createFileRoute('/servers/$serverId/settings')({
   component: ServerSettingsPage,
@@ -111,7 +112,8 @@ function ServerSettingsPage() {
   // Per-server grants: reinstall needs server.settings.update, deletion is
   // owner/admin only (non-delegable)
   const viewer = server?.viewer;
-  const canReinstall = !!viewer && hasServerPermissions(viewer.permissions, { 'server.settings': ['update'] });
+  const canReinstall =
+    !!viewer && hasServerPermissions(viewer.permissions, { 'server.settings': ['update'] });
   const canDelete = !!viewer && (viewer.isOwner || viewer.isAdmin);
 
   return (
@@ -125,19 +127,14 @@ function ServerSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Informations du serveur</CardTitle>
-          <CardDescription>
-            Détail de la configuration de ce serveur.
-          </CardDescription>
+          <CardDescription>Détail de la configuration de ce serveur.</CardDescription>
         </CardHeader>
         <CardContent className="divide-y">
           <InfoRow label="Nom" value={server?.name ?? '…'} />
           <InfoRow label="Identifiant (UUID)" value={server?.id ?? '…'} />
           <InfoRow label="Recette" value={server?.recipe.name ?? '…'} />
           <InfoRow label="Node" value={server?.node.name ?? '…'} />
-          <InfoRow
-            label="Port"
-            value={server?.resources?.port?.toString() ?? '—'}
-          />
+          <InfoRow label="Port" value={server?.resources?.port?.toString() ?? '—'} />
           <InfoRow
             label="Mémoire allouée"
             value={
@@ -161,11 +158,7 @@ function ServerSettingsPage() {
           <InfoRow label="Statut" value={server?.status ?? '…'} />
           <InfoRow
             label="Créé le"
-            value={
-              server?.createdAt
-                ? new Date(server.createdAt).toLocaleString('fr-FR')
-                : '…'
-            }
+            value={server?.createdAt ? new Date(server.createdAt).toLocaleString('fr-FR') : '…'}
           />
         </CardContent>
       </Card>
@@ -176,18 +169,17 @@ function ServerSettingsPage() {
           <CardHeader>
             <CardTitle>Réinstaller le serveur</CardTitle>
             <CardDescription>
-              Réinstaller ce serveur l’arrêtera, puis relancera le script
-              d’installation qui l’a configuré initialement.
+              Réinstaller ce serveur l’arrêtera, puis relancera le script d’installation qui l’a
+              configuré initialement.
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Certains fichiers peuvent être supprimés ou modifiés pendant
-            l’opération — pense à sauvegarder tes données avant de continuer.
+          <CardContent className="text-muted-foreground text-sm">
+            Certains fichiers peuvent être supprimés ou modifiés pendant l’opération — pense à
+            sauvegarder tes données avant de continuer.
             {recipeUpdatedSinceSnapshot && (
               <p className="mt-2 text-yellow-600 dark:text-yellow-400">
-                La recette a été modifiée depuis l’installation de ce serveur —
-                recharge-la pour mettre à jour ses variables, puis réinstalle
-                le serveur pour l’appliquer.
+                La recette a été modifiée depuis l’installation de ce serveur — recharge-la pour
+                mettre à jour ses variables, puis réinstalle le serveur pour l’appliquer.
               </p>
             )}
           </CardContent>
@@ -211,14 +203,10 @@ function ServerSettingsPage() {
               </Button>
             )}
             {reinstallMutation.isError && (
-              <span className="text-sm text-destructive">
-                {reinstallMutation.error.message}
-              </span>
+              <span className="text-destructive text-sm">{reinstallMutation.error.message}</span>
             )}
             {reloadMutation.isError && (
-              <span className="text-sm text-destructive">
-                {reloadMutation.error.message}
-              </span>
+              <span className="text-destructive text-sm">{reloadMutation.error.message}</span>
             )}
           </CardFooter>
         </Card>
@@ -246,7 +234,7 @@ function ServerSettingsPage() {
             </Button>
             {remove.isError && (
               <>
-                <span className="ml-2 text-sm text-destructive">{remove.error.message}</span>
+                <span className="text-destructive ml-2 text-sm">{remove.error.message}</span>
                 <Button
                   variant="destructive"
                   onClick={() => setAskForceDelete(true)}

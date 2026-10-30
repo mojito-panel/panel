@@ -1,7 +1,8 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+
 import { RegisterForm } from '~/components/auth/register-form';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { signIn } from '~/lib/auth-client';
 import { createFirstAdminFn } from '~/server/functions/setup';
 
@@ -20,7 +21,12 @@ function SetupPage() {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (data: { name: string; username: string; email: string; password: string }) => {
+    mutationFn: async (data: {
+      name: string;
+      username: string;
+      email: string;
+      password: string;
+    }) => {
       await createFirstAdminFn({ data });
       // Establish the session (better-auth cookie) right away
       const { error } = await signIn.email({
@@ -54,9 +60,7 @@ function SetupPage() {
             pending={mutation.isPending}
           />
 
-          {mutation.isError && (
-            <p className="text-sm text-destructive">{mutation.error.message}</p>
-          )}
+          {mutation.isError && <p className="text-destructive text-sm">{mutation.error.message}</p>}
         </CardContent>
       </Card>
     </main>

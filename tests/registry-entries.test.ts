@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import { parseRecipe } from '~/contract';
+
 import { buildRegistryEntries, canonicalRecipeHash } from '../src/server/registry-entries';
 
 /** Minimal valid app recipe (schema v4) — the contract defaults the rest. */
@@ -115,10 +117,7 @@ describe('buildRegistryEntries', () => {
       { path: 'z/z/recipe-z.json', content: JSON.stringify(APP_RECIPE) },
       { path: 'a/a/recipe-a.json', content: JSON.stringify(APP_RECIPE) },
     ]);
-    expect(entries.map((entry) => entry.path)).toEqual([
-      'a/a/recipe-a.json',
-      'z/z/recipe-z.json',
-    ]);
+    expect(entries.map((entry) => entry.path)).toEqual(['a/a/recipe-a.json', 'z/z/recipe-z.json']);
   });
 
   it('carries the recipe cover through (base64 data URL from the sync)', () => {

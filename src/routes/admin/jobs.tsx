@@ -1,13 +1,14 @@
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { RefreshCw } from 'lucide-react';
+
 import { DataTable } from '~/components/data-table/data-table';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
-import { getJobStatsFn, listJobsFn } from '~/server/functions/jobs';
-import { adminJobsList, JOB_STATES, JOB_STATE_LABELS } from '~/lists/jobs';
 import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminJobsList, JOB_STATES, JOB_STATE_LABELS } from '~/lists/jobs';
+import { getJobStatsFn, listJobsFn } from '~/server/functions/jobs';
 
 /**
  * /admin/jobs — pg-boss jobs dashboard: every queued/running/done job of
@@ -15,7 +16,8 @@ import { mergeQuery, type ListQuery } from '~/lists/define';
  * pg-boss's own `job` table. The summary cards + table refresh every 5 s.
  */
 export const Route = createFileRoute('/admin/jobs')({
-  validateSearch: (search: Record<string, unknown>): ListQuery => adminJobsList.querySchema.parse(search),
+  validateSearch: (search: Record<string, unknown>): ListQuery =>
+    adminJobsList.querySchema.parse(search),
   search: { middlewares: [stripSearchParams(adminJobsList.defaultSearch)] },
   component: AdminJobsPage,
 });
@@ -54,7 +56,12 @@ function AdminJobsPage() {
             {totalJobs} job{totalJobs === 1 ? '' : 's'} dans la file — rafraîchi toutes les 5 s.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => jobsQuery.refetch()} disabled={jobsQuery.isFetching}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => jobsQuery.refetch()}
+          disabled={jobsQuery.isFetching}
+        >
           <RefreshCw className={jobsQuery.isFetching ? 'animate-spin' : undefined} />
           Rafraîchir
         </Button>
@@ -65,7 +72,7 @@ function AdminJobsPage() {
           <Card key={state}>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{stats[state] ?? 0}</div>
-              <p className="text-xs text-muted-foreground">{JOB_STATE_LABELS[state]}</p>
+              <p className="text-muted-foreground text-xs">{JOB_STATE_LABELS[state]}</p>
             </CardContent>
           </Card>
         ))}

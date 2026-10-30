@@ -1,4 +1,5 @@
 import { defineEntity, p } from '@mikro-orm/core';
+
 import { nanoid } from '~/lib/nanoid';
 
 // ─── better-auth (migrations managed by MikroORM like everything else) ──────
@@ -18,8 +19,14 @@ export const User = defineEntity({
     banned: p.boolean().default(false),
     banReason: p.string().length(255).fieldName('ban_reason').nullable(),
     banExpires: p.datetime().fieldName('ban_expires').nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
@@ -29,8 +36,14 @@ export const Session = defineEntity({
     id: p.text().primary(),
     expiresAt: p.datetime().fieldName('expires_at'),
     token: p.string().unique(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
     ipAddress: p.string().fieldName('ip_address').nullable(),
     userAgent: p.string().fieldName('user_agent').nullable(),
     userId: p.text().fieldName('user_id'),
@@ -53,8 +66,14 @@ export const Account = defineEntity({
     refreshTokenExpiresAt: p.datetime().fieldName('refresh_token_expires_at').nullable(),
     scope: p.text().nullable(),
     password: p.text().nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
@@ -65,8 +84,16 @@ export const Verification = defineEntity({
     identifier: p.string(),
     value: p.string(),
     expiresAt: p.datetime().fieldName('expires_at'),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()).nullable(),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()).nullable(),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date())
+      .nullable(),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date())
+      .nullable(),
   },
 });
 
@@ -76,7 +103,10 @@ export const Node = defineEntity({
   name: 'node',
   properties: {
     /** nanoid generated at insert time (onCreate) — see ~/lib/nanoid. */
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     name: p.string().length(128),
     fqdn: p.string().length(255),
     /** Scheme the panel and browsers use to reach the agent — Pelican
@@ -97,15 +127,24 @@ export const Node = defineEntity({
     agentToken: p.text().fieldName('agent_token'),
     lastSeenAt: p.datetime().fieldName('last_seen_at').nullable(),
     status: p.string().default('unknown'),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
 export const Recipe = defineEntity({
   name: 'recipe',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     slug: p.string().length(128).unique(),
     name: p.string().length(128),
     schemaVersion: p.integer().fieldName('schema_version').default(1),
@@ -125,8 +164,14 @@ export const Recipe = defineEntity({
      */
     remoteSha: p.text().fieldName('remote_sha').nullable(),
     remoteCheckedAt: p.datetime().fieldName('remote_checked_at').nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
@@ -140,7 +185,10 @@ export const Recipe = defineEntity({
 export const Registry = defineEntity({
   name: 'registry',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     name: p.string().length(128),
     /** Canonical https git URL of the repository (~/lib/recipe-source). */
     url: p.text(),
@@ -175,8 +223,14 @@ export const Registry = defineEntity({
     description: p.text().nullable(),
     author: p.string().length(256).nullable(),
     license: p.string().length(128).nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
@@ -189,7 +243,10 @@ export const Registry = defineEntity({
 export const RegistryEntry = defineEntity({
   name: 'registry_entry',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     registryId: p.string().fieldName('registry_id'),
     /** POSIX path inside the repo — "steamcmd/enshrouded/recipe-enshrouded.json". */
     path: p.string().length(512),
@@ -207,8 +264,14 @@ export const RegistryEntry = defineEntity({
     cover: p.text().nullable(),
     /** Raw file content — imports and the "view JSON" dialog read this. */
     content: p.text(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
   uniques: [{ properties: ['registryId', 'path'], name: 'registry_entry_registry_path_unique' }],
   indexes: [{ properties: ['registryId'], name: 'registry_entry_registry_id_index' }],
@@ -224,7 +287,10 @@ export const RegistryEntry = defineEntity({
 export const SshKey = defineEntity({
   name: 'ssh_key',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     name: p.string().length(128),
     /** OpenSSH public key line — "ssh-ed25519 AAAA… comment". */
     publicKey: p.text().fieldName('public_key'),
@@ -232,15 +298,24 @@ export const SshKey = defineEntity({
     privateKey: p.text().fieldName('private_key'),
     /** SHA256 fingerprint (OpenSSH form) — display + pair verification. */
     fingerprint: p.string().length(64),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
 export const Server = defineEntity({
   name: 'server',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     name: p.string().length(128),
     nodeId: p.string().fieldName('node_id'),
     recipeId: p.string().fieldName('recipe_id'),
@@ -266,15 +341,24 @@ export const Server = defineEntity({
     recipeSnapshot: p.json<Record<string, unknown>>().fieldName('recipe_snapshot').nullable(),
     /** When the snapshot was taken — drives the "recipe updated" reload button. */
     recipeSyncedAt: p.datetime().fieldName('recipe_synced_at').nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
 export const Allocation = defineEntity({
   name: 'allocation',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     /** Owning node — the IP:port pool is per node (Pelican semantics). */
     nodeId: p.string().fieldName('node_id'),
     /** Assigned server — null = free allocation in the node pool. */
@@ -285,14 +369,20 @@ export const Allocation = defineEntity({
     alias: p.string().length(255).nullable(),
     /** Primary allocation of the server — source of SERVER_PORT / SERVER_IP. */
     primary: p.boolean().fieldName('is_primary').default(false),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
   },
 });
 
 export const ServerUser = defineEntity({
   name: 'server_user',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     serverId: p.string().fieldName('server_id'),
     userId: p.string().fieldName('user_id'),
     /**
@@ -301,8 +391,14 @@ export const ServerUser = defineEntity({
      * against the catalog in `~/lib/permissions`.
      */
     permissions: p.json<Record<string, string[]>>(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
   uniques: [{ properties: ['serverId', 'userId'], name: 'server_user_server_user_unique' }],
 });
@@ -324,8 +420,14 @@ export const PanelRole = defineEntity({
      * `~/lib/permissions` (never `server.*`: those are sub-user grants).
      */
     permissions: p.json<Record<string, string[]>>(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
 });
 
@@ -333,7 +435,10 @@ export const Backup = defineEntity({
   name: 'backup',
   properties: {
     /** nanoid generated at insert time (onCreate) — also the archive file name on the agent. */
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     serverId: p.text().fieldName('server_id'),
     name: p.string().length(128),
     /** pending → running → completed | failed (`restoring` while a restore runs). */
@@ -343,8 +448,14 @@ export const Backup = defineEntity({
     checksum: p.text().nullable(),
     error: p.text().nullable(),
     completedAt: p.datetime().fieldName('completed_at').nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
   // Declared to match the DB (the hand-written backup migration created it):
   // every backups query is scoped by server_id.
@@ -367,7 +478,10 @@ export const Backup = defineEntity({
 export const Schedule = defineEntity({
   name: 'schedule',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     serverId: p.string().fieldName('server_id'),
     name: p.string().length(128),
     /** 5-field unix cron expression — "30 4 * * *". */
@@ -383,8 +497,14 @@ export const Schedule = defineEntity({
     lastRunAt: p.datetime().fieldName('last_run_at').nullable(),
     /** Computed at write/claim time — the runner scans `next_run_at <= now`. */
     nextRunAt: p.datetime().fieldName('next_run_at').nullable(),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
   indexes: [
     { properties: ['serverId'], name: 'schedule_server_id_index' },
@@ -401,7 +521,10 @@ export const Schedule = defineEntity({
 export const ScheduleTask = defineEntity({
   name: 'schedule_task',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     scheduleId: p.string().fieldName('schedule_id'),
     /** Execution order within the chain — 1..n, renumbered on every edit. */
     sequenceId: p.integer().fieldName('sequence_id'),
@@ -412,8 +535,14 @@ export const ScheduleTask = defineEntity({
     timeOffset: p.integer().fieldName('time_offset').default(0),
     /** An agent failure does not stop the chain — the next task still runs. */
     continueOnFailure: p.boolean().fieldName('continue_on_failure').default(false),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
-    updatedAt: p.datetime().fieldName('updated_at').onUpdate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
+    updatedAt: p
+      .datetime()
+      .fieldName('updated_at')
+      .onUpdate(() => new Date()),
   },
   indexes: [{ properties: ['scheduleId'], name: 'schedule_task_schedule_id_index' }],
 });
@@ -441,7 +570,10 @@ export const Setting = defineEntity({
 export const ActivityLog = defineEntity({
   name: 'activity_log',
   properties: {
-    id: p.string().primary().onCreate(() => nanoid()),
+    id: p
+      .string()
+      .primary()
+      .onCreate(() => nanoid()),
     /** Namespaced event — "server:power", "backup:create", "subuser:add"… */
     event: p.string().length(128),
     /** Human-readable summary of the action (what happened, to what). */
@@ -457,7 +589,10 @@ export const ActivityLog = defineEntity({
     serverName: p.string().nullable(),
     /** Structured context of the event (target ids, changed fields…). */
     properties: p.json<Record<string, unknown>>().default('{}'),
-    createdAt: p.datetime().fieldName('created_at').onCreate(() => new Date()),
+    createdAt: p
+      .datetime()
+      .fieldName('created_at')
+      .onCreate(() => new Date()),
   },
   indexes: [
     { properties: ['event'], name: 'activity_log_event_index' },

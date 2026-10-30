@@ -1,16 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
+
 import { PanelRole, User } from '~/db/entities';
-import { requirePanelPermission, HttpError } from '../session';
-import { withOrmContext } from '../middleware';
-import { logActivity } from '../activity';
-import { orm } from '../orm';
-import {
-  slugify,
-  assertNoClash,
-  assertWithinActorCeiling,
-  requireRole,
-  deleteRole,
-} from '../users';
 import {
   PANEL_ROLES,
   PANEL_ROLE_NAMES,
@@ -19,11 +9,19 @@ import {
   sanitizeStatements,
   type PanelRoleName,
 } from '~/lib/permissions';
+import { createRoleSchema, updateRoleSchema, deleteRoleSchema } from '~/validators/role';
+
+import { logActivity } from '../activity';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
+import { requirePanelPermission, HttpError } from '../session';
 import {
-  createRoleSchema,
-  updateRoleSchema,
-  deleteRoleSchema,
-} from '~/validators/role';
+  slugify,
+  assertNoClash,
+  assertWithinActorCeiling,
+  requireRole,
+  deleteRole,
+} from '../users';
 
 /**
  * Custom panel roles (Pelican-style, managed from /admin/roles) — CRUD on
@@ -108,7 +106,12 @@ export const createRoleFn = createServerFn({ method: 'POST' })
     em.persist(role);
     await em.flush();
 
-    await logActivity({ event: 'role:create', description: `Rôle « ${role.name} » créé`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { roleId: role.id, permissions: grant } });
+    await logActivity({
+      event: 'role:create',
+      description: `Rôle « ${role.name} » créé`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { roleId: role.id, permissions: grant },
+    });
 
     return { id: role.id, name: role.name };
   });
@@ -143,7 +146,12 @@ export const updateRoleFn = createServerFn({ method: 'POST' })
     role.permissions = statements;
     await orm.em.flush();
 
-    await logActivity({ event: 'role:update', description: `Rôle « ${role.name} » modifié`, actor: { id: actor.id, name: actor.name, email: actor.email }, properties: { roleId: role.id, permissions: grant } });
+    await logActivity({
+      event: 'role:update',
+      description: `Rôle « ${role.name} » modifié`,
+      actor: { id: actor.id, name: actor.name, email: actor.email },
+      properties: { roleId: role.id, permissions: grant },
+    });
 
     return { id: role.id, name: role.name };
   });
@@ -162,6 +170,11 @@ export const deleteRoleFn = createServerFn({ method: 'POST' })
 
     const role = await requireRole(data.roleId);
     await deleteRole(data.roleId);
-    await logActivity({ event: 'role:delete', description: `Rôle « ${role.name} » supprimé`, actor: { id: user.id, name: user.name, email: user.email }, properties: { roleId: role.id } });
+    await logActivity({
+      event: 'role:delete',
+      description: `Rôle « ${role.name} » supprimé`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { roleId: role.id },
+    });
     return { deleted: true };
   });

@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
+import { useEffect, useRef, useState } from 'react';
+
 import '@xterm/xterm/css/xterm.css';
+import { Skeleton } from '~/components/ui/skeleton';
 import {
   CONSOLE_TOKEN_TTL_SECONDS,
   type ConsoleClientMessage,
@@ -9,8 +11,8 @@ import {
   type ServerStats,
 } from '~/contract';
 import { createConsoleTokenFn } from '~/server/functions/servers';
+
 import { consoleMessageEmoji, renderConsoleEvent } from './messages';
-import { Skeleton } from '~/components/ui/skeleton';
 
 export type ConsoleMode = 'connecting' | 'ws';
 
@@ -109,7 +111,8 @@ export function XtermConsole({
      * red; the rest (server online/stopped) in green.
      */
     const eventColor = (code: string, params?: Record<string, string>): string => {
-      if (code.startsWith('watchdog.') || code === 'install.failed' || code === 'server.crash_loop') return '\x1b[31m';
+      if (code.startsWith('watchdog.') || code === 'install.failed' || code === 'server.crash_loop')
+        return '\x1b[31m';
       if (code.startsWith('power.')) return '\x1b[36m';
       if (code === 'install.done') return '\x1b[32m';
       if (params?.step) return '\x1b[33m';
@@ -122,9 +125,7 @@ export function XtermConsole({
       if (text === null) return; // unknown code (old agent) — nothing to show
       const time = (at ? new Date(at) : new Date()).toLocaleTimeString('fr-FR');
       const emoji = consoleMessageEmoji(code) || (params?.step ? '🔧' : '');
-      term.writeln(
-        `\x1b[90m[${time}]\x1b[0m ${eventColor(code, params)}${emoji} ${text}\x1b[0m`,
-      );
+      term.writeln(`\x1b[90m[${time}]\x1b[0m ${eventColor(code, params)}${emoji} ${text}\x1b[0m`);
     };
 
     const scheduleRefresh = () => {
@@ -166,7 +167,8 @@ export function XtermConsole({
       } catch {
         // Panel unreachable / ownership refused — retry
         if (attempt >= WS_MAX_ATTEMPTS - 1) {
-          if (term) term.writeln('\x1b[31m[error] Console connection failed — retrying later\x1b[0m');
+          if (term)
+            term.writeln('\x1b[31m[error] Console connection failed — retrying later\x1b[0m');
           // Make "later" true: one more attempt every SLOW_RETRY_MS until
           // the panel answers again (e.g. a dev-server restart).
           slowRetryTimer = setTimeout(() => void connect(0), SLOW_RETRY_MS);
@@ -269,7 +271,9 @@ export function XtermConsole({
           // WS not usable at all (origin refused, proxy without WS…) — the
           // terminal says so; the socket stays closed. No polling fallback.
           if (term) {
-            term.writeln('\x1b[31m[error] Console connection failed — check the agent status\x1b[0m');
+            term.writeln(
+              '\x1b[31m[error] Console connection failed — check the agent status\x1b[0m',
+            );
           }
           return;
         }

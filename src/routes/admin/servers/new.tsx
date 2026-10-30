@@ -1,19 +1,11 @@
-import { createFileRoute, Link, useNavigate, redirect } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm, useStore } from '@tanstack/react-form';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, useNavigate, redirect } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { Plus } from 'lucide-react';
-import type { RecipeVariable } from '~/contract';
-import {
-  listNodesFn,
-  listRecipeOptionsFn,
-  listFreeNodeAllocationsFn,
-} from '~/server/functions/admin';
-import { installServerFn } from '~/server/functions/servers';
-import { adminServersList } from '~/lists/servers';
-import { hasPermissions } from '~/lib/permissions';
-import { createServerSchema, type CreateServerDto } from '~/validators/server';
+
 import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import {
@@ -24,7 +16,16 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { VariableField } from '~/components/variable-field';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import type { RecipeVariable } from '~/contract';
+import { hasPermissions } from '~/lib/permissions';
+import { adminServersList } from '~/lists/servers';
+import {
+  listNodesFn,
+  listRecipeOptionsFn,
+  listFreeNodeAllocationsFn,
+} from '~/server/functions/admin';
+import { installServerFn } from '~/server/functions/servers';
+import { createServerSchema, type CreateServerDto } from '~/validators/server';
 
 export const Route = createFileRoute('/admin/servers/new')({
   // The /admin layout already requires admin area access — this narrows it
@@ -160,7 +161,7 @@ function NewServerPage() {
                     onBlur={field.handleBlur}
                   />
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -175,7 +176,10 @@ function NewServerPage() {
                   <Select
                     value={field.state.value}
                     onValueChange={(v) => v !== null && selectNode(v)}
-                    items={nodes.map((node) => ({ value: node.id, label: `${node.name} (${node.fqdn}:${node.publicPort})` }))}
+                    items={nodes.map((node) => ({
+                      value: node.id,
+                      label: `${node.name} (${node.fqdn}:${node.publicPort})`,
+                    }))}
                   >
                     <SelectTrigger id="nodeId" className="w-full" onBlur={field.handleBlur}>
                       <SelectValue placeholder="— Choisir un node —" />
@@ -189,7 +193,7 @@ function NewServerPage() {
                     </SelectContent>
                   </Select>
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -218,7 +222,7 @@ function NewServerPage() {
                     </SelectContent>
                   </Select>
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -235,7 +239,10 @@ function NewServerPage() {
                   <Select
                     value={field.state.value}
                     onValueChange={(v) => v !== null && field.handleChange(v)}
-                    items={(freeAllocationsQuery.data ?? []).map((a) => ({ value: a.id, label: `${a.ip}:${a.port}${a.alias ? ` (${a.alias})` : ''}` }))}
+                    items={(freeAllocationsQuery.data ?? []).map((a) => ({
+                      value: a.id,
+                      label: `${a.ip}:${a.port}${a.alias ? ` (${a.alias})` : ''}`,
+                    }))}
                     disabled={!selectedNodeId}
                   >
                     <SelectTrigger id="allocationId" className="w-full" onBlur={field.handleBlur}>
@@ -255,14 +262,14 @@ function NewServerPage() {
                     </SelectContent>
                   </Select>
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
                   {selectedNodeId && (freeAllocationsQuery.data ?? []).length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      Aucune allocation libre sur ce node — demande à un
-                      administrateur d’en créer dans la page du node.
+                    <p className="text-muted-foreground text-sm">
+                      Aucune allocation libre sur ce node — demande à un administrateur d’en créer
+                      dans la page du node.
                     </p>
                   )}
                 </div>
@@ -281,11 +288,11 @@ function NewServerPage() {
                     onChange={(e) => field.handleChange(Number(e.target.value))}
                     onBlur={field.handleBlur}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     0 = illimité (pas de limite de commit).
                   </p>
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -306,11 +313,11 @@ function NewServerPage() {
                     onChange={(e) => field.handleChange(Number(e.target.value))}
                     onBlur={field.handleBlur}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     Valeurs fractionnaires acceptées (ex. 1.5) — 0 = illimité.
                   </p>
                   {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-destructive text-sm">
                       {field.state.meta.errors[0]?.message}
                     </p>
                   )}
@@ -336,7 +343,7 @@ function NewServerPage() {
             </form.Subscribe>
 
             {mutation.isError && (
-              <p className="text-sm text-destructive">{mutation.error.message}</p>
+              <p className="text-destructive text-sm">{mutation.error.message}</p>
             )}
 
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
@@ -348,7 +355,10 @@ function NewServerPage() {
       </Card>
 
       <p className="mt-6">
-        <Button variant="ghost" render={<Link to="/admin/servers" search={adminServersList.defaultSearch} />}>
+        <Button
+          variant="ghost"
+          render={<Link to="/admin/servers" search={adminServersList.defaultSearch} />}
+        >
           ← Serveurs
         </Button>
       </p>

@@ -1,4 +1,5 @@
 import { Pencil, Play, Trash2 } from 'lucide-react';
+
 import { Button } from '~/components/ui/button';
 import { cronToHuman } from '~/lib/cron';
 import { defineList, field } from '~/lists/define';
@@ -30,9 +31,7 @@ function ScheduleStatusChip({ row }: { row: ServerScheduleRow }) {
     : row.isActive
       ? ['Active', 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400']
       : ['Inactive', 'bg-muted text-muted-foreground'];
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
-  );
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }
 
 /** Row actions of the schedules list, supplied by the page (mutations + navigation). */
@@ -58,7 +57,7 @@ export const serverSchedulesList = defineList<ServerScheduleRow, ServerSchedules
       cell: (schedule) => (
         <div>
           <p className="font-medium">{schedule.name}</p>
-          <p className="text-xs text-muted-foreground">{cronToHuman(schedule.cron)}</p>
+          <p className="text-muted-foreground text-xs">{cronToHuman(schedule.cron)}</p>
         </div>
       ),
       filter: { control: 'text', target: field('name') },
@@ -67,7 +66,7 @@ export const serverSchedulesList = defineList<ServerScheduleRow, ServerSchedules
       header: 'Expression',
       sort: field('cron'),
       cell: (schedule) => (
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{schedule.cron}</code>
+        <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{schedule.cron}</code>
       ),
     },
     nextRunAt: {
@@ -75,9 +74,7 @@ export const serverSchedulesList = defineList<ServerScheduleRow, ServerSchedules
       sort: field('nextRunAt'),
       cell: (schedule) => (
         <span className="text-muted-foreground">
-          {schedule.isActive
-            ? (schedule.nextRunAt?.toLocaleString('fr-FR') ?? '—')
-            : '—'}
+          {schedule.isActive ? (schedule.nextRunAt?.toLocaleString('fr-FR') ?? '—') : '—'}
         </span>
       ),
     },

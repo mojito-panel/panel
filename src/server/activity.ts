@@ -1,9 +1,9 @@
 import '@tanstack/react-start/server-only';
-
 import { getRequestHeaders } from '@tanstack/react-start/server';
 
-import { orm } from './orm';
 import { ActivityLog } from '~/db/entities';
+
+import { orm } from './orm';
 
 /**
  * Audit trail writer — Pelican-style `ActivityLog` rows (event, ip, actor,

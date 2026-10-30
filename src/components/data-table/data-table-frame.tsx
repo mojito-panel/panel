@@ -1,4 +1,10 @@
-import { flexRender, type ReactTable, type RowData, type TableFeatures } from '@tanstack/react-table';
+import {
+  flexRender,
+  type ReactTable,
+  type RowData,
+  type TableFeatures,
+} from '@tanstack/react-table';
+
 import { DataTableFilters } from '~/components/data-table/data-table-filters';
 import { DataTablePagination } from '~/components/data-table/data-table-pagination';
 import { DataTableSkeleton } from '~/components/data-table/data-table-skeleton';
@@ -18,7 +24,11 @@ import type { DefinedList, ListChoiceOption, ListQuery } from '~/lists/define';
  * driven by the list definition and by the controlled query, so the two modes
  * differ only in who computes the rows (`DataTable` vs `ClientDataTable`).
  */
-export interface DataTableFrameProps<TFeatures extends TableFeatures, TData extends RowData, TContext> {
+export interface DataTableFrameProps<
+  TFeatures extends TableFeatures,
+  TData extends RowData,
+  TContext,
+> {
   table: ReactTable<TFeatures, TData>;
   list: DefinedList<TData, TContext>;
   search: ListQuery;
@@ -97,7 +107,7 @@ export function DataTableFrame<TFeatures extends TableFeatures, TData extends Ro
         columnOptions={columnOptions}
       />
 
-      {error && <p className="text-sm text-destructive">Erreur : {error.message}</p>}
+      {error && <p className="text-destructive text-sm">Erreur : {error.message}</p>}
 
       <TablePrimitive>
         <TableHeader>
@@ -120,7 +130,7 @@ export function DataTableFrame<TFeatures extends TableFeatures, TData extends Ro
             <TableRow>
               <TableCell
                 colSpan={view.getAllColumns().length}
-                className="h-24 text-center text-sm text-muted-foreground"
+                className="text-muted-foreground h-24 text-center text-sm"
               >
                 {emptyText}
               </TableCell>

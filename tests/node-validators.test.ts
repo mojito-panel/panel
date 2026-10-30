@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { createNodeSchema, updateNodeSchema } from '../src/validators/node';
 
 /**
@@ -26,17 +27,24 @@ describe('node fqdn field', () => {
   });
 
   it('rejects schemes, ports, paths and other URL fragments', () => {
-    expect(createNodeSchema.safeParse({ ...base, fqdn: 'https://node1.example.com' }).success).toBe(false);
-    expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1.example.com:8443' }).success).toBe(false);
-    expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1.example.com/path' }).success).toBe(false);
-    expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1.example.com?x=1' }).success).toBe(false);
+    expect(createNodeSchema.safeParse({ ...base, fqdn: 'https://node1.example.com' }).success).toBe(
+      false,
+    );
+    expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1.example.com:8443' }).success).toBe(
+      false,
+    );
+    expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1.example.com/path' }).success).toBe(
+      false,
+    );
+    expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1.example.com?x=1' }).success).toBe(
+      false,
+    );
     expect(createNodeSchema.safeParse({ ...base, fqdn: 'node1 example.com' }).success).toBe(false);
   });
 
   it('applies the same constraint on the edit form', () => {
     expect(
-      updateNodeSchema.safeParse({ nodeId: 'node-1', ...base, fqdn: 'node1.example.com' })
-        .success,
+      updateNodeSchema.safeParse({ nodeId: 'node-1', ...base, fqdn: 'node1.example.com' }).success,
     ).toBe(true);
     expect(
       updateNodeSchema.safeParse({ nodeId: 'node-1', ...base, fqdn: 'https://node1.example.com' })

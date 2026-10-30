@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { clientFilterFns } from '~/components/data-table/features';
 
 /**
@@ -23,7 +24,9 @@ describe('client-side filters', () => {
   });
 
   it('splits a comma list for a multiple-choice filter', () => {
-    expect(clientFilterFns.wireArrIncludesSome(rowWith(['a', 'b']), 'permissions', 'b,c')).toBe(true);
+    expect(clientFilterFns.wireArrIncludesSome(rowWith(['a', 'b']), 'permissions', 'b,c')).toBe(
+      true,
+    );
     expect(clientFilterFns.wireArrIncludesSome(rowWith(['a']), 'permissions', 'b,c')).toBe(false);
     expect(clientFilterFns.wireArrIncludesSome(rowWith('b'), 'permissions', 'b,c')).toBe(true);
     expect(clientFilterFns.wireArrIncludesSome(rowWith(['a']), 'permissions', '')).toBe(true);

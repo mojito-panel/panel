@@ -1,10 +1,11 @@
 import { Link } from '@tanstack/react-router';
 import { Download, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+
+import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
-import { defineList, field } from '~/lists/define';
 import { parseRecipeSource, type RecipeSourceStatus } from '~/lib/recipe-source';
+import { defineList, field } from '~/lists/define';
 
 /**
  * /admin/recipes — every recipe imported in the panel (Pelican "Eggs").
@@ -73,7 +74,7 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
               </Badge>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">{recipe.slug}</p>
+          <p className="text-muted-foreground text-xs">{recipe.slug}</p>
         </div>
       ),
     },
@@ -86,7 +87,7 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
       cell: (recipe) =>
         recipe.sourceUrl ? (
           <span
-            className="block max-w-xs truncate text-xs text-muted-foreground"
+            className="text-muted-foreground block max-w-xs truncate text-xs"
             title={recipe.sourceUrl}
           >
             {sourceLabel(recipe.sourceUrl)}
@@ -105,9 +106,7 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
       header: 'Modifiée le',
       sort: field('updatedAt'),
       cell: (recipe) => (
-        <span className="text-muted-foreground">
-          {recipe.updatedAt.toLocaleString('fr-FR')}
-        </span>
+        <span className="text-muted-foreground">{recipe.updatedAt.toLocaleString('fr-FR')}</span>
       ),
     },
     createdAt: {
@@ -125,42 +124,42 @@ export const adminRecipesList = defineList<AdminRecipeRow, AdminRecipesContext>(
       cell: (recipe, context) =>
         // A picker renders this list without a page — nothing to act on.
         context === undefined ? null : (
-        <div className="flex justify-end gap-1">
-          {recipe.sourceUrl && (
+          <div className="flex justify-end gap-1">
+            {recipe.sourceUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Re-importer depuis la source"
+                disabled={context.importing || context.updating}
+                onClick={() => context.onUpdateFromSource(recipe)}
+              >
+                <RefreshCw />
+                Mettre à jour
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
-              title="Re-importer depuis la source"
-              disabled={context.importing || context.updating}
-              onClick={() => context.onUpdateFromSource(recipe)}
+              render={<Link to="/admin/recipes/$recipeId" params={{ recipeId: recipe.id }} />}
             >
-              <RefreshCw />
-              Mettre à jour
+              <Pencil />
+              Éditer
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            render={<Link to="/admin/recipes/$recipeId" params={{ recipeId: recipe.id }} />}
-          >
-            <Pencil />
-            Éditer
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => context.onExport(recipe)}>
-            <Download />
-            Exporter
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={context.deleting}
-            onClick={() => context.onDelete(recipe)}
-          >
-            <Trash2 />
-            Supprimer
-          </Button>
-        </div>
-      ),
+            <Button variant="ghost" size="sm" onClick={() => context.onExport(recipe)}>
+              <Download />
+              Exporter
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={context.deleting}
+              onClick={() => context.onDelete(recipe)}
+            >
+              <Trash2 />
+              Supprimer
+            </Button>
+          </div>
+        ),
     },
   },
 });

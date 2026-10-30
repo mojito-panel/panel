@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Trash2 } from 'lucide-react';
+
 import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import { defineList, field } from '~/lists/define';
@@ -73,8 +74,9 @@ export const adminNodesList = defineList<AdminNodeRow, AdminNodesContext>({
         const port =
           node.publicPort === (protocol === 'https' ? 443 : 80) ? '' : `:${node.publicPort}`;
         return (
-          <span className="font-mono text-xs text-muted-foreground">
-            {protocol}://{node.fqdn}{port}
+          <span className="text-muted-foreground font-mono text-xs">
+            {protocol}://{node.fqdn}
+            {port}
           </span>
         );
       },
@@ -93,9 +95,7 @@ export const adminNodesList = defineList<AdminNodeRow, AdminNodesContext>({
       header: 'Créé le',
       sort: field('createdAt'),
       cell: (node) => (
-        <span className="text-muted-foreground">
-          {node.createdAt.toLocaleDateString('fr-FR')}
-        </span>
+        <span className="text-muted-foreground">{node.createdAt.toLocaleDateString('fr-FR')}</span>
       ),
     },
     actions: {

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { useTheme } from 'next-themes';
 import { ChevronsUpDown, LogOut, Monitor, MoonStar, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,8 +20,8 @@ import {
   useSidebar,
 } from '~/components/ui/sidebar';
 import { UserAvatar } from '~/components/user-avatar';
-import { getBrandingFn } from '~/server/functions/settings';
 import { useAuth } from '~/contexts/use-auth';
+import { getBrandingFn } from '~/server/functions/settings';
 
 /** Theme options of the user menu — values are next-themes themes. */
 const themeOptions = [
@@ -65,19 +66,13 @@ export function SidebarUserMenu() {
                 />
                 <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="truncate font-semibold">{user?.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {user?.email}
-                  </span>
+                  <span className="text-muted-foreground truncate text-xs">{user?.email}</span>
                 </div>
                 <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
               </SidebarMenuButton>
             }
           />
-          <DropdownMenuContent
-            side={isMobile ? 'bottom' : 'top'}
-            align="end"
-            className="w-56"
-          >
+          <DropdownMenuContent side={isMobile ? 'bottom' : 'top'} align="end" className="w-56">
             <DropdownMenuGroup>
               <DropdownMenuLabel>Thème</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
@@ -90,10 +85,7 @@ export function SidebarUserMenu() {
               </DropdownMenuRadioGroup>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => signOut.mutate()}
-              disabled={signOut.isPending}
-            >
+            <DropdownMenuItem onClick={() => signOut.mutate()} disabled={signOut.isPending}>
               <LogOut />
               Se déconnecter
             </DropdownMenuItem>

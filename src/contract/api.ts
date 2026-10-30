@@ -91,9 +91,7 @@ export const updateServerVariablesRequestSchema = z.object({
   variables: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
 });
 
-export type UpdateServerVariablesRequest = z.infer<
-  typeof updateServerVariablesRequestSchema
->;
+export type UpdateServerVariablesRequest = z.infer<typeof updateServerVariablesRequestSchema>;
 
 /**
  * Resources update (Pelican "set primary allocation" / port change, and
@@ -116,9 +114,7 @@ export const updateServerResourcesRequestSchema = z.object({
   }),
 });
 
-export type UpdateServerResourcesRequest = z.infer<
-  typeof updateServerResourcesRequestSchema
->;
+export type UpdateServerResourcesRequest = z.infer<typeof updateServerResourcesRequestSchema>;
 
 export const serverActionSchema = z.enum(['start', 'stop', 'restart', 'kill']);
 

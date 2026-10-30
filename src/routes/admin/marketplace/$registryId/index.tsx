@@ -1,33 +1,18 @@
-import { useState } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
+import { ArrowLeft, FileJson, FolderGit2, GitBranch, RefreshCw, Search } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { ArrowLeft, FileJson, FolderGit2, GitBranch, RefreshCw, Search } from 'lucide-react';
-import {
-  listRegistryEntriesFn,
-  syncRegistryFn,
-  importRegistryEntryFn,
-  getRegistryEntryFn,
-} from '~/server/functions/marketplace';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { CoverImage } from '~/components/cover-image';
+import { ErrorState } from '~/components/error/error-state';
 import { RecipeSourceStatusBadge } from '~/components/recipe-source-status';
 import { TimeAgo } from '~/components/time-ago';
-import { ErrorState } from '~/components/error/error-state';
-import { useAuth } from '~/contexts/use-auth';
-import { hasPermissions } from '~/lib/permissions';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
 import {
   Card,
   CardAction,
@@ -43,7 +28,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { Input } from '~/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { useAuth } from '~/contexts/use-auth';
+import { hasPermissions } from '~/lib/permissions';
 import type { RegistryCatalogEntry, RegistryEntryStatus } from '~/lib/recipe-source';
+import {
+  listRegistryEntriesFn,
+  syncRegistryFn,
+  importRegistryEntryFn,
+  getRegistryEntryFn,
+} from '~/server/functions/marketplace';
 
 /**
  * Search params of the catalog — plain string params (this page is a card
@@ -54,7 +55,14 @@ import type { RegistryCatalogEntry, RegistryEntryStatus } from '~/lib/recipe-sou
 const catalogSearchSchema = z.object({
   q: z.string().trim().max(128).optional().catch(undefined),
   status: z
-    .enum(['not_imported', 'up_to_date', 'update_available', 'modified_locally', 'invalid', 'upstream_gone'])
+    .enum([
+      'not_imported',
+      'up_to_date',
+      'update_available',
+      'modified_locally',
+      'invalid',
+      'upstream_gone',
+    ])
     .optional()
     .catch(undefined),
 });
@@ -198,7 +206,7 @@ function RegistryCatalogPage() {
           <CardTitle className="flex items-center gap-2">
             <Link
               to="/admin/marketplace"
-              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md p-1"
               title="Retour aux registres"
             >
               <ArrowLeft />
@@ -208,9 +216,7 @@ function RegistryCatalogPage() {
           <CardDescription>
             {registry ? (
               <>
-                {registry.description && (
-                  <span className="mb-1 block">{registry.description}</span>
-                )}
+                {registry.description && <span className="mb-1 block">{registry.description}</span>}
                 <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="inline-flex items-center gap-1">
                     <FolderGit2 className="size-3.5 shrink-0" />
@@ -218,14 +224,16 @@ function RegistryCatalogPage() {
                       href={registry.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="underline hover:text-foreground"
+                      className="hover:text-foreground underline"
                     >
                       {registry.url}
                     </a>
                   </span>
                   {(registry.branch || registry.branchName) && (
                     <>
-                      <span className="text-muted-foreground" aria-hidden>·</span>
+                      <span className="text-muted-foreground" aria-hidden>
+                        ·
+                      </span>
                       <span className="inline-flex items-center gap-1">
                         <GitBranch className="size-3.5 shrink-0" />
                         {registry.branch || registry.branchName}
@@ -234,17 +242,23 @@ function RegistryCatalogPage() {
                   )}
                   {(registry.author || registry.license) && (
                     <>
-                      <span className="text-muted-foreground" aria-hidden>·</span>
+                      <span className="text-muted-foreground" aria-hidden>
+                        ·
+                      </span>
                       {registry.author && <span>{registry.author}</span>}
                       {registry.author && registry.license && (
-                        <span className="text-muted-foreground" aria-hidden>·</span>
+                        <span className="text-muted-foreground" aria-hidden>
+                          ·
+                        </span>
                       )}
                       {registry.license && <Badge variant="outline">{registry.license}</Badge>}
                     </>
                   )}
                   {registry.lastSyncedAt && (
                     <>
-                      <span className="text-muted-foreground" aria-hidden>·</span>
+                      <span className="text-muted-foreground" aria-hidden>
+                        ·
+                      </span>
                       <TimeAgo
                         date={registry.lastSyncedAt}
                         prefix={<RefreshCw className="size-3.5 shrink-0" />}
@@ -269,7 +283,7 @@ function RegistryCatalogPage() {
         </CardHeader>
         <CardContent>
           {registry?.lastError && (
-            <p className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
+            <p className="border-destructive/30 bg-destructive/10 text-destructive mb-4 rounded-md border p-2 text-sm">
               Dernière synchronisation en échec : {registry.lastError}
             </p>
           )}
@@ -277,7 +291,7 @@ function RegistryCatalogPage() {
           {/* ─── Filter bar — plain URL params (this page is a grid, not a list) ─── */}
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
               <Input
                 value={search.q ?? ''}
                 onChange={(e) => setSearch({ q: e.target.value })}
@@ -309,23 +323,23 @@ function RegistryCatalogPage() {
                 ))}
               </SelectContent>
             </Select>
-            <span className="ml-auto text-xs text-muted-foreground">
+            <span className="text-muted-foreground ml-auto text-xs">
               {visible.length} / {entries.length} recette(s)
             </span>
           </div>
 
           {/* ─── Catalog — vertical cover cards ─── */}
           {query.isPending ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 3xl:grid-cols-8">
+            <div className="3xl:grid-cols-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="aspect-[2/3] animate-pulse rounded-md bg-muted" />
+                <div key={index} className="bg-muted aspect-[2/3] animate-pulse rounded-md" />
               ))}
             </div>
           ) : query.isError ? (
             // A failed load is NEVER an empty catalog — offer the retry.
             <ErrorState message={query.error.message} onRetry={() => query.refetch()} bare />
           ) : visible.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               {registry?.neverSynced
                 ? 'Synchronisation en cours…'
                 : entries.length === 0
@@ -333,7 +347,7 @@ function RegistryCatalogPage() {
                   : 'Aucune recette ne correspond au filtre.'}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 3xl:grid-cols-8">
+            <div className="3xl:grid-cols-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {visible.map((row) => (
                 <div
                   key={row.path}
@@ -351,10 +365,13 @@ function RegistryCatalogPage() {
                   <div className="flex flex-1 flex-col gap-2 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium leading-tight" title={row.name ?? row.path}>
+                        <p
+                          className="truncate text-sm leading-tight font-medium"
+                          title={row.name ?? row.path}
+                        >
                           {row.name ?? row.path}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground" title={row.path}>
+                        <p className="text-muted-foreground truncate text-xs" title={row.path}>
                           {row.slug ?? row.path}
                         </p>
                       </div>
@@ -368,13 +385,16 @@ function RegistryCatalogPage() {
                       )}
                     </div>
                     {row.description && (
-                      <p className="line-clamp-2 text-xs text-muted-foreground" title={row.description}>
+                      <p
+                        className="text-muted-foreground line-clamp-2 text-xs"
+                        title={row.description}
+                      >
                         {row.description}
                       </p>
                     )}
                     <RecipeSourceStatusBadge status={row.status} />
                     {row.error && (
-                      <p className="line-clamp-2 text-xs text-destructive" title={row.error}>
+                      <p className="text-destructive line-clamp-2 text-xs" title={row.error}>
                         {row.error}
                       </p>
                     )}
@@ -460,12 +480,12 @@ function RegistryCatalogPage() {
               Fichier du registre, en lecture seule — importer pour l’ajouter au panel.
             </DialogDescription>
           </DialogHeader>
-          <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+          <pre className="bg-muted max-h-[60vh] overflow-auto rounded-md p-3 font-mono text-xs leading-relaxed">
             {viewQuery.isPending
               ? 'Chargement…'
-              : (viewQuery.error
-                  ? viewQuery.error.message
-                  : (viewQuery.data?.content ?? ''))}
+              : viewQuery.error
+                ? viewQuery.error.message
+                : (viewQuery.data?.content ?? '')}
           </pre>
         </DialogContent>
       </Dialog>

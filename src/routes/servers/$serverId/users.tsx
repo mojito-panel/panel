@@ -1,38 +1,14 @@
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
+import { Save, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Save, UserPlus } from 'lucide-react';
-import { DataTable } from '~/components/data-table/data-table';
-import { getServerFn } from '~/server/functions/servers';
-import {
-  listServerUsersFn,
-  addServerUserFn,
-  updateServerUserFn,
-  removeServerUserFn,
-} from '~/server/functions/subusers';
-import {
-  hasServerPermissions,
-  SERVER_PERMISSION_GROUPS,
-  type PermissionStatements,
-} from '~/lib/permissions';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { serverSubusersList, type ServerSubuserRow } from '~/lists/subusers';
-import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Checkbox } from '~/components/ui/checkbox';
-import { Label } from '~/components/ui/label';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '~/components/ui/dialog';
+import { DataTable } from '~/components/data-table/data-table';
+import { Button } from '~/components/ui/button';
 import {
   Card,
   CardContent,
@@ -41,6 +17,31 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
+import { Checkbox } from '~/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import {
+  hasServerPermissions,
+  SERVER_PERMISSION_GROUPS,
+  type PermissionStatements,
+} from '~/lib/permissions';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { serverSubusersList, type ServerSubuserRow } from '~/lists/subusers';
+import { getServerFn } from '~/server/functions/servers';
+import {
+  listServerUsersFn,
+  addServerUserFn,
+  updateServerUserFn,
+  removeServerUserFn,
+} from '~/server/functions/subusers';
 
 /**
  * /servers/$serverId/users — sous-utilisateurs (accès partagé au serveur).
@@ -167,7 +168,7 @@ function ServerUsersPage() {
   // in flight the table below renders its own skeleton
   if (serverQuery.isSuccess && !hasServerPermissions(permissions, { 'server.users': ['read'] })) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Tu n’as pas la permission de gérer les utilisateurs de ce serveur.
       </p>
     );
@@ -181,8 +182,7 @@ function ServerUsersPage() {
           <CardHeader>
             <CardTitle>Donner accès à un utilisateur</CardTitle>
             <CardDescription>
-              Permissions granulaires : chaque case déverrouille une action
-              précise sur CE serveur.
+              Permissions granulaires : chaque case déverrouille une action précise sur CE serveur.
             </CardDescription>
           </CardHeader>
           <form
@@ -213,7 +213,7 @@ function ServerUsersPage() {
               <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 {SERVER_PERMISSION_GROUPS.map((group) => (
                   <div key={group.resource} className="space-y-1.5">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                       {group.label}
                     </p>
                     {group.actions.map((entry) => (
@@ -226,9 +226,7 @@ function ServerUsersPage() {
                             <Checkbox
                               id={`add-${entry.permission}`}
                               checked={Boolean(field.state.value)}
-                              onCheckedChange={(checked) =>
-                                field.handleChange(checked === true)
-                              }
+                              onCheckedChange={(checked) => field.handleChange(checked === true)}
                             />
                             <Label
                               htmlFor={`add-${entry.permission}`}
@@ -263,8 +261,7 @@ function ServerUsersPage() {
         <CardHeader>
           <CardTitle>Sous-utilisateurs</CardTitle>
           <CardDescription>
-            Comptes ayant accès à ce serveur — le propriétaire garde toujours
-            tous les droits.
+            Comptes ayant accès à ce serveur — le propriétaire garde toujours tous les droits.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -372,14 +369,11 @@ function SubuserPermissionsDialog({
           <div className="grid max-h-[60vh] gap-x-8 gap-y-4 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
             {SERVER_PERMISSION_GROUPS.map((group) => (
               <div key={group.resource} className="space-y-1.5">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                   {group.label}
                 </p>
                 {group.actions.map((entry) => (
-                  <form.Field
-                    key={entry.permission}
-                    name={`permissions.${entry.permission}`}
-                  >
+                  <form.Field key={entry.permission} name={`permissions.${entry.permission}`}>
                     {(field) => (
                       <div className="flex items-center gap-2">
                         <Checkbox

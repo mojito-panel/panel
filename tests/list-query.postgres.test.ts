@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/postgresql';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import {
   User,
   Session,
@@ -16,6 +17,7 @@ import {
 } from '~/db/entities';
 import { adminServersList } from '~/lists/servers';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
+
 import { databaseReachable } from './helpers/db-reachable';
 
 /**
@@ -29,12 +31,21 @@ import { databaseReachable } from './helpers/db-reachable';
  * It SKIPS itself when no database is reachable, so `npm test` stays green on a
  * machine without the dev stack. Start one with `mise run setup:dev`.
  */
-const DATABASE_URL =
-  process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
 const ENTITIES = [
-  User, Session, Account, Verification, Node, Recipe, Server,
-  Allocation, ServerUser, PanelRole, Backup, Setting,
+  User,
+  Session,
+  Account,
+  Verification,
+  Node,
+  Recipe,
+  Server,
+  Allocation,
+  ServerUser,
+  PanelRole,
+  Backup,
+  Setting,
 ];
 
 // Plain TCP probe (tests/helpers/db-reachable) — a MikroORM probe's
@@ -88,9 +99,7 @@ describe.skipIf(!databaseUp)('admin servers list against Postgres', () => {
     const every = await run({ size: 100 });
     const running = await run({ status: 'running', size: 100 });
     expect(running.rows.every((row) => row.status === 'running')).toBe(true);
-    expect(running.rowCount).toBe(
-      every.rows.filter((row) => row.status === 'running').length,
-    );
+    expect(running.rowCount).toBe(every.rows.filter((row) => row.status === 'running').length);
 
     const both = await run({ status: 'running,crashed', size: 100 });
     expect(both.rowCount).toBeGreaterThanOrEqual(running.rowCount);
@@ -116,12 +125,12 @@ describe.skipIf(!databaseUp)('admin servers list against Postgres', () => {
       id: { $in: [...new Set(all.rows.map((row) => row.ownerId))] },
     });
     const matchingOwners = new Set(
-      owners.filter((candidate) => candidate.email === owner.email).map((candidate) => candidate.id),
+      owners
+        .filter((candidate) => candidate.email === owner.email)
+        .map((candidate) => candidate.id),
     );
     const byOwner = await run({ q: owner.email, size: 100 });
-    expect(byOwner.rowCount).toBe(
-      all.rows.filter((row) => matchingOwners.has(row.ownerId)).length,
-    );
+    expect(byOwner.rowCount).toBe(all.rows.filter((row) => matchingOwners.has(row.ownerId)).length);
   });
 
   it('sorts by a local column and by the joined owner column', async () => {

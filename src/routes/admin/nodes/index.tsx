@@ -1,26 +1,15 @@
-import { useEffect, useState } from 'react';
-import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm, useStore } from '@tanstack/react-form';
-import { toast } from 'sonner';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { ExternalLink, Plus } from 'lucide-react';
-import {
-  listAdminNodesFn,
-  createNodeFn,
-  deleteNodeFn,
-  resolveNodeFqdnFn,
-} from '~/server/functions/admin';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataTable } from '~/components/data-table/data-table';
-import { useAuth } from '~/contexts/use-auth';
-import { hasPermissions } from '~/lib/permissions';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { adminNodesList, type AdminNodeRow } from '~/lists/nodes';
-import { createNodeSchema, type CreateNodeDto } from '~/validators/node';
-import { buildAgentConfig } from '~/lib/agent-config';
+import { NodeSchemeField } from '~/components/node-scheme-field';
 import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
 import {
   Card,
   CardAction,
@@ -29,8 +18,20 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
-import { NodeSchemeField } from '~/components/node-scheme-field';
-import { ConfirmDialog } from '~/components/confirm-dialog';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import { useAuth } from '~/contexts/use-auth';
+import { buildAgentConfig } from '~/lib/agent-config';
+import { hasPermissions } from '~/lib/permissions';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminNodesList, type AdminNodeRow } from '~/lists/nodes';
+import {
+  listAdminNodesFn,
+  createNodeFn,
+  deleteNodeFn,
+  resolveNodeFqdnFn,
+} from '~/server/functions/admin';
+import { createNodeSchema, type CreateNodeDto } from '~/validators/node';
 import type { NodeScheme } from '~/validators/node';
 
 export const Route = createFileRoute('/admin/nodes/')({
@@ -94,7 +95,13 @@ function AdminNodesPage() {
 
   const form = useForm({
     validators: { onChange: createNodeSchema },
-    defaultValues: { name: '', fqdn: '', agentPort: 8080, publicPort: 8080, scheme: 'http' as NodeScheme },
+    defaultValues: {
+      name: '',
+      fqdn: '',
+      agentPort: 8080,
+      publicPort: 8080,
+      scheme: 'http' as NodeScheme,
+    },
     onSubmit: ({ value }) => create.mutate(value),
   });
 
@@ -126,9 +133,7 @@ function AdminNodesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Nodes</CardTitle>
-          <CardDescription>
-            Machines hébergeant un agent Mojito.
-          </CardDescription>
+          <CardDescription>Machines hébergeant un agent Mojito.</CardDescription>
           <CardAction>
             <Button onClick={() => setShowCreate((v) => !v)}>
               <Plus />
@@ -191,9 +196,7 @@ function AdminNodesPage() {
                       onBlur={field.handleBlur}
                     />
                     {dnsCheckable && dnsQuery.isPending && (
-                      <p className="text-sm text-muted-foreground">
-                        Vérification DNS…
-                      </p>
+                      <p className="text-muted-foreground text-sm">Vérification DNS…</p>
                     )}
                     {dnsCheckable && !dnsQuery.isPending && (
                       <p
@@ -205,7 +208,7 @@ function AdminNodesPage() {
                       </p>
                     )}
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}
@@ -224,9 +227,11 @@ function AdminNodesPage() {
                       onChange={(e) => field.handleChange(Number(e.target.value))}
                       onBlur={field.handleBlur}
                     />
-                    <p className="text-xs text-muted-foreground">Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>).</p>
+                    <p className="text-muted-foreground text-xs">
+                      Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>).
+                    </p>
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}
@@ -245,9 +250,13 @@ function AdminNodesPage() {
                       onChange={(e) => field.handleChange(Number(e.target.value))}
                       onBlur={field.handleBlur}
                     />
-                    <p className="text-xs text-muted-foreground">Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port d’écoute.</p>
+                    <p className="text-muted-foreground text-xs">
+                      Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière
+                      un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon
+                      identique au port d’écoute.
+                    </p>
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}
@@ -258,7 +267,7 @@ function AdminNodesPage() {
               <form.Field name="scheme">
                 {(field) => (
                   <div className="space-y-2">
-                    <p id="node-scheme" className="text-sm font-medium leading-none">
+                    <p id="node-scheme" className="text-sm leading-none font-medium">
                       Communication SSL
                     </p>
                     <NodeSchemeField
@@ -266,11 +275,11 @@ function AdminNodesPage() {
                       value={field.state.value}
                       onChange={(value) => field.handleChange(value)}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Équivalent Pelican « Communicate over SSL » : le panel et les
-                      navigateurs (console WS) joignent l’agent via ce protocole, sur le
-                      port accessible. Derrière un reverse proxy qui termine le TLS,
-                      l’agent reste en HTTP sur son port d’écoute.
+                    <p className="text-muted-foreground text-xs">
+                      Équivalent Pelican « Communicate over SSL » : le panel et les navigateurs
+                      (console WS) joignent l’agent via ce protocole, sur le port accessible.
+                      Derrière un reverse proxy qui termine le TLS, l’agent reste en HTTP sur son
+                      port d’écoute.
                     </p>
                   </div>
                 )}
@@ -288,7 +297,7 @@ function AdminNodesPage() {
                       onBlur={field.handleBlur}
                     />
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}
@@ -302,7 +311,7 @@ function AdminNodesPage() {
             </form>
 
             {create.isError && (
-              <p className="mt-2 text-sm text-destructive">{create.error.message}</p>
+              <p className="text-destructive mt-2 text-sm">{create.error.message}</p>
             )}
 
             {/* Agent config shown ONCE after creation — the token inside will
@@ -313,8 +322,8 @@ function AdminNodesPage() {
                   Copie cette configuration maintenant — le token ne sera plus jamais affiché.
                 </p>
                 <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                  Placer ce fichier <code>shard.yml</code> à côté de{' '}
-                  <code>shard.exe</code> sur le node, puis démarrer l'agent.
+                  Placer ce fichier <code>shard.yml</code> à côté de <code>shard.exe</code> sur le
+                  node, puis démarrer l'agent.
                 </p>
                 <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs dark:bg-black/40">
                   {buildAgentConfig(create.data)}
@@ -328,7 +337,9 @@ function AdminNodesPage() {
                       void navigator.clipboard
                         .writeText(buildAgentConfig(create.data!))
                         .then(() => toast.success('Configuration shard.yml copiée'))
-                        .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
+                        .catch(() =>
+                          toast.error('Copie impossible — sélectionne le texte manuellement'),
+                        );
                     }}
                   >
                     Copier la configuration

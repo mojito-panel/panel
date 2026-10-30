@@ -1,8 +1,9 @@
 import { Copy, Trash2 } from 'lucide-react';
+
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { defineList, field } from '~/lists/define';
 import { publicKeyTypeLabel } from '~/lib/ssh-key';
+import { defineList, field } from '~/lists/define';
 
 /**
  * /admin/keys — the SSH key pairs of the panel (deploy keys of the private
@@ -45,7 +46,7 @@ export const adminSshKeysList = defineList<AdminSshKeyRow, AdminSshKeysContext>(
         <div>
           <p className="font-medium">{key.name}</p>
           {key.comment && (
-            <p className="max-w-xs truncate text-xs text-muted-foreground" title={key.comment}>
+            <p className="text-muted-foreground max-w-xs truncate text-xs" title={key.comment}>
               {key.comment}
             </p>
           )}
@@ -62,7 +63,7 @@ export const adminSshKeysList = defineList<AdminSshKeyRow, AdminSshKeysContext>(
       header: 'Empreinte',
       cell: (key) => (
         <span
-          className="block max-w-[14rem] truncate font-mono text-xs text-muted-foreground"
+          className="text-muted-foreground block max-w-[14rem] truncate font-mono text-xs"
           title={key.fingerprint}
         >
           {key.fingerprint}

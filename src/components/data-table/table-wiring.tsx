@@ -6,6 +6,7 @@ import {
   type SortingState,
   type Updater,
 } from '@tanstack/react-table';
+
 import { DataTableColumnHeader } from '~/components/data-table/data-table-column-header';
 import { clientFilterFn } from '~/components/data-table/data-table-columns';
 import type { DefinedList, ListQuery, ListTableState } from '~/lists/define';
@@ -54,10 +55,10 @@ export function buildColumns<TData extends RowData, TContext>(
     if (mode === 'client') {
       // The `wire*` fns are registered on `clientTableFeatures` only — the
       // loosely typed column def cannot see that registry, hence the cast.
-      column.filterFn = clientFilterFn(
-        definition.filter,
-        'client',
-      ) as ColumnDef<any, TData>['filterFn'];
+      column.filterFn = clientFilterFn(definition.filter, 'client') as ColumnDef<
+        any,
+        TData
+      >['filterFn'];
       column.sortFn = definition.sortFn ?? 'text';
     }
     return column;

@@ -1,4 +1,5 @@
 import { Trash2 } from 'lucide-react';
+
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { SERVER_PERMISSION_GROUPS } from '~/lib/permissions';
@@ -38,9 +39,7 @@ export interface ServerSubusersContext {
 /** Flat permission → French label ("server.files.read" → "Fichiers · Voir"). */
 const PERMISSION_LABELS: Record<string, string> = Object.fromEntries(
   SERVER_PERMISSION_GROUPS.flatMap((group) =>
-    group.actions.map(
-      (entry) => [entry.permission, `${group.label} · ${entry.label}`] as const,
-    ),
+    group.actions.map((entry) => [entry.permission, `${group.label} · ${entry.label}`] as const),
   ),
 );
 
@@ -65,7 +64,7 @@ function PermissionSummary({ permissions }: { permissions: string[] }) {
           {label}
         </Badge>
       ))}
-      {rest > 0 && <span className="text-xs text-muted-foreground">+{rest}</span>}
+      {rest > 0 && <span className="text-muted-foreground text-xs">+{rest}</span>}
     </div>
   );
 }
@@ -85,7 +84,7 @@ export const serverSubusersList = defineList<ServerSubuserRow, ServerSubusersCon
       cell: (subuser) => (
         <div>
           <p className="font-medium">{subuser.name}</p>
-          <p className="text-xs text-muted-foreground">{subuser.email}</p>
+          <p className="text-muted-foreground text-xs">{subuser.email}</p>
         </div>
       ),
     },

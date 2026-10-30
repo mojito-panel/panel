@@ -1,26 +1,13 @@
-import { useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
-import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { Plus, Save, ShieldCheck, Trash2 } from 'lucide-react';
-import {
-  listRolesFn,
-  createRoleFn,
-  updateRoleFn,
-  deleteRoleFn,
-} from '~/server/functions/roles';
-import { useAuth } from '~/contexts/use-auth';
-import {
-  hasPermissions,
-  PANEL_PERMISSION_GROUPS,
-  type PermissionStatements,
-} from '~/lib/permissions';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Checkbox } from '~/components/ui/checkbox';
-import { Label } from '~/components/ui/label';
 import {
   Card,
   CardContent,
@@ -29,8 +16,17 @@ import {
   CardHeader,
   CardTitle,
 } from '~/components/ui/card';
-import { ConfirmDialog } from '~/components/confirm-dialog';
+import { Checkbox } from '~/components/ui/checkbox';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import { useAuth } from '~/contexts/use-auth';
+import {
+  hasPermissions,
+  PANEL_PERMISSION_GROUPS,
+  type PermissionStatements,
+} from '~/lib/permissions';
 import type { RoleDto } from '~/lists/roles';
+import { listRolesFn, createRoleFn, updateRoleFn, deleteRoleFn } from '~/server/functions/roles';
 
 /** /admin/roles — the panel roles (Pelican-style): built-in + custom roles. */
 export const Route = createFileRoute('/admin/roles')({
@@ -79,8 +75,11 @@ function AdminRolesPage() {
   };
 
   const create = useMutation({
-    mutationFn: (input: { name: string; description?: string; permissions: PermissionStatements }) =>
-      createRole({ data: input }),
+    mutationFn: (input: {
+      name: string;
+      description?: string;
+      permissions: PermissionStatements;
+    }) => createRole({ data: input }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Rôle créé');
@@ -89,8 +88,12 @@ function AdminRolesPage() {
   });
 
   const update = useMutation({
-    mutationFn: (input: { roleId: string; name: string; description?: string; permissions: PermissionStatements }) =>
-      updateRole({ data: input }),
+    mutationFn: (input: {
+      roleId: string;
+      name: string;
+      description?: string;
+      permissions: PermissionStatements;
+    }) => updateRole({ data: input }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Rôle mis à jour');
@@ -130,9 +133,7 @@ function AdminRolesPage() {
 
   if (!hasPermissions(permissions, { 'panel.roles': ['read'] })) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Tu n’as pas la permission de gérer les rôles.
-      </p>
+      <p className="text-muted-foreground text-sm">Tu n’as pas la permission de gérer les rôles.</p>
     );
   }
 
@@ -147,9 +148,8 @@ function AdminRolesPage() {
         <CardHeader>
           <CardTitle>Rôles intégrés</CardTitle>
           <CardDescription>
-            Toujours disponibles, non modifiables : ils ancrent le panel
-            (l’administrateur détient toutes les permissions, le rôle
-            « Utilisateur » est la base de tout compte).
+            Toujours disponibles, non modifiables : ils ancrent le panel (l’administrateur détient
+            toutes les permissions, le rôle « Utilisateur » est la base de tout compte).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -158,11 +158,11 @@ function AdminRolesPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium">{role.name}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {role.userCount} utilisateur(s) · {role.permissions.length} permission(s)
                   </p>
                 </div>
-                <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-xs">
                   Intégré
                 </span>
               </div>
@@ -170,7 +170,7 @@ function AdminRolesPage() {
                 {role.permissions.map((permission) => (
                   <span
                     key={permission}
-                    className="rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                    className="text-muted-foreground rounded-full border px-2 py-0.5 font-mono text-[11px]"
                   >
                     {permission}
                   </span>
@@ -187,10 +187,9 @@ function AdminRolesPage() {
           <CardHeader>
             <CardTitle>Créer un rôle</CardTitle>
             <CardDescription>
-              Coche les permissions de ce rôle — un rôle ne peut accorder que
-              ce que tu possèdes toi-même. Les rôles personnalisés n’ont
-              jamais de permissions par serveur : celles-ci se gèrent par
-              serveur (onglet « Utilisateurs » d’un serveur).
+              Coche les permissions de ce rôle — un rôle ne peut accorder que ce que tu possèdes
+              toi-même. Les rôles personnalisés n’ont jamais de permissions par serveur : celles-ci
+              se gèrent par serveur (onglet « Utilisateurs » d’un serveur).
             </CardDescription>
           </CardHeader>
           <form
@@ -242,9 +241,7 @@ function AdminRolesPage() {
                             <Checkbox
                               id={`create-role-${entry.permission}`}
                               checked={Boolean(field.state.value)}
-                              onCheckedChange={(checked) =>
-                                field.handleChange(checked === true)
-                              }
+                              onCheckedChange={(checked) => field.handleChange(checked === true)}
                             />
                             <Label
                               htmlFor={`create-role-${entry.permission}`}
@@ -294,9 +291,7 @@ function AdminRolesPage() {
       ))}
 
       {!query.isPending && custom.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          Aucun rôle personnalisé pour l’instant.
-        </p>
+        <p className="text-muted-foreground text-sm">Aucun rôle personnalisé pour l’instant.</p>
       )}
 
       <ConfirmDialog
@@ -387,7 +382,12 @@ function CustomRoleCard({
           </div>
           <div className="flex items-center gap-2">
             {canUpdate && (
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => form.handleSubmit()}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => form.handleSubmit()}
+              >
                 <Save />
                 Enregistrer
               </Button>
@@ -418,10 +418,7 @@ function CustomRoleCard({
             <div key={group.resource} className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">{group.label}</p>
               {group.actions.map((entry) => (
-                <form.Field
-                  key={entry.permission}
-                  name={`permissions.${entry.permission}`}
-                >
+                <form.Field key={entry.permission} name={`permissions.${entry.permission}`}>
                   {(field) => (
                     <div className="flex items-center gap-2">
                       <Checkbox

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
+import { useEffect, useState } from 'react';
+
 import type { HealthServerMessage, NodeStats } from '~/contract';
 import { createNodeHealthTokenFn } from '~/server/functions/admin';
 

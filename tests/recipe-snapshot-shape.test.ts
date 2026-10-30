@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { isServerRecipeSnapshot } from '../src/server/recipe-snapshot';
 
 /**
@@ -17,9 +18,7 @@ describe('isServerRecipeSnapshot', () => {
   it('rejects the legacy folded shape (no recipe id)', () => {
     // The 20261023143000 migration folded the old recipe-only column into
     // `{ recipe: <whole document>, runtimes }` — the inner object has no id.
-    expect(
-      isServerRecipeSnapshot({ recipe: { recipe, runtimes: [] }, runtimes: [] }),
-    ).toBe(false);
+    expect(isServerRecipeSnapshot({ recipe: { recipe, runtimes: [] }, runtimes: [] })).toBe(false);
   });
 
   it('rejects missing / malformed documents', () => {

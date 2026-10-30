@@ -1,10 +1,11 @@
-import { createContext, type ReactNode, useContext } from 'react';
 import { useMutation, type UseMutationResult, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
+import { createContext, type ReactNode, useContext } from 'react';
 import { toast } from 'sonner';
-import { signOutFn } from '~/server/functions/auth';
+
 import type { SessionInfo, SessionUser } from '~/db/types';
+import { signOutFn } from '~/server/functions/auth';
 
 interface AuthContextState {
   user: SessionUser | null;
@@ -40,9 +41,7 @@ export const AuthProvider = ({ children, user, session }: AuthProviderProps) => 
       },
     });
 
-  return (
-    <AuthContext value={{ user, session, useSignOut }}>{children}</AuthContext>
-  );
+  return <AuthContext value={{ user, session, useSignOut }}>{children}</AuthContext>;
 };
 
 export const useAuth = () => useContext(AuthContext);

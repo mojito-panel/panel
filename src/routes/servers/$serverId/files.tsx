@@ -1,15 +1,15 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { toast } from 'sonner';
 
-import { getFileDownloadUrlFn } from '~/server/functions/files';
-import { getServerFn } from '~/server/functions/servers';
-import { hasServerPermissions } from '~/lib/permissions';
 import { triggerDownload } from '~/components/download';
-import { filesSearchSchema } from '~/validators/files';
 import { FileBrowser } from '~/components/files/file-browser';
 import { FileEditor } from '~/components/files/file-editor';
+import { hasServerPermissions } from '~/lib/permissions';
+import { getFileDownloadUrlFn } from '~/server/functions/files';
+import { getServerFn } from '~/server/functions/servers';
+import { filesSearchSchema } from '~/validators/files';
 
 export const Route = createFileRoute('/servers/$serverId/files')({
   validateSearch: (search: Record<string, unknown>) => filesSearchSchema.parse(search),
@@ -51,8 +51,7 @@ function FilesPage() {
         }
       : null;
 
-  const invalidateFiles = () =>
-    queryClient.invalidateQueries({ queryKey: ['files', serverId] });
+  const invalidateFiles = () => queryClient.invalidateQueries({ queryKey: ['files', serverId] });
 
   const go = (targetDir: string, targetFile?: string) =>
     navigate({

@@ -47,8 +47,7 @@ export function mergeVariableValues(
   const merged: Record<string, string | number | boolean> = {};
   for (const definition of definitions) {
     const value = values[definition.env];
-    merged[definition.env] =
-      value === undefined || value === '' ? definition.default_value : value;
+    merged[definition.env] = value === undefined || value === '' ? definition.default_value : value;
   }
   return merged;
 }

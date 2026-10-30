@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/postgresql';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { Server } from '~/db/entities';
 import { defineList, field, type DefinedList } from '~/lists/define';
 import { applyListQuery, listQueryBuilder } from '~/server/list/query';
@@ -144,7 +145,12 @@ describe('list definitions', () => {
           status: {
             header: 'Statut',
             cell: () => null,
-            filter: { control: 'choice', target: field('status'), options: STATUSES, dynamic: true },
+            filter: {
+              control: 'choice',
+              target: field('status'),
+              options: STATUSES,
+              dynamic: true,
+            },
           },
         },
       }),
@@ -172,7 +178,11 @@ describe('list definitions', () => {
         alias: 'b',
         searchTargets: ['u.email'],
         columns: {
-          name: { header: 'Nom', cell: () => null, filter: { control: 'text', target: field('name') } },
+          name: {
+            header: 'Nom',
+            cell: () => null,
+            filter: { control: 'text', target: field('name') },
+          },
         },
       }),
     ).toThrow(/needs the join "u"/);

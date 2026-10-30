@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { importEgg } from '../src/contract/egg-import';
 import { parseRecipe } from '../src/contract/recipe-schema';
 
@@ -121,9 +122,7 @@ describe('importEgg (PTDL_v2)', () => {
       parser: 'properties',
       find: { 'server-port': '{{SERVER_PORT}}', motd: 'A Minecraft Server' },
     });
-    expect(
-      warnings.some((w) => w.includes('some.dat') && w.includes('parseur')),
-    ).toBe(true);
+    expect(warnings.some((w) => w.includes('some.dat') && w.includes('parseur'))).toBe(true);
   });
 
   it('always warns about the ignored install scripts', () => {

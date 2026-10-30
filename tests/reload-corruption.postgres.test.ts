@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MikroORM } from '@mikro-orm/postgresql';
-import { ormConfig } from '../src/db/index';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
 import { Recipe, Server } from '~/db/entities';
+
+import { ormConfig } from '../src/db/index';
 import { mergeVariableValues } from '../src/lib/recipe-merge';
 import { databaseReachable } from './helpers/db-reachable';
 import { metadataOnly } from './helpers/metadata-orm';
@@ -21,8 +23,7 @@ import { metadataOnly } from './helpers/metadata-orm';
  * inside beforeAll: their module graph initializes a Postgres connection,
  * which must only happen once the probe has passed.
  */
-const DATABASE_URL =
-  process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
+const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
 const databaseUp = await databaseReachable(DATABASE_URL);
 
@@ -97,8 +98,24 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
     const em = orm.em.fork();
     const now = new Date();
     em.persist([
-      em.create(Recipe, { id: `rt-${SUFFIX}`, slug: runtimeSlug, name: runtimeJson.name, schemaVersion: 4, json: runtimeJson, createdAt: now, updatedAt: now }),
-      em.create(Recipe, { id: `app-${SUFFIX}`, slug: appSlug, name: appJson.name, schemaVersion: 4, json: appJson, createdAt: now, updatedAt: now }),
+      em.create(Recipe, {
+        id: `rt-${SUFFIX}`,
+        slug: runtimeSlug,
+        name: runtimeJson.name,
+        schemaVersion: 4,
+        json: runtimeJson,
+        createdAt: now,
+        updatedAt: now,
+      }),
+      em.create(Recipe, {
+        id: `app-${SUFFIX}`,
+        slug: appSlug,
+        name: appJson.name,
+        schemaVersion: 4,
+        json: appJson,
+        createdAt: now,
+        updatedAt: now,
+      }),
     ]);
     await em.flush();
   });
@@ -146,8 +163,14 @@ describe.skipIf(!databaseUp)('reload recipe must not corrupt the recipe row', ()
     const em2 = orm.em.fork();
     const appRow = await em2.findOneOrFail(Recipe, { slug: appSlug });
     const runtimeRow = await em2.findOneOrFail(Recipe, { slug: runtimeSlug });
-    expect((appRow.json as { requires?: string[] }).requires, 'app recipe row lost its requires').toEqual([runtimeSlug]);
-    expect((runtimeRow.json as { export?: { path?: string } }).export, 'runtime row lost its export').toMatchObject({ path: 'bin' });
+    expect(
+      (appRow.json as { requires?: string[] }).requires,
+      'app recipe row lost its requires',
+    ).toEqual([runtimeSlug]);
+    expect(
+      (runtimeRow.json as { export?: { path?: string } }).export,
+      'runtime row lost its export',
+    ).toMatchObject({ path: 'bin' });
     expect((runtimeRow.json as { variables?: unknown[] }).variables).toHaveLength(1);
   });
 });

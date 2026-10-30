@@ -1,8 +1,9 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
+
+import { AppShell } from '~/components/app-shell';
+import { AppSidebar } from '~/components/app-sidebar';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { AppSidebar } from '~/components/app-sidebar';
-import { AppShell } from '~/components/app-shell';
 import { ServerProvider, useServer } from '~/contexts/use-server';
 
 /**
@@ -49,7 +50,7 @@ function ServerHeaderShell() {
       header={
         <>
           <span className="text-sm font-medium">{snapshot?.server?.name ?? '…'}</span>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-muted-foreground text-sm">
             · {snapshot?.server?.recipe?.name ?? ''}
           </span>
         </>

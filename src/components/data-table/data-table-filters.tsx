@@ -1,5 +1,6 @@
 import { Columns3, PlusCircle, RotateCcw, Search, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
+
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import {
@@ -106,9 +107,7 @@ export function toggleChip(
 ): string[] {
   const active = selected.includes(value);
   if (exclusive) return active ? [] : [value];
-  return active
-    ? selected.filter((entry) => entry !== value)
-    : [...selected, value];
+  return active ? selected.filter((entry) => entry !== value) : [...selected, value];
 }
 
 /** Active filter chips of a filter (empty = no filter). */
@@ -235,7 +234,11 @@ export function FilterControl({
 }
 
 /** Short text shown next to the filter label once the filter is active. */
-function filterSummary(filter: ListFilter, options: readonly ListChoiceOption[], value: string): string {
+function filterSummary(
+  filter: ListFilter,
+  options: readonly ListChoiceOption[],
+  value: string,
+): string {
   switch (filter.control) {
     case 'text':
       return value;
@@ -293,7 +296,7 @@ function ColumnFilter({
         {label}
         {active && (
           <>
-            <span className="mx-1 h-4 w-px bg-border" />
+            <span className="bg-border mx-1 h-4 w-px" />
             <Badge variant="secondary">{filterSummary(filter, options, value)}</Badge>
             <X
               className="size-3.5 opacity-60 hover:opacity-100"
@@ -307,7 +310,7 @@ function ColumnFilter({
         )}
       </PopoverTrigger>
       <PopoverContent className="w-72 gap-3 p-3" align="start">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
           Filtrer : {label}
         </p>
         <FilterControl
@@ -381,7 +384,7 @@ export function DataTableFilters<TData, TContext = void>({
     <div className="flex flex-wrap items-center gap-2">
       {list.spec.searchTargets.length > 0 && (
         <div className="relative w-64">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <Search className="text-muted-foreground pointer-events-none absolute top-2.5 left-2.5 size-4" />
           <DebouncedInput
             value={search}
             placeholder="Rechercher…"
@@ -396,7 +399,9 @@ export function DataTableFilters<TData, TContext = void>({
           key={column}
           label={list.columns[column].header}
           filter={filter}
-          options={filter.control === 'choice' ? (filter.options ?? filterOptions[column] ?? []) : []}
+          options={
+            filter.control === 'choice' ? (filter.options ?? filterOptions[column] ?? []) : []
+          }
           value={values[column] ?? ''}
           onChange={(value) => onChange(column, value)}
         />

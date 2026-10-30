@@ -6,11 +6,7 @@ import { z } from 'zod';
  */
 
 /** Shared identity fields of a key (create, both modes). */
-const nameSchema = z
-  .string()
-  .trim()
-  .min(2, 'Le nom doit faire au moins 2 caractères')
-  .max(128);
+const nameSchema = z.string().trim().min(2, 'Le nom doit faire au moins 2 caractères').max(128);
 
 /**
  * Key creation — one form, two modes:
@@ -38,7 +34,10 @@ export const createSshKeySchema = z
       .string()
       .trim()
       .max(128)
-      .regex(/^[\x20-\x7E]{0,128}$/, 'Le commentaire doit être une seule ligne en ASCII imprimable'),
+      .regex(
+        /^[\x20-\x7E]{0,128}$/,
+        'Le commentaire doit être une seule ligne en ASCII imprimable',
+      ),
     /** Import only — the private key in OpenSSH or PEM form. */
     privateKey: z.string().max(16_384).optional(),
     /** Import only — when absent, derived from the private key. */

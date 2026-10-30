@@ -1,17 +1,19 @@
-import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { AlertTriangle, Save } from 'lucide-react';
-import { Button } from '~/components/ui/button';
+import { useEffect, useState, type ReactNode } from 'react';
+
 import { TabsCard } from '~/components/tabs-card';
+import { Button } from '~/components/ui/button';
 import {
   findUnknownVariablesInEditorValue,
   recipeEditorSchema,
   type RecipeEditorValue,
 } from '~/validators/recipe-editor';
+
 import { ConfigurationTab } from './tab-configuration';
+import { InstallTab } from './tab-install';
 import { ProcessTab } from './tab-process';
 import { VariablesTab } from './tab-variables';
-import { InstallTab } from './tab-install';
 
 /**
  * Pelican-style recipe (egg) editor — one TanStack Form:
@@ -85,7 +87,7 @@ export function RecipeEditor({
       </div>
 
       {submitError && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border p-3 text-sm">
           {submitError}
         </p>
       )}
@@ -95,20 +97,22 @@ export function RecipeEditor({
         <form.Subscribe selector={(s) => s.errorMap.onChange}>
           {(rawErrors) => {
             const fields =
-              (rawErrors as { fields?: Record<string, ReadonlyArray<{ message?: string }>> } | undefined)
-                ?.fields ?? {};
+              (
+                rawErrors as
+                  | { fields?: Record<string, ReadonlyArray<{ message?: string }>> }
+                  | undefined
+              )?.fields ?? {};
             const entries = Object.entries(fields).flatMap(([fieldName, issues]) =>
               issues.map((issue) => ({ fieldName, message: issue.message })),
             );
             if (entries.length === 0) return null;
             return (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="border-destructive/50 bg-destructive/10 text-destructive rounded-md border p-3 text-sm">
                 <p className="font-semibold">La recette contient des erreurs :</p>
                 <ul className="mt-1 list-inside list-disc space-y-1">
                   {entries.slice(0, 20).map((entry) => (
                     <li key={`${entry.fieldName}-${entry.message}`}>
-                      <span className="font-mono text-xs">{entry.fieldName}</span> :{' '}
-                      {entry.message}
+                      <span className="font-mono text-xs">{entry.fieldName}</span> : {entry.message}
                     </li>
                   ))}
                 </ul>
@@ -128,8 +132,8 @@ export function RecipeEditor({
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <p>
                 Variables utilisées dans les templates mais non déclarées :{' '}
-                <span className="font-mono">{unknown.join(', ')}</span>. L'installation
-                échouera — déclare-les dans l'onglet Variables ou l'environnement fixe.
+                <span className="font-mono">{unknown.join(', ')}</span>. L'installation échouera —
+                déclare-les dans l'onglet Variables ou l'environnement fixe.
               </p>
             </div>
           );
@@ -144,7 +148,11 @@ export function RecipeEditor({
           <TabsCard
             defaultValue="configuration"
             tabs={[
-              { value: 'configuration', label: 'Configuration', content: <ConfigurationTab form={form} /> },
+              {
+                value: 'configuration',
+                label: 'Configuration',
+                content: <ConfigurationTab form={form} />,
+              },
               ...(recipeType === 'app'
                 ? [{ value: 'process', label: 'Démarrage', content: <ProcessTab form={form} /> }]
                 : []),

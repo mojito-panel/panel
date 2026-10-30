@@ -1,7 +1,14 @@
 import { defineList, field } from '~/lists/define';
 
 /** All pg-boss job states (the DB enum `pgboss.job_state`). */
-export const JOB_STATES = ['created', 'retry', 'active', 'completed', 'cancelled', 'failed'] as const;
+export const JOB_STATES = [
+  'created',
+  'retry',
+  'active',
+  'completed',
+  'cancelled',
+  'failed',
+] as const;
 
 export type JobState = (typeof JOB_STATES)[number];
 
@@ -130,7 +137,10 @@ export const adminJobsList = defineList<AdminJobRow>({
       header: 'Sortie',
       cell: (job) =>
         job.output ? (
-          <span className="block max-w-xs truncate text-xs text-muted-foreground" title={job.output}>
+          <span
+            className="text-muted-foreground block max-w-xs truncate text-xs"
+            title={job.output}
+          >
             {job.output}
           </span>
         ) : (

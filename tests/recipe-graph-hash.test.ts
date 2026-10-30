@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { recipeGraphHashOf } from '../src/server/recipe-snapshot';
 
 /**
@@ -32,9 +33,7 @@ describe('recipeGraphHashOf', () => {
   it('ignores key order and the runtime resolution order', () => {
     const reordered = { author: 'Tester', name: 'Minecraft', ...app };
     const other = { ...java, id: 'bedrock' };
-    expect(recipeGraphHashOf(reordered, [java, other])).toBe(
-      recipeGraphHashOf(app, [other, java]),
-    );
+    expect(recipeGraphHashOf(reordered, [java, other])).toBe(recipeGraphHashOf(app, [other, java]));
   });
 
   it('changes when the app recipe changes', () => {

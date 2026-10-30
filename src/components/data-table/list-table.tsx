@@ -1,4 +1,5 @@
 import type { RowData } from '@tanstack/react-table';
+
 import { ClientDataTable } from '~/components/data-table/client-data-table';
 import { DataTable, type DataTableProps } from '~/components/data-table/data-table';
 

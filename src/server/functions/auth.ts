@@ -1,8 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
-import { withOrmContext } from '../middleware';
 import { getRequestHeaders } from '@tanstack/react-start/server';
-import { auth } from '~/lib/auth';
+
 import type { AuthSession } from '~/db/types';
+import { auth } from '~/lib/auth';
+
+import { withOrmContext } from '../middleware';
 import { resolvePanelPermissions } from '../session';
 
 /**
@@ -11,8 +13,7 @@ import { resolvePanelPermissions } from '../session';
  */
 export const getSession = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
-  .handler(
-  async (): Promise<AuthSession | null> => {
+  .handler(async (): Promise<AuthSession | null> => {
     const session = await auth.api.getSession({
       headers: getRequestHeaders(),
     });
@@ -37,8 +38,7 @@ export const getSession = createServerFn({ method: 'GET' })
         expiresAt: session.session.expiresAt,
       },
     };
-  },
-);
+  });
 
 /**
  * Server-side sign-out — deletes the session cookie.

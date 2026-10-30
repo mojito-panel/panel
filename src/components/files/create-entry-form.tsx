@@ -49,7 +49,7 @@ export function CreateEntryForm({
               autoFocus
             />
             {field.state.meta.errors.length > 0 && (
-              <p className="text-xs text-destructive">{field.state.meta.errors[0]?.message}</p>
+              <p className="text-destructive text-xs">{field.state.meta.errors[0]?.message}</p>
             )}
           </div>
         )}

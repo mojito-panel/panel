@@ -1,4 +1,5 @@
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
+
 import { Button } from '~/components/ui/button';
 import {
   Select,
@@ -35,7 +36,7 @@ export function DataTablePagination({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         {rowCount === 0
           ? 'Aucun résultat'
           : `${firstRow}–${lastRow} sur ${rowCount}${isFetching ? ' — chargement…' : ''}`}
@@ -43,7 +44,7 @@ export function DataTablePagination({
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Lignes</span>
+          <span className="text-muted-foreground text-sm">Lignes</span>
           <Select
             value={String(pageSize)}
             onValueChange={(value) => value !== null && onPageSizeChange(Number(value))}
@@ -61,7 +62,7 @@ export function DataTablePagination({
           </Select>
         </div>
 
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Page {pageIndex + 1} sur {pageCount}
         </p>
 

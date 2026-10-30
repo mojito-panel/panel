@@ -1,7 +1,7 @@
 import { CloudOff, RefreshCw, TriangleAlert } from 'lucide-react';
 
-import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
+import { Skeleton } from '~/components/ui/skeleton';
 
 /**
  * True when an error message looks like an unreachable agent — the server
@@ -50,18 +50,18 @@ export function ErrorState({
     >
       {unreachable ? (
         <>
-          <CloudOff className="size-8 text-muted-foreground" />
+          <CloudOff className="text-muted-foreground size-8" />
           <p className="font-medium">Agent injoignable</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            Le nœud qui héberge ce serveur ne répond pas. Vérifie que l’agent
-            tourne sur la machine et que son port est ouvert, puis réessaie.
+          <p className="text-muted-foreground max-w-md text-sm">
+            Le nœud qui héberge ce serveur ne répond pas. Vérifie que l’agent tourne sur la machine
+            et que son port est ouvert, puis réessaie.
           </p>
         </>
       ) : (
         <>
-          <TriangleAlert className="size-8 text-destructive" />
+          <TriangleAlert className="text-destructive size-8" />
           <p className="font-medium">Une erreur est survenue</p>
-          <p className="max-w-md text-sm text-muted-foreground">{message}</p>
+          <p className="text-muted-foreground max-w-md text-sm">{message}</p>
         </>
       )}
       {onRetry && (
@@ -82,11 +82,7 @@ export function ErrorState({
 export function PageSkeleton({ bare = false }: { bare?: boolean }) {
   return (
     <div
-      className={
-        bare
-          ? 'space-y-3'
-          : 'mt-6 space-y-3 rounded-lg border border-dashed px-6 py-10'
-      }
+      className={bare ? 'space-y-3' : 'mt-6 space-y-3 rounded-lg border border-dashed px-6 py-10'}
     >
       <Skeleton className="mx-auto h-5 w-48" />
       <Skeleton className="mx-auto h-4 w-64" />

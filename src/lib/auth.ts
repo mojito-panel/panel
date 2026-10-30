@@ -1,16 +1,17 @@
 import { betterAuth } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { admin } from 'better-auth/plugins/admin';
 import { tanstackStartCookies } from 'better-auth/tanstack-start';
 import { Pool } from 'pg';
-import { APIError } from 'better-auth/api';
-import { orm, runWithOrmContext } from '../server/orm';
+
 import { User } from '~/db/entities';
-import { isRegistrationEnabled } from '../server/settings';
 import { ac, PANEL_ROLES } from '~/lib/permissions';
 import { AUTH_RATE_LIMIT } from '~/lib/rate-limit';
 
-const databaseUrl =
-  process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
+import { orm, runWithOrmContext } from '../server/orm';
+import { isRegistrationEnabled } from '../server/settings';
+
+const databaseUrl = process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
 /**
  * Server-side better-auth configuration.

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   healthResponseSchema,
   installServerRequestSchema,
@@ -339,9 +340,9 @@ describe('consoleTokenPayloadSchema', () => {
   });
 
   it('rejects an unknown issuer', () => {
-    expect(
-      consoleTokenPayloadSchema.safeParse({ ...validPayload, iss: 'evil' }).success,
-    ).toBe(false);
+    expect(consoleTokenPayloadSchema.safeParse({ ...validPayload, iss: 'evil' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects an audience other than mojito-agent', () => {
@@ -360,9 +361,9 @@ describe('consoleTokenPayloadSchema', () => {
   });
 
   it('rejects an empty serverId', () => {
-    expect(
-      consoleTokenPayloadSchema.safeParse({ ...validPayload, serverId: '' }).success,
-    ).toBe(false);
+    expect(consoleTokenPayloadSchema.safeParse({ ...validPayload, serverId: '' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects a scope other than websocket', () => {
@@ -383,7 +384,9 @@ describe('consoleTokenResponseSchema', () => {
   });
 
   it('rejects a response without token', () => {
-    expect(consoleTokenResponseSchema.safeParse({ wsUrl: 'ws://localhost/ws' }).success).toBe(false);
+    expect(consoleTokenResponseSchema.safeParse({ wsUrl: 'ws://localhost/ws' }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -408,9 +411,9 @@ describe('consoleClientMessageSchema', () => {
   });
 
   it('rejects an empty command', () => {
-    expect(
-      consoleClientMessageSchema.safeParse({ type: 'command', command: '' }).success,
-    ).toBe(false);
+    expect(consoleClientMessageSchema.safeParse({ type: 'command', command: '' }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -429,11 +432,19 @@ describe('consoleServerMessageSchema', () => {
   });
 
   it('validates a status and an error', () => {
-    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'running' }).success).toBe(true);
+    expect(
+      consoleServerMessageSchema.safeParse({ type: 'status', status: 'running' }).success,
+    ).toBe(true);
     // Every runtime status flows over the WS — starting/stopping included.
-    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'starting' }).success).toBe(true);
-    expect(consoleServerMessageSchema.safeParse({ type: 'status', status: 'stopping' }).success).toBe(true);
-    expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(true);
+    expect(
+      consoleServerMessageSchema.safeParse({ type: 'status', status: 'starting' }).success,
+    ).toBe(true);
+    expect(
+      consoleServerMessageSchema.safeParse({ type: 'status', status: 'stopping' }).success,
+    ).toBe(true);
+    expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'forbidden' }).success).toBe(
+      true,
+    );
   });
 
   it('validates an install-status (live banner)', () => {
@@ -484,7 +495,9 @@ describe('consoleServerMessageSchema', () => {
   });
 
   it('rejects an unknown error code', () => {
-    expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'kaboom' }).success).toBe(false);
+    expect(consoleServerMessageSchema.safeParse({ type: 'error', code: 'kaboom' }).success).toBe(
+      false,
+    );
   });
 
   it('validates a stats frame (ring replay / live push)', () => {
@@ -695,9 +708,7 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
   });
 
   it('rejects empty backup ids on a create backup request', () => {
-    expect(
-      createBackupRequestSchema.safeParse({ backupId: '' }).success,
-    ).toBe(false);
+    expect(createBackupRequestSchema.safeParse({ backupId: '' }).success).toBe(false);
   });
 
   it('validates a running operation status', () => {
@@ -757,7 +768,6 @@ describe('backup API (panel orchestrates, agent archives & restores)', () => {
     });
     expect(result.success).toBe(false);
   });
-
 });
 
 describe('agentStatusReportSchema (agent → panel status push)', () => {

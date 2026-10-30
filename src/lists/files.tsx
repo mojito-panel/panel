@@ -1,9 +1,10 @@
 import { Download, File as FileIcon, Folder, Pencil, Trash2 } from 'lucide-react';
+
 import { formatSize } from '~/components/files/format-size';
-import { isEditableFile } from '~/lib/text-files';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
 import type { FileObject } from '~/contract';
+import { isEditableFile } from '~/lib/text-files';
 import { defineList, field } from '~/lists/define';
 
 /**
@@ -89,20 +90,16 @@ export const filesList = defineList<FileObject, FilesContext>({
       filter: { control: 'text', target: field('name') },
       cell: (entry, context) => (
         <button
-          className="flex items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted"
+          className="hover:bg-muted flex items-center gap-2 rounded px-2 py-1 text-left"
           onClick={() => context?.onOpen(entry)}
           title={
-            entry.isDirectory
-              ? 'Ouvrir'
-              : isEditableFile(entry.name)
-                ? 'Éditer'
-                : 'Télécharger'
+            entry.isDirectory ? 'Ouvrir' : isEditableFile(entry.name) ? 'Éditer' : 'Télécharger'
           }
         >
           {entry.isDirectory ? (
-            <Folder className="size-4 shrink-0 text-muted-foreground" />
+            <Folder className="text-muted-foreground size-4 shrink-0" />
           ) : (
-            <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+            <FileIcon className="text-muted-foreground size-4 shrink-0" />
           )}
           <span className="truncate">{entry.name}</span>
         </button>
@@ -129,40 +126,40 @@ export const filesList = defineList<FileObject, FilesContext>({
       cell: (entry, context) =>
         // A picker renders this list without a page — nothing to act on.
         context === undefined ? null : (
-        <div className="flex justify-end gap-1">
-          {!entry.isDirectory && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Télécharger"
-              onClick={() => context.onDownload(entry)}
-            >
-              <Download />
-            </Button>
-          )}
-          {context.canWrite && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Renommer"
-              onClick={() => context.onRename(entry)}
-            >
-              <Pencil />
-            </Button>
-          )}
-          {context.canDelete && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Supprimer"
-              disabled={context.deleting}
-              onClick={() => context.onDelete(entry)}
-            >
-              <Trash2 />
-            </Button>
-          )}
-        </div>
-      ),
+          <div className="flex justify-end gap-1">
+            {!entry.isDirectory && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Télécharger"
+                onClick={() => context.onDownload(entry)}
+              >
+                <Download />
+              </Button>
+            )}
+            {context.canWrite && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Renommer"
+                onClick={() => context.onRename(entry)}
+              >
+                <Pencil />
+              </Button>
+            )}
+            {context.canDelete && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Supprimer"
+                disabled={context.deleting}
+                onClick={() => context.onDelete(entry)}
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
+        ),
     },
   },
 });

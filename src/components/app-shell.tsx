@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { cn } from '~/lib/utils';
+
 import { SidebarInset, SidebarTrigger } from '~/components/ui/sidebar';
+import { cn } from '~/lib/utils';
 
 /**
  * Shared shell for all sidebar layouts (dashboard, admin, server): top bar

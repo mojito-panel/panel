@@ -1,4 +1,6 @@
 import '@tanstack/react-start/server-only';
+import { z } from 'zod';
+
 import {
   findUnknownVariables,
   isRuntimeRecipeJson,
@@ -9,12 +11,12 @@ import {
   type RecipeVariable,
   type RuntimeRecipe,
 } from '~/contract';
-import { z } from 'zod';
-import { recipeErrorMessage } from '~/lib/recipe-source';
 import { Recipe, Server } from '~/db/entities';
+import { recipeErrorMessage } from '~/lib/recipe-source';
+
+import { assertPublicHost } from './assert-public-host';
 import { orm } from './orm';
 import { HttpError } from './session';
-import { assertPublicHost } from './assert-public-host';
 
 export { recipeErrorMessage };
 
@@ -128,7 +130,12 @@ export async function upsertRecipe(
     schemaVersion: recipeJson.schema_version,
     json: recipeJson,
     ...(source
-      ? { sourceUrl: source.url, sourceSha: source.sha, remoteSha: source.sha, remoteCheckedAt: now }
+      ? {
+          sourceUrl: source.url,
+          sourceSha: source.sha,
+          remoteSha: source.sha,
+          remoteCheckedAt: now,
+        }
       : {}),
     createdAt: now,
     updatedAt: now,

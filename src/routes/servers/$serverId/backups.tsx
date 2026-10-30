@@ -1,15 +1,15 @@
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { toast } from 'sonner';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { HardDriveDownload } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataTable } from '~/components/data-table/data-table';
 import { triggerDownload } from '~/components/download';
 import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { ConfirmDialog } from '~/components/confirm-dialog';
 import {
   Card,
   CardAction,
@@ -25,9 +25,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { mergeQuery, type ListQuery } from '~/lists/define';
+import { Input } from '~/components/ui/input';
+import { hasServerPermissions } from '~/lib/permissions';
 import { serverBackupsList, type ServerBackupRow } from '~/lists/backups';
-import { getServerFn } from '~/server/functions/servers';
+import { mergeQuery, type ListQuery } from '~/lists/define';
 import {
   listBackupsFn,
   createBackupFn,
@@ -35,7 +36,7 @@ import {
   deleteBackupFn,
   getBackupDownloadUrlFn,
 } from '~/server/functions/backups';
-import { hasServerPermissions } from '~/lib/permissions';
+import { getServerFn } from '~/server/functions/servers';
 import { createBackupFormSchema } from '~/validators/server';
 
 /**
@@ -62,7 +63,9 @@ function ServerBackupsPage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const queryClient = useQueryClient();
   // Pending restore: which backup and whether it truncates the folder.
-  const [toRestore, setToRestore] = useState<{ backup: ServerBackupRow; truncate: boolean } | null>(null);
+  const [toRestore, setToRestore] = useState<{ backup: ServerBackupRow; truncate: boolean } | null>(
+    null,
+  );
   const [toDelete, setToDelete] = useState<ServerBackupRow | null>(null);
   // Create dialog, opened from the list card's action button.
   const [createOpen, setCreateOpen] = useState(false);
@@ -154,7 +157,7 @@ function ServerBackupsPage() {
   // flight the table renders its skeleton (also keeps SSR HTML usable).
   if (serverQuery.isSuccess && !canRead) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Tu n’as pas la permission de gérer les sauvegardes de ce serveur.
       </p>
     );
@@ -308,8 +311,8 @@ function CreateBackupDialog({
         <DialogHeader>
           <DialogTitle>Créer une sauvegarde</DialogTitle>
           <DialogDescription>
-            Le nom est optionnel — sans nom, la sauvegarde porte la date du jour.
-            Le contenu de l’archive est déclaré par la recette du serveur.
+            Le nom est optionnel — sans nom, la sauvegarde porte la date du jour. Le contenu de
+            l’archive est déclaré par la recette du serveur.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -329,9 +332,7 @@ function CreateBackupDialog({
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
               </div>
             )}

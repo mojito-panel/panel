@@ -1,23 +1,18 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { ErrorState, PageSkeleton } from '~/components/error/error-state';
+import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { VariableField } from '~/components/variable-field';
 import type { RecipeVariable } from '~/contract';
+import { hasServerPermissions } from '~/lib/permissions';
 import { getServerFn, updateServerVariablesFn } from '~/server/functions/servers';
 import { makeUpdateServerVariablesSchema } from '~/validators/server';
-import { ErrorState, PageSkeleton } from '~/components/error/error-state';
-import { hasServerPermissions } from '~/lib/permissions';
-import { Button } from '~/components/ui/button';
-import { VariableField } from '~/components/variable-field';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '~/components/ui/card';
 
 /** /servers/$serverId/variables — the server's variables (ex-"Startup" page). */
 export const Route = createFileRoute('/servers/$serverId/variables')({
@@ -81,7 +76,7 @@ function ServerVariablesPage() {
     !hasServerPermissions(server.viewer.permissions, { 'server.variables': ['read'] })
   ) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Tu n’as pas la permission de voir les variables de ce serveur.
       </p>
     );
@@ -94,7 +89,9 @@ function ServerVariablesPage() {
       // Narrowed above (recipe.start is null without server.variables.read)
       start={server.recipe.start}
       definitions={[...(server.recipe.variables ?? [])].sort((a, b) => a.sort - b.sort)}
-      canUpdate={hasServerPermissions(server.viewer.permissions, { 'server.variables': ['update'] })}
+      canUpdate={hasServerPermissions(server.viewer.permissions, {
+        'server.variables': ['update'],
+      })}
     />
   );
 }
@@ -109,7 +106,13 @@ interface VariablesEditorProps {
 }
 
 /** Form + cards — mounts only with the data present, hooks unconditional. */
-function VariablesEditor({ serverId, variables, start, definitions, canUpdate }: VariablesEditorProps) {
+function VariablesEditor({
+  serverId,
+  variables,
+  start,
+  definitions,
+  canUpdate,
+}: VariablesEditorProps) {
   const queryClient = useQueryClient();
   const updateVariables = useServerFn(updateServerVariablesFn);
 
@@ -161,9 +164,8 @@ function VariablesEditor({ serverId, variables, start, definitions, canUpdate }:
         <CardHeader>
           <CardTitle>Variables</CardTitle>
           <CardDescription>
-            Ces valeurs alimentent la commande de démarrage et les fichiers de
-            configuration générés par la recette. Elles s'appliquent au prochain
-            démarrage du serveur.
+            Ces valeurs alimentent la commande de démarrage et les fichiers de configuration générés
+            par la recette. Elles s'appliquent au prochain démarrage du serveur.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -190,7 +192,7 @@ function VariablesEditor({ serverId, variables, start, definitions, canUpdate }:
                 </form.Field>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Cette recette n'a aucune variable éditable.
               </p>
             )}
@@ -212,8 +214,7 @@ function VariablesEditor({ serverId, variables, start, definitions, canUpdate }:
           <CardHeader>
             <CardTitle>Variables en lecture seule</CardTitle>
             <CardDescription>
-              Définies par l'administrateur via la recette — non modifiables
-              ici.
+              Définies par l'administrateur via la recette — non modifiables ici.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -235,15 +236,14 @@ function VariablesEditor({ serverId, variables, start, definitions, canUpdate }:
         <CardHeader>
           <CardTitle>Commande de démarrage</CardTitle>
           <CardDescription>
-            Résolue avec les valeurs actuelles — lecture seule, définie par le
-            recette. Les variables système ({'{{SERVER_…}}'}) sont injectées par
-            l'agent au démarrage.
+            Résolue avec les valeurs actuelles — lecture seule, définie par le recette. Les
+            variables système ({'{{SERVER_…}}'}) sont injectées par l'agent au démarrage.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form.Subscribe selector={(s) => s.values.variables}>
             {(variables) => (
-              <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-sm">
+              <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-sm">
                 {resolveCommand(start.command, variables, defaults)}
               </pre>
             )}

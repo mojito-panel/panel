@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parsePortsSpec, createAllocationsSchema, deleteAllocationsSchema } from '~/validators/node';
+
+import {
+  parsePortsSpec,
+  createAllocationsSchema,
+  deleteAllocationsSchema,
+} from '~/validators/node';
 
 describe('parsePortsSpec', () => {
   it('parses a single port', () => {
@@ -68,7 +73,6 @@ describe('createAllocationsSchema', () => {
       expect(result.error.issues[0]?.message).toBe('Indique au moins un port');
     }
   });
-
 });
 
 describe('deleteAllocationsSchema', () => {

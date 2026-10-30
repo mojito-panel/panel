@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import type { ReactNode } from 'react';
+
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 
@@ -25,7 +26,9 @@ export function DataTableColumnHeader({
   className?: string;
 }) {
   const label = (
-    <span className={cn('text-xs font-medium uppercase tracking-wide text-muted-foreground', className)}>
+    <span
+      className={cn('text-muted-foreground text-xs font-medium tracking-wide uppercase', className)}
+    >
       {title}
     </span>
   );

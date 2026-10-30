@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseRecipe, safeParseRecipe, type Recipe } from '~/contract';
 import {
   emptyRecipeEditorValue,

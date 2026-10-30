@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import {
   RESERVED_ENV_NAMES,
   STOP_SIGNALS,
@@ -371,12 +372,17 @@ export const recipeEditorSchema = z
      * lives in <home>\bin), "." for root-installing tools. Empty = no
      * PATH entry.
      */
-    exportPath: z.string().refine(
-      (p) =>
-        p === '' ||
-        (!/^[a-zA-Z]:/.test(p) && !p.startsWith('/') && !p.startsWith('\\') && !p.split(/[/\\]/).includes('..')),
-      'Dossier relatif au dossier du runtime (pas de lecteur, pas de "..")',
-    ),
+    exportPath: z
+      .string()
+      .refine(
+        (p) =>
+          p === '' ||
+          (!/^[a-zA-Z]:/.test(p) &&
+            !p.startsWith('/') &&
+            !p.startsWith('\\') &&
+            !p.split(/[/\\]/).includes('..')),
+        'Dossier relatif au dossier du runtime (pas de lecteur, pas de "..")',
+      ),
     /** Runtime export: fixed env pairs (e.g. JAVA_HOME={{RUNTIME_DIR}}). */
     exportEnv: z.array(kvPairSchema),
     env: z.array(kvPairSchema),

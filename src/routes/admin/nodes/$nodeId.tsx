@@ -1,17 +1,38 @@
-import { createFileRoute } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
-import { Trash2 } from 'lucide-react';
-import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-  keepPreviousData,
-} from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
+import { Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { getNodeFn, getNodeHealthFn, updateNodeFn, resetNodeTokenFn, listNodeAllocationsFn, listFreeNodeAllocationsFn, createNodeAllocationsFn, deleteAllocationFn, deleteAllocationsFn, assignAllocationFn, revokeAllocationFn } from '~/server/functions/admin';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
+import { DataTable } from '~/components/data-table/data-table';
+import { NodeSchemeField } from '~/components/node-scheme-field';
+import { StatusBadge, isLiveData } from '~/components/status-badge';
+import { CardSection, TabsCard } from '~/components/tabs-card';
+import { TimeAgo } from '~/components/time-ago';
+import { Button } from '~/components/ui/button';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import { Skeleton } from '~/components/ui/skeleton';
+import { buildAgentConfig, buildAgentConfigWithoutToken } from '~/lib/agent-config';
+import { nodeAllocationsList, type NodeAllocationRow } from '~/lists/allocations';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import {
+  getNodeFn,
+  getNodeHealthFn,
+  updateNodeFn,
+  resetNodeTokenFn,
+  listNodeAllocationsFn,
+  listFreeNodeAllocationsFn,
+  createNodeAllocationsFn,
+  deleteAllocationFn,
+  deleteAllocationsFn,
+  assignAllocationFn,
+  revokeAllocationFn,
+} from '~/server/functions/admin';
 import { listServerOptionsFn } from '~/server/functions/servers';
 import {
   updateNodeSchema,
@@ -19,20 +40,7 @@ import {
   type UpdateNodeDto,
   type CreateAllocationsDto,
 } from '~/validators/node';
-import { buildAgentConfig, buildAgentConfigWithoutToken } from '~/lib/agent-config';
-import { NodeSchemeField } from '~/components/node-scheme-field';
 import { isHttpsScheme, type NodeScheme } from '~/validators/node';
-import { DataTable } from '~/components/data-table/data-table';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { nodeAllocationsList, type NodeAllocationRow } from '~/lists/allocations';
-import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
-import { CardSection, TabsCard } from '~/components/tabs-card';
-import { Skeleton } from '~/components/ui/skeleton';
-import { StatusBadge, isLiveData } from '~/components/status-badge';
-import { TimeAgo } from '~/components/time-ago';
-import { ConfirmDialog } from '~/components/confirm-dialog';
 
 export const Route = createFileRoute('/admin/nodes/$nodeId')({
   component: AdminNodeEditPage,
@@ -119,7 +127,7 @@ function AdminNodeEditPage() {
           <StatusBadge status={liveStatus} live={isLiveData(healthQuery)} />
         )}
       </div>
-      <p className="mt-1 font-mono text-sm text-muted-foreground">
+      <p className="text-muted-foreground mt-1 font-mono text-sm">
         {isHttpsScheme(node.scheme) ? 'https' : 'http'}://{node.fqdn}
         {node.publicPort === (isHttpsScheme(node.scheme) ? 443 : 80) ? '' : `:${node.publicPort}`}
       </p>
@@ -156,7 +164,15 @@ function AdminNodeEditPage() {
                skeleton (empty fields would freeze in the form). */
             content: (
               <NodeSettingsForm
-                node={{ id: node.id, name: node.name, fqdn: node.fqdn, scheme: node.scheme as NodeScheme, agentPort: node.agentPort, publicPort: node.publicPort, sftpPort: node.sftpPort }}
+                node={{
+                  id: node.id,
+                  name: node.name,
+                  fqdn: node.fqdn,
+                  scheme: node.scheme as NodeScheme,
+                  agentPort: node.agentPort,
+                  publicPort: node.publicPort,
+                  sftpPort: node.sftpPort,
+                }}
               />
             ),
           },
@@ -177,16 +193,16 @@ function AdminNodeEditPage() {
                 title="shard.yml"
                 description={
                   <>
-                    Placer ce fichier à côté de <code>shard.exe</code> sur le node
-                    (ou démarrer avec <code>shard.exe --config &lt;chemin&gt;</code>).
-                    Le token est chiffré côté panel et affiché une seule fois :{' '}
+                    Placer ce fichier à côté de <code>shard.exe</code> sur le node (ou démarrer avec{' '}
+                    <code>shard.exe --config &lt;chemin&gt;</code>). Le token est chiffré côté panel
+                    et affiché une seule fois :{' '}
                     {freshToken
                       ? 'voici la configuration complète avec le token fraîchement régénéré.'
                       : 'régénère le token pour afficher une configuration complète.'}
                   </>
                 }
               >
-                <pre className="overflow-x-auto rounded bg-muted p-2 text-xs">{configYaml}</pre>
+                <pre className="bg-muted overflow-x-auto rounded p-2 text-xs">{configYaml}</pre>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -197,7 +213,9 @@ function AdminNodeEditPage() {
                       void navigator.clipboard
                         .writeText(configYaml)
                         .then(() => toast.success('Configuration shard.yml copiée'))
-                        .catch(() => toast.error('Copie impossible — sélectionne le texte manuellement'));
+                        .catch(() =>
+                          toast.error('Copie impossible — sélectionne le texte manuellement'),
+                        );
                     }}
                   >
                     Copier la configuration
@@ -240,18 +258,10 @@ function AdminNodeEditPage() {
 }
 
 /** One info entry of the Overview tab (Filament TextEntry equivalent). */
-function InfoEntry({
-  label,
-  value,
-  muted,
-}: {
-  label: string;
-  value: ReactNode;
-  muted?: boolean;
-}) {
+function InfoEntry({ label, value, muted }: { label: string; value: ReactNode; muted?: boolean }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-muted-foreground text-xs tracking-wide uppercase">{label}</p>
       <p className={`mt-1 font-medium ${muted ? 'text-muted-foreground' : ''}`}>{value}</p>
     </div>
   );
@@ -265,7 +275,15 @@ function InfoEntry({
 function NodeSettingsForm({
   node,
 }: {
-  node: { id: string; name: string; fqdn: string; scheme: NodeScheme; agentPort: number; publicPort: number; sftpPort: number };
+  node: {
+    id: string;
+    name: string;
+    fqdn: string;
+    scheme: NodeScheme;
+    agentPort: number;
+    publicPort: number;
+    sftpPort: number;
+  };
 }) {
   const queryClient = useQueryClient();
   const updateNode = useServerFn(updateNodeFn);
@@ -315,9 +333,7 @@ function NodeSettingsForm({
               onBlur={field.handleBlur}
             />
             {field.state.meta.errors.length > 0 && (
-              <p className="text-sm text-destructive">
-                {field.state.meta.errors[0]?.message}
-              </p>
+              <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
             )}
           </div>
         )}
@@ -335,9 +351,7 @@ function NodeSettingsForm({
               onBlur={field.handleBlur}
             />
             {field.state.meta.errors.length > 0 && (
-              <p className="text-sm text-destructive">
-                {field.state.meta.errors[0]?.message}
-              </p>
+              <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
             )}
           </div>
         )}
@@ -354,11 +368,12 @@ function NodeSettingsForm({
               onChange={(e) => field.handleChange(Number(e.target.value))}
               onBlur={field.handleBlur}
             />
-            <p className="text-xs text-muted-foreground">Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>) — après modification, régénère la configuration.</p>
+            <p className="text-muted-foreground text-xs">
+              Port que l’agent ouvre sur le node (shard.yml <code>api.port</code>) — après
+              modification, régénère la configuration.
+            </p>
             {field.state.meta.errors.length > 0 && (
-              <p className="text-sm text-destructive">
-                {field.state.meta.errors[0]?.message}
-              </p>
+              <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
             )}
           </div>
         )}
@@ -375,11 +390,13 @@ function NodeSettingsForm({
               onChange={(e) => field.handleChange(Number(e.target.value))}
               onBlur={field.handleBlur}
             />
-            <p className="text-xs text-muted-foreground">Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port d’écoute.</p>
+            <p className="text-muted-foreground text-xs">
+              Port utilisé par le panel et les navigateurs pour joindre l’agent — derrière un
+              reverse proxy, c’est le port exposé par le proxy (ex. 443) ; sinon identique au port
+              d’écoute.
+            </p>
             {field.state.meta.errors.length > 0 && (
-              <p className="text-sm text-destructive">
-                {field.state.meta.errors[0]?.message}
-              </p>
+              <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
             )}
           </div>
         )}
@@ -388,7 +405,7 @@ function NodeSettingsForm({
       <form.Field name="scheme">
         {(field) => (
           <div className="space-y-2">
-            <p id="node-edit-scheme" className="text-sm font-medium leading-none">
+            <p id="node-edit-scheme" className="text-sm leading-none font-medium">
               Communication SSL
             </p>
             <NodeSchemeField
@@ -396,11 +413,10 @@ function NodeSettingsForm({
               value={field.state.value}
               onChange={(value) => field.handleChange(value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Protocole utilisé par le panel ET les navigateurs (console, santé)
-              pour joindre l’agent, sur le port accessible. Derrière un reverse
-              proxy qui termine le TLS : l’agent reste en HTTP sur son port
-              d’écoute.
+            <p className="text-muted-foreground text-xs">
+              Protocole utilisé par le panel ET les navigateurs (console, santé) pour joindre
+              l’agent, sur le port accessible. Derrière un reverse proxy qui termine le TLS :
+              l’agent reste en HTTP sur son port d’écoute.
             </p>
           </div>
         )}
@@ -417,14 +433,12 @@ function NodeSettingsForm({
               onChange={(e) => field.handleChange(Number(e.target.value))}
               onBlur={field.handleBlur}
             />
-            <p className="text-xs text-muted-foreground">
-              Port d’écoute SFTP de l’agent (shard.yml <code>sftp.port</code>)
-              — après modification, régénère la configuration.
+            <p className="text-muted-foreground text-xs">
+              Port d’écoute SFTP de l’agent (shard.yml <code>sftp.port</code>) — après modification,
+              régénère la configuration.
             </p>
             {field.state.meta.errors.length > 0 && (
-              <p className="text-sm text-destructive">
-                {field.state.meta.errors[0]?.message}
-              </p>
+              <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
             )}
           </div>
         )}
@@ -580,8 +594,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
         : [...previous, allocationId],
     );
 
-  const toggleAll = () =>
-    setSelectedIds(allSelected ? [] : freeRows.map((row) => row.id));
+  const toggleAll = () => setSelectedIds(allSelected ? [] : freeRows.map((row) => row.id));
 
   return (
     <div className="divide-y">
@@ -610,9 +623,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
               </div>
             )}
@@ -631,9 +642,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
               </div>
             )}
@@ -652,9 +661,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
               </div>
             )}
@@ -669,7 +676,7 @@ function NodeAllocationsPanel({ nodeId }: { nodeId: string }) {
       <CardSection title="Allocations du node">
         {/* Bulk selection bar — bulk delete of the checked free allocations */}
         {selectedIds.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
+          <div className="bg-muted/50 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm">
             <span>
               {selectedIds.length} allocation{selectedIds.length > 1 ? 's' : ''} sélectionnée
               {selectedIds.length > 1 ? 's' : ''}

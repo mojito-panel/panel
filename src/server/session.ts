@@ -1,11 +1,11 @@
 import '@tanstack/react-start/server-only';
-import { getRequestHeaders } from '@tanstack/react-start/server';
 import type { EntityManager as PostgreSqlEntityManager } from '@mikro-orm/postgresql';
+import { getRequestHeaders } from '@tanstack/react-start/server';
 import type { Role } from 'better-auth/plugins/access';
-import { auth } from '~/lib/auth';
-import { orm } from './orm';
+
 import { Server, ServerUser, PanelRole } from '~/db/entities';
 import type { IUser, IServer } from '~/db/types';
+import { auth } from '~/lib/auth';
 import {
   can,
   ownerRole,
@@ -19,6 +19,8 @@ import {
   ALL_SERVER_PERMISSIONS,
   type PermissionRequest,
 } from '~/lib/permissions';
+
+import { orm } from './orm';
 
 /** HTTP error thrown from a server function (message propagated to the client). */
 export class HttpError extends Error {
@@ -114,10 +116,7 @@ export interface ServerAccess {
  * into the browser bundle. See the Import Protection guide, "Common Pitfall:
  * Why Some Imports Stay Alive".
  */
-export async function loadServerForViewer(
-  serverId: string,
-  user: IUser,
-): Promise<ServerAccess> {
+export async function loadServerForViewer(serverId: string, user: IUser): Promise<ServerAccess> {
   const em = orm.em;
   const server = await em.findOne(Server, { id: serverId });
   if (!server) {
@@ -134,7 +133,11 @@ export async function loadServerForViewer(
   }
 
   if (isAdmin || isOwner) {
-    return { em, server, viewer: { isOwner, isAdmin, isSubuser: false, permissions: ALL_SERVER_PERMISSIONS } };
+    return {
+      em,
+      server,
+      viewer: { isOwner, isAdmin, isSubuser: false, permissions: ALL_SERVER_PERMISSIONS },
+    };
   }
 
   const grant = await em.findOne(ServerUser, { serverId: server.id, userId: user.id });
@@ -175,10 +178,7 @@ export async function loadServerWithPermission(
  * Requires server ownership (or the admin role) — used for destructive,
  * non-delegable actions (deleting the server).
  */
-export async function requireServerOwner(
-  serverId: string,
-  user: IUser,
-): Promise<ServerAccess> {
+export async function requireServerOwner(serverId: string, user: IUser): Promise<ServerAccess> {
   const access = await loadServerForViewer(serverId, user);
   if (!access.viewer.isOwner && !access.viewer.isAdmin) {
     throw new HttpError(403, 'Seul le propriétaire peut faire cela');

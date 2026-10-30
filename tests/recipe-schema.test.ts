@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+
 import {
   recipeSchema,
   recipeVariableSchema,
@@ -19,8 +20,7 @@ import {
  * type-level cast only (the helper never reads the defaulted fields).
  */
 type VariableFixture = z.input<typeof recipeVariableSchema>;
-const asVariable = (variable: VariableFixture): RecipeVariable =>
-  variable as RecipeVariable;
+const asVariable = (variable: VariableFixture): RecipeVariable => variable as RecipeVariable;
 
 /**
  * Paper-style egg — covers all recipe v3 features:
@@ -319,8 +319,12 @@ describe('validateVariableValue (Laravel rules equivalent)', () => {
   });
 
   it('rejects a number out of bounds', () => {
-    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 100)).toContain('512');
-    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 9999)).toContain('4096');
+    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 100)).toContain(
+      '512',
+    );
+    expect(validateVariableValue(asVariable({ ...base, min: 512, max: 4096 }), 9999)).toContain(
+      '4096',
+    );
   });
 
   it('rejects a non-numeric value for a number type', () => {

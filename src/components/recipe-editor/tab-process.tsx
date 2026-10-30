@@ -9,6 +9,7 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { STOP_SIGNALS, type StopSignal } from '~/contract';
+
 import { FieldShell } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
@@ -24,23 +25,19 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
         title="Commande de démarrage"
         description={
           <>
-            Templating {'{{VAR}}'} : variables système &gt; variables du serveur &gt;{' '}
-            defaults de la recette &gt; environnement fixe.
+            Templating {'{{VAR}}'} : variables système &gt; variables du serveur &gt; defaults de la
+            recette &gt; environnement fixe.
           </>
         }
       >
         <div className="space-y-4">
           <form.Field name="start.command">
             {(field) => (
-              <FieldShell
-                id="start-command"
-                label="Commande"
-                errors={field.state.meta.errors}
-              >
+              <FieldShell id="start-command" label="Commande" errors={field.state.meta.errors}>
                 <textarea
                   id="start-command"
                   rows={3}
-                  className="flex w-full rounded-md border border-input bg-background p-3 font-mono text-sm"
+                  className="border-input bg-background flex w-full rounded-md border p-3 font-mono text-sm"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -245,10 +242,7 @@ export function ProcessTab({ form }: { form: RecipeForm }) {
         </div>
       </CardSection>
 
-      <CardSection
-        title="Logs"
-        description="Source des logs affichés dans la console."
-      >
+      <CardSection title="Logs" description="Source des logs affichés dans la console.">
         <div className="space-y-4">
           <form.Field name="logs.mode">
             {(field) => (

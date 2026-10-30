@@ -1,4 +1,6 @@
-import { SERVER_STATS_INTERVAL_MS, type ServerStats, type ServerStatsSample } from '~/contract';
+import { Area, AreaChart, CartesianGrid, Customized, XAxis, YAxis } from 'recharts';
+
+import { useFlowSamples } from '~/components/health/use-flow-samples';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import {
   ChartContainer,
@@ -6,15 +8,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '~/components/ui/chart';
-import { useFlowSamples } from '~/components/health/use-flow-samples';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Customized,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { SERVER_STATS_INTERVAL_MS, type ServerStats, type ServerStatsSample } from '~/contract';
 
 /**
  * Live resource cards of a server (CPU / RAM), fed by the console WS:
@@ -78,7 +72,15 @@ interface StatChartProps {
 }
 
 /** One compact area chart (no visible X axis — the card stays tight). */
-function StatChart({ data, config, dataKey, gradientId, domain, tickFormatter, tooltipFormatter }: StatChartProps) {
+function StatChart({
+  data,
+  config,
+  dataKey,
+  gradientId,
+  domain,
+  tickFormatter,
+  tooltipFormatter,
+}: StatChartProps) {
   return (
     <ChartContainer config={config} className="h-28 w-full">
       <AreaChart data={data} margin={{ top: 4, bottom: 0, left: 0, right: 4 }}>
@@ -131,7 +133,7 @@ function StatChart({ data, config, dataKey, gradientId, domain, tickFormatter, t
  *  page knows whether the server runs, the agent answered at all). */
 function EmptyChart({ hint }: { hint: string }) {
   return (
-    <div className="flex h-28 items-center justify-center px-2 text-center text-xs text-muted-foreground">
+    <div className="text-muted-foreground flex h-28 items-center justify-center px-2 text-center text-xs">
       {hint}
     </div>
   );
@@ -164,7 +166,9 @@ export function ServerStatsCards({ stats, hint }: { stats: ServerStats | null; h
         <CardHeader>
           <CardTitle className="text-base">CPU</CardTitle>
           <CardDescription>
-            {latest && stats ? `${formatCpuPercent(latest.cpuPercent)} / ${formatCpuPercent(cpuMax)}` : '—'}
+            {latest && stats
+              ? `${formatCpuPercent(latest.cpuPercent)} / ${formatCpuPercent(cpuMax)}`
+              : '—'}
           </CardDescription>
         </CardHeader>
         <CardContent>

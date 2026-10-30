@@ -1,7 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
 export class Migration20261028130000 extends Migration {
-
   override name = 'Migration20261028130000';
 
   override up(): void | Promise<void> {
@@ -14,14 +13,21 @@ export class Migration20261028130000 extends Migration {
     // The catalog cache moves from a giant JSONB column to its own table —
     // one row per recipe file, so lists can select light columns (path/sha)
     // and never drag every cached file content around.
-    this.addSql(`create table "registry_entry" ("id" varchar(255) not null, "registry_id" varchar(255) not null, "path" varchar(512) not null, "sha" text not null, "slug" text null, "name" text null, "type" varchar(255) null, "description" text null, "error" text null, "cover" text null, "content" text not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, primary key ("id"));`);
-    this.addSql(`create index "registry_entry_registry_id_index" on "registry_entry" ("registry_id");`);
-    this.addSql(`alter table "registry_entry" add constraint "registry_entry_registry_path_unique" unique ("registry_id", "path");`);
+    this.addSql(
+      `create table "registry_entry" ("id" varchar(255) not null, "registry_id" varchar(255) not null, "path" varchar(512) not null, "sha" text not null, "slug" text null, "name" text null, "type" varchar(255) null, "description" text null, "error" text null, "cover" text null, "content" text not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, primary key ("id"));`,
+    );
+    this.addSql(
+      `create index "registry_entry_registry_id_index" on "registry_entry" ("registry_id");`,
+    );
+    this.addSql(
+      `alter table "registry_entry" add constraint "registry_entry_registry_path_unique" unique ("registry_id", "path");`,
+    );
 
     // Data migration: explode the cached JSONB arrays into rows. The id is a
     // deterministic md5 (unique per registry+path) — a migrated entry keeps a
     // stable id without needing the nanoid generator in SQL.
-    this.addSql(`insert into "registry_entry" ("id", "registry_id", "path", "sha", "slug", "name", "type", "description", "error", "cover", "content", "created_at", "updated_at")
+    this
+      .addSql(`insert into "registry_entry" ("id", "registry_id", "path", "sha", "slug", "name", "type", "description", "error", "cover", "content", "created_at", "updated_at")
 select md5(r."id" || ':' || (e->>'path')), r."id", e->>'path', e->>'sha', e->>'slug', e->>'name', e->>'type', e->>'description', e->>'error', e->>'cover', e->>'content', now(), now()
 from "registry" r cross join lateral jsonb_array_elements(r."entries") as e
 where r."entries" is not null;`);
@@ -45,5 +51,4 @@ where r."entries" is not null;`);
     this.addSql(`alter table "registry" drop column "cover";`);
     this.addSql(`alter table "registry" rename to "recipe_registry";`);
   }
-
 }

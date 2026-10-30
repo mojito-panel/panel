@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Trash2 } from 'lucide-react';
+
 import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import { defineList, field } from '~/lists/define';
@@ -80,18 +81,18 @@ export const userServersList = defineList<UserServerRow, UserServersContext>({
       cell: (server, context) =>
         // A picker renders this list without a page — nothing to act on.
         context === undefined ? null : (
-        <div className="flex justify-end">
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={context.deleting}
-            onClick={() => context.onDelete(server)}
-          >
-            <Trash2 />
-            Supprimer
-          </Button>
-        </div>
-      ),
+          <div className="flex justify-end">
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={context.deleting}
+              onClick={() => context.onDelete(server)}
+            >
+              <Trash2 />
+              Supprimer
+            </Button>
+          </div>
+        ),
     },
   },
 });

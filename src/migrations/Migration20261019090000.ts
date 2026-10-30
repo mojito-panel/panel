@@ -1,7 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
 export class Migration20261019090000 extends Migration {
-
   override name = 'Migration20261019090000';
 
   override up(): void | Promise<void> {
@@ -19,5 +18,4 @@ export class Migration20261019090000 extends Migration {
   override down(): void | Promise<void> {
     // Runtime recipes are gone for good — nothing to restore.
   }
-
 }

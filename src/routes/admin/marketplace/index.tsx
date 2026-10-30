@@ -1,37 +1,22 @@
-import { useState } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
-import { toast } from 'sonner';
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import {
-  listRegistriesFn,
-  addRegistryFn,
-  syncRegistryFn,
-  deleteRegistryFn,
-  updateRegistryFn,
-  type RegistryCardRow,
-} from '~/server/functions/marketplace';
-import { listSshKeysFn } from '~/server/functions/ssh-keys';
-import { DataPicker } from '~/components/data-table/data-picker';
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+} from '@tanstack/react-query';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { CoverImage } from '~/components/cover-image';
+import { DataPicker } from '~/components/data-table/data-picker';
 import { ErrorState } from '~/components/error/error-state';
-import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
-import { useAuth } from '~/contexts/use-auth';
-import { hasPermissions } from '~/lib/permissions';
-import {
-  addRegistrySchema,
-  updateRegistrySchema,
-  type AddRegistryDto,
-  type UpdateRegistryDto,
-} from '~/validators/marketplace';
-import type { ListQuery, ListResult } from '~/lists/define';
-import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
-import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
+import { Button } from '~/components/ui/button';
 import {
   Card,
   CardAction,
@@ -47,6 +32,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import { useAuth } from '~/contexts/use-auth';
+import { hasPermissions } from '~/lib/permissions';
+import type { ListQuery, ListResult } from '~/lists/define';
+import { adminSshKeysList, type AdminSshKeyRow } from '~/lists/ssh-keys';
+import {
+  listRegistriesFn,
+  addRegistryFn,
+  syncRegistryFn,
+  deleteRegistryFn,
+  updateRegistryFn,
+  type RegistryCardRow,
+} from '~/server/functions/marketplace';
+import { listSshKeysFn } from '~/server/functions/ssh-keys';
+import {
+  addRegistrySchema,
+  updateRegistrySchema,
+  type AddRegistryDto,
+  type UpdateRegistryDto,
+} from '~/validators/marketplace';
 
 export const Route = createFileRoute('/admin/marketplace/')({
   component: MarketplacePage,
@@ -147,9 +153,7 @@ function MarketplacePage() {
     onSuccess: async (result) => {
       await invalidate();
       toast.success(
-        result.synced
-          ? 'Registre mis à jour — resynchronisation lancée'
-          : 'Registre mis à jour',
+        result.synced ? 'Registre mis à jour — resynchronisation lancée' : 'Registre mis à jour',
       );
     },
     onError: (error) => toast.error(error.message),
@@ -175,8 +179,8 @@ function MarketplacePage() {
         <CardHeader>
           <CardTitle>Marketplace</CardTitle>
           <CardDescription>
-            Dépôts git de recettes : synchronisation automatique, import en un
-            clic, mises à jour détectées par hachage du contenu.
+            Dépôts git de recettes : synchronisation automatique, import en un clic, mises à jour
+            détectées par hachage du contenu.
           </CardDescription>
           <CardAction>
             {canCreate && (
@@ -212,7 +216,11 @@ function MarketplacePage() {
                           const value = e.target.value;
                           field.handleChange(value);
                           // Prefill the display name from the repository name.
-                          const label = value.split('/').pop()?.replace(/\.git$/, '') ?? '';
+                          const label =
+                            value
+                              .split('/')
+                              .pop()
+                              ?.replace(/\.git$/, '') ?? '';
                           if (label && !form.getFieldValue('name')) {
                             form.setFieldValue('name', label);
                           }
@@ -220,19 +228,18 @@ function MarketplacePage() {
                         onBlur={field.handleBlur}
                       />
                       {field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
+                        <p className="text-destructive text-sm">
                           {field.state.meta.errors[0]?.message}
                         </p>
                       )}
-                      <p className="text-xs text-muted-foreground">
-                        GitHub, GitLab, Gitea ou auto-hébergé — le clonage utilise
-                        la commande <code>git clone</code> du panel (Git pour
-                        Windows requis). Dépôts publics en https ; dépôts privés
-                        en ssh via une clé (voir{' '}
+                      <p className="text-muted-foreground text-xs">
+                        GitHub, GitLab, Gitea ou auto-hébergé — le clonage utilise la commande{' '}
+                        <code>git clone</code> du panel (Git pour Windows requis). Dépôts publics en
+                        https ; dépôts privés en ssh via une clé (voir{' '}
                         <Link
                           to="/admin/keys"
                           search={adminSshKeysList.defaultSearch}
-                          className="underline hover:text-foreground"
+                          className="hover:text-foreground underline"
                         >
                           Clés SSH
                         </Link>
@@ -254,7 +261,7 @@ function MarketplacePage() {
                         onBlur={field.handleBlur}
                       />
                       {field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
+                        <p className="text-destructive text-sm">
                           {field.state.meta.errors[0]?.message}
                         </p>
                       )}
@@ -274,11 +281,11 @@ function MarketplacePage() {
                         onBlur={field.handleBlur}
                       />
                       {field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
+                        <p className="text-destructive text-sm">
                           {field.state.meta.errors[0]?.message}
                         </p>
                       )}
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         Laissée vide, la branche par défaut du dépôt est suivie.
                       </p>
                     </div>
@@ -302,28 +309,26 @@ function MarketplacePage() {
                 </Button>
               </form>
 
-              {add.isError && (
-                <p className="mt-2 text-sm text-destructive">{add.error.message}</p>
-              )}
+              {add.isError && <p className="text-destructive mt-2 text-sm">{add.error.message}</p>}
             </div>
           )}
 
           {/* ─── Registry cards — click one to browse its catalog ─── */}
           {query.isPending ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 3xl:grid-cols-8">
+            <div className="3xl:grid-cols-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="aspect-[2/3] animate-pulse rounded-lg bg-muted" />
+                <div key={index} className="bg-muted aspect-[2/3] animate-pulse rounded-lg" />
               ))}
             </div>
           ) : query.isError ? (
             // A failed load is NEVER an empty list — offer the retry.
             <ErrorState message={query.error.message} onRetry={() => query.refetch()} bare />
           ) : registries.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               Aucun registre — ajoute un dépôt git de recettes (https public ou ssh).
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 3xl:grid-cols-8">
+            <div className="3xl:grid-cols-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
               {registries.map((registry) => (
                 <RegistryCardView
                   key={registry.id}
@@ -410,7 +415,7 @@ function RegistryCardView({
       >
         <CoverImage cover={registry.cover} seed={registry.id} />
         {registry.neverSynced && (
-          <span className="absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-center text-xs text-muted-foreground">
+          <span className="bg-background/80 text-muted-foreground absolute inset-x-0 bottom-0 px-2 py-1 text-center text-xs">
             Synchronisation…
           </span>
         )}
@@ -426,19 +431,19 @@ function RegistryCardView({
           {registry.name}
         </button>
         {registry.description && (
-          <p className="line-clamp-2 text-xs text-muted-foreground" title={registry.description}>
+          <p className="text-muted-foreground line-clamp-2 text-xs" title={registry.description}>
             {registry.description}
           </p>
         )}
         {(registry.author || registry.license) && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
             {registry.author && <span className="truncate">{registry.author}</span>}
             {registry.author && registry.license && <span aria-hidden>·</span>}
             {registry.license && <Badge variant="outline">{registry.license}</Badge>}
           </div>
         )}
         {registry.lastError && (
-          <p className="line-clamp-2 text-xs text-destructive" title={registry.lastError}>
+          <p className="text-destructive line-clamp-2 text-xs" title={registry.lastError}>
             {registry.lastError}
           </p>
         )}
@@ -448,7 +453,7 @@ function RegistryCardView({
           {registry.updateAvailable > 0 && (
             <Badge
               variant="secondary"
-              className="font-medium text-primary"
+              className="text-primary font-medium"
               title="Recettes dont une nouvelle version est disponible dans le dépôt"
             >
               {registry.updateAvailable} à mettre à jour
@@ -541,7 +546,7 @@ function SshKeyPicker({
     return (
       <div className="space-y-2">
         <Label>Clé SSH (dépôt privé)</Label>
-        <p className="py-2 text-sm text-muted-foreground">
+        <p className="text-muted-foreground py-2 text-sm">
           {selection?.name ?? '—'} — permission de lister les clés manquante.
         </p>
       </div>
@@ -561,13 +566,12 @@ function SshKeyPicker({
         title="Choisir une clé SSH"
         placeholder="Aucune — dépôt public"
       />
-      <p className="text-xs text-muted-foreground">
-        Dépôt privé en ssh ? Sélectionne la clé de déploiement à utiliser pour
-        le clonage —{' '}
+      <p className="text-muted-foreground text-xs">
+        Dépôt privé en ssh ? Sélectionne la clé de déploiement à utiliser pour le clonage —{' '}
         <Link
           to="/admin/keys"
           search={adminSshKeysList.defaultSearch}
-          className="underline hover:text-foreground"
+          className="hover:text-foreground underline"
         >
           gérer les clés
         </Link>
@@ -615,8 +619,8 @@ function EditRegistryDialog({
         <DialogHeader>
           <DialogTitle>Modifier « {registry?.name} »</DialogTitle>
           <DialogDescription>
-            Le dépôt git est l’identité du registre — il ne change pas. Un
-            changement de branche ou de clé relance une synchronisation.
+            Le dépôt git est l’identité du registre — il ne change pas. Un changement de branche ou
+            de clé relance une synchronisation.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -638,9 +642,7 @@ function EditRegistryDialog({
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
               </div>
             )}
@@ -648,7 +650,7 @@ function EditRegistryDialog({
 
           <div className="space-y-2">
             <Label>Dépôt git (immuable)</Label>
-            <p className="truncate rounded-md border bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <p className="bg-muted text-muted-foreground truncate rounded-md border px-3 py-2 text-xs">
               {registry?.url ?? '—'}
             </p>
           </div>
@@ -665,11 +667,9 @@ function EditRegistryDialog({
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Laissée vide, la branche par défaut du dépôt est suivie.
                 </p>
               </div>
@@ -694,10 +694,7 @@ function EditRegistryDialog({
             </Button>
             <form.Subscribe selector={(s) => [s.canSubmit, s.isSubmitting]}>
               {([canSubmit, isSubmitting]) => (
-                <Button
-                  type="submit"
-                  disabled={!canSubmit || isSubmitting || update.isPending}
-                >
+                <Button type="submit" disabled={!canSubmit || isSubmitting || update.isPending}>
                   <Pencil />
                   {update.isPending ? 'Enregistrement…' : 'Enregistrer'}
                 </Button>
@@ -706,9 +703,7 @@ function EditRegistryDialog({
           </div>
         </form>
 
-        {update.isError && (
-          <p className="mt-2 text-sm text-destructive">{update.error.message}</p>
-        )}
+        {update.isError && <p className="text-destructive mt-2 text-sm">{update.error.message}</p>}
       </DialogContent>
     </Dialog>
   );

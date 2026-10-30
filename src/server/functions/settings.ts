@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { withOrmContext } from '../middleware';
+
 import {
   SETTING_KEYS,
   formatSettingBool,
@@ -9,14 +9,6 @@ import {
   type MailEncryption,
   type SettingKey,
 } from '~/lib/settings';
-import { requirePanelPermission, HttpError } from '../session';
-import { logActivity } from '../activity';
-import {
-  resolveSettings,
-  getBranding,
-  writeSettings,
-  envForcedKey,
-} from '../settings';
 import {
   updateGeneralSettingsSchema,
   updateMailSettingsSchema,
@@ -24,6 +16,11 @@ import {
   type GeneralSettingsDto,
   type MailSettingsDto,
 } from '~/validators/settings';
+
+import { logActivity } from '../activity';
+import { withOrmContext } from '../middleware';
+import { requirePanelPermission, HttpError } from '../session';
+import { resolveSettings, getBranding, writeSettings, envForcedKey } from '../settings';
 
 /**
  * Panel settings — Pelican "Settings" admin area: general (branding +
@@ -37,7 +34,10 @@ function assertNotForced(keys: SettingKey[]): void {
   for (const key of keys) {
     const env = envForcedKey(key);
     if (env) {
-      throw new HttpError(422, `Le paramètre « ${key} » est forcé par la variable d’environnement ${env}`);
+      throw new HttpError(
+        422,
+        `Le paramètre « ${key} » est forcé par la variable d’environnement ${env}`,
+      );
     }
   }
 }
@@ -52,11 +52,9 @@ function assertNotForced(keys: SettingKey[]): void {
  */
 export const getBrandingFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
-  .handler(
-  async (): Promise<BrandingSettings> => {
+  .handler(async (): Promise<BrandingSettings> => {
     return getBranding();
-  },
-);
+  });
 
 // ─── Admin read ───────────────────────────────────────────────────────────────
 
@@ -64,38 +62,38 @@ export const getBrandingFn = createServerFn({ method: 'GET' })
 export const getSettingsFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(
-  async (): Promise<{
-    general: GeneralSettingsDto;
-    mail: MailSettingsDto;
-    forced: ForcedSettings;
-  }> => {
-    await requirePanelPermission({ 'panel.settings': ['read'] });
-    const { values, forced } = await resolveSettings();
+    async (): Promise<{
+      general: GeneralSettingsDto;
+      mail: MailSettingsDto;
+      forced: ForcedSettings;
+    }> => {
+      await requirePanelPermission({ 'panel.settings': ['read'] });
+      const { values, forced } = await resolveSettings();
 
-    return {
-      general: {
-        appName: values['app:name'],
-        favicon: values['app:favicon'],
-        gravatar: parseSettingBool(values['app:gravatar']),
-        registrationEnabled: parseSettingBool(values['app:registration_enabled']),
-        marketplaceSyncInterval: Number(values['marketplace:sync_interval']),
-      },
-      mail: {
-        // Casts: the write path only stores valid values (validated enums)
-        driver: values['mail:driver'] as MailDriver,
-        host: values['mail:smtp:host'],
-        port: Number(values['mail:smtp:port']),
-        username: values['mail:smtp:username'],
-        encryption: values['mail:smtp:encryption'] as MailEncryption,
-        fromAddress: values['mail:from:address'],
-        fromName: values['mail:from:name'],
-        // The stored password is never sent back — only whether one exists.
-        hasPassword: values['mail:smtp:password'] !== '',
-      },
-      forced,
-    };
-  },
-);
+      return {
+        general: {
+          appName: values['app:name'],
+          favicon: values['app:favicon'],
+          gravatar: parseSettingBool(values['app:gravatar']),
+          registrationEnabled: parseSettingBool(values['app:registration_enabled']),
+          marketplaceSyncInterval: Number(values['marketplace:sync_interval']),
+        },
+        mail: {
+          // Casts: the write path only stores valid values (validated enums)
+          driver: values['mail:driver'] as MailDriver,
+          host: values['mail:smtp:host'],
+          port: Number(values['mail:smtp:port']),
+          username: values['mail:smtp:username'],
+          encryption: values['mail:smtp:encryption'] as MailEncryption,
+          fromAddress: values['mail:from:address'],
+          fromName: values['mail:from:name'],
+          // The stored password is never sent back — only whether one exists.
+          hasPassword: values['mail:smtp:password'] !== '',
+        },
+        forced,
+      };
+    },
+  );
 
 // ─── Admin updates ────────────────────────────────────────────────────────────
 
@@ -120,7 +118,12 @@ export const updateGeneralSettingsFn = createServerFn({ method: 'POST' })
       'app:registration_enabled': formatSettingBool(data.registrationEnabled),
       'marketplace:sync_interval': String(data.marketplaceSyncInterval),
     });
-    await logActivity({ event: 'settings:update', description: 'Paramètres généraux mis à jour', actor: { id: user.id, name: user.name, email: user.email }, properties: { keys } });
+    await logActivity({
+      event: 'settings:update',
+      description: 'Paramètres généraux mis à jour',
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { keys },
+    });
 
     return { updated: true };
   });
@@ -151,11 +154,14 @@ export const updateMailSettingsFn = createServerFn({ method: 'POST' })
       'mail:smtp:encryption': data.encryption,
       'mail:from:address': data.fromAddress,
       'mail:from:name': data.fromName,
-      ...(data.password !== ''
-        ? { 'mail:smtp:password': data.password }
-        : {}),
+      ...(data.password !== '' ? { 'mail:smtp:password': data.password } : {}),
     });
-    await logActivity({ event: 'settings:update', description: 'Paramètres de messagerie mis à jour', actor: { id: user.id, name: user.name, email: user.email }, properties: { keys } });
+    await logActivity({
+      event: 'settings:update',
+      description: 'Paramètres de messagerie mis à jour',
+      actor: { id: user.id, name: user.name, email: user.email },
+      properties: { keys },
+    });
 
     return { updated: true };
   });

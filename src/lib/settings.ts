@@ -79,9 +79,7 @@ export const SETTING_DEFAULTS: Record<SettingKey, string> = {
 };
 
 /** Secrets stored encrypted at rest and never round-tripped to the client. */
-export const SETTING_SECRETS: ReadonlySet<SettingKey> = new Set([
-  SETTING_KEYS.mailPassword,
-]);
+export const SETTING_SECRETS: ReadonlySet<SettingKey> = new Set([SETTING_KEYS.mailPassword]);
 
 // ─── Mail values ─────────────────────────────────────────────────────────────
 

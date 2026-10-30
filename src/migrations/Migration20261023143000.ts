@@ -1,7 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
 export class Migration20261023143000 extends Migration {
-
   override name = 'Migration20261023143000';
 
   override up(): void | Promise<void> {
@@ -12,7 +11,7 @@ export class Migration20261023143000 extends Migration {
     // the legacy `runtime_snapshots` column is then dropped.
     this.addSql(
       `update "server" set "recipe_snapshot" = jsonb_build_object('recipe', "recipe_snapshot", 'runtimes', coalesce("runtime_snapshots", '[]'::jsonb))` +
-      ` where "recipe_snapshot" is not null and not ("recipe_snapshot" ? 'runtimes');`,
+        ` where "recipe_snapshot" is not null and not ("recipe_snapshot" ? 'runtimes');`,
     );
     this.addSql(`alter table "server" drop column "runtime_snapshots";`);
   }
@@ -21,8 +20,7 @@ export class Migration20261023143000 extends Migration {
     this.addSql(`alter table "server" add column "runtime_snapshots" jsonb null;`);
     this.addSql(
       `update "server" set "runtime_snapshots" = "recipe_snapshot"->'runtimes', "recipe_snapshot" = "recipe_snapshot"->'recipe'` +
-      ` where "recipe_snapshot" is not null and ("recipe_snapshot" ? 'runtimes');`,
+        ` where "recipe_snapshot" is not null and ("recipe_snapshot" ? 'runtimes');`,
     );
   }
-
 }

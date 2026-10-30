@@ -1,9 +1,6 @@
+import { createAccessControl, role as makeRole, type Role } from 'better-auth/plugins/access';
 import { z } from 'zod';
-import {
-  createAccessControl,
-  role as makeRole,
-  type Role,
-} from 'better-auth/plugins/access';
+
 import type { Permission, SftpPermission } from '~/contract';
 
 /**
@@ -269,16 +266,12 @@ export function parsePermissions(flat: string[]): PermissionStatements {
  * each, only declared actions. Used on anything coming out of storage
  * (`server_user.permissions`) or over the wire.
  */
-export function sanitizeStatements(
-  input: ReadonlyPermissionStatements,
-): PermissionStatements {
+export function sanitizeStatements(input: ReadonlyPermissionStatements): PermissionStatements {
   const out: PermissionStatements = {};
   for (const [resource, actions] of Object.entries(input)) {
     const catalog = (statement as Record<string, readonly string[]>)[resource];
     if (!catalog || !Array.isArray(actions)) continue;
-    const allowed = actions.filter((action) =>
-      (catalog as readonly string[]).includes(action),
-    );
+    const allowed = actions.filter((action) => (catalog as readonly string[]).includes(action));
     if (allowed.length > 0) out[resource] = allowed;
   }
   return out;
@@ -428,28 +421,24 @@ const RESOURCE_LABELS: Record<string, string> = {
 };
 
 /** Catalog of server permissions for the sub-user editor, in display order. */
-export const SERVER_PERMISSION_GROUPS = serverResourceEntries.map(
-  ([resource, actions]) => ({
-    resource,
-    label: RESOURCE_LABELS[resource] ?? resource,
-    actions: actions.map((action) => ({
-      action,
-      label: ACTION_LABELS[action] ?? action,
-      // Flat permission string — the wire format
-      permission: `${resource}.${action}`,
-    })),
-  }),
-);
+export const SERVER_PERMISSION_GROUPS = serverResourceEntries.map(([resource, actions]) => ({
+  resource,
+  label: RESOURCE_LABELS[resource] ?? resource,
+  actions: actions.map((action) => ({
+    action,
+    label: ACTION_LABELS[action] ?? action,
+    // Flat permission string — the wire format
+    permission: `${resource}.${action}`,
+  })),
+}));
 
 /** Catalog of panel-level permissions for the custom role editor. */
-export const PANEL_PERMISSION_GROUPS = panelResourceEntries.map(
-  ([resource, actions]) => ({
-    resource,
-    label: RESOURCE_LABELS[resource] ?? resource,
-    actions: actions.map((action) => ({
-      action,
-      label: ACTION_LABELS[action] ?? action,
-      permission: `${resource}.${action}`,
-    })),
-  }),
-);
+export const PANEL_PERMISSION_GROUPS = panelResourceEntries.map(([resource, actions]) => ({
+  resource,
+  label: RESOURCE_LABELS[resource] ?? resource,
+  actions: actions.map((action) => ({
+    action,
+    label: ACTION_LABELS[action] ?? action,
+    permission: `${resource}.${action}`,
+  })),
+}));

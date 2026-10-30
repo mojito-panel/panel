@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   Outlet,
   HeadContent,
@@ -6,19 +6,17 @@ import {
   createRootRouteWithContext,
   redirect,
 } from '@tanstack/react-router';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
+import type { ReactNode } from 'react';
 
-import type { RouterContext } from '~/router';
-
-import { getSession } from '~/server/functions/auth';
-import { getSetupStatusFn } from '~/server/functions/setup';
-import { getBrandingFn } from '~/server/functions/settings';
-
+import { Toaster } from '~/components/ui/sonner';
 import { AuthProvider } from '~/contexts/use-auth';
 import type { BrandingSettings } from '~/lib/settings';
+import type { RouterContext } from '~/router';
+import { getSession } from '~/server/functions/auth';
+import { getBrandingFn } from '~/server/functions/settings';
+import { getSetupStatusFn } from '~/server/functions/setup';
 
-import { ThemeProvider } from 'next-themes';
-import { Toaster } from '~/components/ui/sonner';
 import styles from '~/styles.css?url';
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -99,13 +97,7 @@ function RootComponent() {
  */
 const THEME_INIT_SCRIPT = `!function(){try{var t=localStorage.getItem("theme")||"system",d="dark"===t||("system"===t&&window.matchMedia("(prefers-color-scheme: dark)").matches),c=document.documentElement.classList;d?c.add("dark"):c.remove("dark")}catch(e){document.documentElement.classList.add("dark")}}()`;
 
-function RootDocument({
-  children,
-  branding,
-}: {
-  children: ReactNode;
-  branding: BrandingSettings;
-}) {
+function RootDocument({ children, branding }: { children: ReactNode; branding: BrandingSettings }) {
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>

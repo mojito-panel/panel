@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -51,15 +52,11 @@ export function ConfirmDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description && (
-            <AlertDialogDescription>{description}</AlertDialogDescription>
-          )}
+          {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
         {children}
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => onOpenChange(false)}>
-            {cancelLabel}
-          </AlertDialogCancel>
+          <AlertDialogCancel onClick={() => onOpenChange(false)}>{cancelLabel}</AlertDialogCancel>
           <Button
             variant={destructive ? 'destructive' : 'default'}
             disabled={pending}

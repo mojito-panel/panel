@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { MikroORM } from '@mikro-orm/sqlite';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+
 import { Setting } from '~/db/entities';
 import {
   SETTING_DEFAULTS,

@@ -1,4 +1,5 @@
 import { Ban, CircleCheck, Trash2 } from 'lucide-react';
+
 import { Button } from '~/components/ui/button';
 import {
   Select,
@@ -60,7 +61,7 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
       cell: (user) => (
         <div>
           <p className="font-medium">{user.name ?? '—'}</p>
-          <p className="text-xs text-muted-foreground">{user.email}</p>
+          <p className="text-muted-foreground text-xs">{user.email}</p>
         </div>
       ),
     },
@@ -80,7 +81,9 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
                   raw value, so the label is resolved here. */}
               <SelectValue>
                 {(current: string | null) =>
-                  context.roles.find((role) => role.id === current)?.name ?? current ?? user.roleName
+                  context.roles.find((role) => role.id === current)?.name ??
+                  current ??
+                  user.roleName
                 }
               </SelectValue>
             </SelectTrigger>
@@ -105,11 +108,11 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
       filter: { control: 'boolean', target: field('banned') },
       cell: (user) =>
         user.banned ? (
-          <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">
+          <span className="border-destructive/50 text-destructive rounded-full border px-2 py-0.5 text-xs">
             Suspendu
           </span>
         ) : (
-          <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+          <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-xs">
             Actif
           </span>
         ),
@@ -118,9 +121,7 @@ export const adminUsersList = defineList<AdminUserRow, AdminUsersContext>({
       header: 'Créé le',
       sort: field('createdAt'),
       cell: (user) => (
-        <span className="text-muted-foreground">
-          {user.createdAt.toLocaleDateString('fr-FR')}
-        </span>
+        <span className="text-muted-foreground">{user.createdAt.toLocaleDateString('fr-FR')}</span>
       ),
     },
     actions: {

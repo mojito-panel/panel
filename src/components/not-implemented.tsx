@@ -1,11 +1,6 @@
 import { Construction } from 'lucide-react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '~/components/ui/card';
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 
 /**
  * Placeholder for a planned-but-not-yet-implemented page (roadmap view —
@@ -35,7 +30,7 @@ export function NotImplemented({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm text-muted-foreground">
+      <CardContent className="text-muted-foreground space-y-2 text-sm">
         <p>{description}</p>
         {pelican && (
           <p className="text-xs">

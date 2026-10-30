@@ -1,13 +1,21 @@
-import { useState } from 'react';
-import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
-import { ConfirmDialog } from '~/components/confirm-dialog';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
-import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
-import { Button } from '~/components/ui/button';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { DataTable } from '~/components/data-table/data-table';
+import { Button } from '~/components/ui/button';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { useAuth } from '~/contexts/use-auth';
 import { hasPermissions } from '~/lib/permissions';
 import { mergeQuery, type ListQuery } from '~/lists/define';
@@ -82,7 +90,6 @@ function AdminServersPage() {
   // Row whose deletion failed against an unreachable agent — the force
   // dialog offers the panel-only retry.
   const [forceTarget, setForceTarget] = useState<AdminServerRow | null>(null);
-
 
   return (
     <div className="space-y-6">

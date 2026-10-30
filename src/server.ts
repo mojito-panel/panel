@@ -1,9 +1,10 @@
 import handler, { createServerEntry } from '@tanstack/react-start/server-entry';
+
 import { initOrm } from '~/db';
 import { isSecretInsecure } from '~/server/crypto';
 import { startQueue } from '~/server/queue';
-import { startScheduleRunner } from '~/server/schedules';
 import { startMarketplaceRunner } from '~/server/registries';
+import { startScheduleRunner } from '~/server/schedules';
 
 /**
  * Custom server entrypoint — TanStack Start detects src/server.ts automatically.
@@ -18,7 +19,7 @@ import { startMarketplaceRunner } from '~/server/registries';
 // dev setup (where .env is often the copied .env.default) only warns.
 if (isSecretInsecure(process.env.BETTER_AUTH_SECRET)) {
   const hint =
-    'generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"';
+    "generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"";
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
       `BETTER_AUTH_SECRET is missing, too short, or the shipped placeholder — ${hint}`,

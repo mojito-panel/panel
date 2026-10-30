@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { RowData } from '@tanstack/react-table';
 import { ChevronDown, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+
 import { DataTable } from '~/components/data-table/data-table';
 import {
   Dialog,
@@ -10,12 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import {
-  mergeQuery,
-  type DefinedList,
-  type ListQuery,
-  type ListResult,
-} from '~/lists/define';
+import { mergeQuery, type DefinedList, type ListQuery, type ListResult } from '~/lists/define';
 
 /**
  * Pick one row out of a list, like a fancy input in a form: `value` +
@@ -64,8 +60,6 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
     placeholderData: keepPreviousData,
   });
 
-
-
   return (
     <>
       {/* Field-shaped trigger: same geometry and surface as Input/SelectTrigger
@@ -73,7 +67,7 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
           the form controls around it. */}
       <div
         data-placeholder={value === null || undefined}
-        className="flex h-9 w-full min-w-0 items-center gap-1.5 rounded-3xl border border-transparent bg-input/50 px-3 text-sm whitespace-nowrap transition-[color,box-shadow,background-color] outline-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 data-placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        className="bg-input/50 focus-within:border-ring focus-within:ring-ring/30 data-placeholder:text-muted-foreground flex h-9 w-full min-w-0 items-center gap-1.5 rounded-3xl border border-transparent px-3 text-sm whitespace-nowrap transition-[color,box-shadow,background-color] outline-none focus-within:ring-3 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {value === null ? (
           <button
@@ -93,7 +87,7 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
               aria-label="Retirer la sélection"
               disabled={disabled}
               onClick={() => onChange(null)}
-              className="-ml-1 flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground disabled:pointer-events-none"
+              className="text-muted-foreground hover:bg-foreground/10 hover:text-foreground -ml-1 flex size-6 shrink-0 items-center justify-center rounded-full disabled:pointer-events-none"
             >
               <X className="pointer-events-none size-3.5" />
             </button>
@@ -109,7 +103,7 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
             </button>
           </>
         )}
-        <ChevronDown className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
+        <ChevronDown className="text-muted-foreground pointer-events-none size-4 shrink-0" />
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -125,9 +119,7 @@ export function DataPicker<TData extends RowData, TContext = void, TSelection = 
               rows={query.data?.rows ?? []}
               rowCount={query.data?.rowCount ?? 0}
               search={search}
-              onSearchChange={(patch) =>
-                setSearch((previous) => mergeQuery(previous, patch))
-              }
+              onSearchChange={(patch) => setSearch((previous) => mergeQuery(previous, patch))}
               isPending={query.isPending}
               isFetching={query.isFetching}
               error={query.error}

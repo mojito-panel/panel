@@ -35,9 +35,7 @@ export const activityList = defineList<ActivityRow>({
       header: 'Date',
       sort: field('createdAt'),
       cell: (row) => (
-        <span className="text-muted-foreground">
-          {row.createdAt.toLocaleString('fr-FR')}
-        </span>
+        <span className="text-muted-foreground">{row.createdAt.toLocaleString('fr-FR')}</span>
       ),
     },
     event: {

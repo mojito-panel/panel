@@ -55,7 +55,9 @@ const CATALOG: Record<string, (params: Params) => string> = {
   'server.online': () => 'Server is online',
   'power.stopped': () => 'Server stopped',
   'server.crash_loop': (p) =>
-    p.code ? `Crash loop detected (${p.code}) — automatic restart skipped` : 'Crash loop detected — automatic restart skipped',
+    p.code
+      ? `Crash loop detected (${p.code}) — automatic restart skipped`
+      : 'Crash loop detected — automatic restart skipped',
 
   // ─── Port watchdog (agent audits listening sockets vs the allocation) ────
   'watchdog.violation': (p) =>

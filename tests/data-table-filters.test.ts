@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, it, expect } from 'vitest';
+
 import { FilterControl, toggleChip } from '~/components/data-table/data-table-filters';
 import type { ListFilterChoice } from '~/lists/define';
 

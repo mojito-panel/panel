@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react';
+
 import { LIVE_MAX_AGE_MS, isLiveData } from '~/components/status-badge';
 import { getServerFn, getServerRuntimeFn } from '~/server/functions/servers';
 

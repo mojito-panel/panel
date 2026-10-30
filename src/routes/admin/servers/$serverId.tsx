@@ -1,10 +1,36 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
 import { useForm } from '@tanstack/react-form';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
+import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ExternalLink, RefreshCw, Trash2 } from 'lucide-react';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
+import { DataPicker } from '~/components/data-table/data-picker';
+import { DataTable } from '~/components/data-table/data-table';
+import { StatusBadge, isLiveData, statusLabel } from '~/components/status-badge';
+import { CardSection, TabsCard, type TabsCardTab } from '~/components/tabs-card';
+import { Button } from '~/components/ui/button';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { Separator } from '~/components/ui/separator';
+import { Skeleton } from '~/components/ui/skeleton';
+import { useAuth } from '~/contexts/use-auth';
+import type { ServerStatusDb } from '~/db/types';
+import { hasPermissions } from '~/lib/permissions';
+import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
+import { mergeQuery, type ListQuery } from '~/lists/define';
+import { adminServersList } from '~/lists/servers';
+import { adminUsersList } from '~/lists/users';
+import { listRecipeOptionsFn } from '~/server/functions/admin';
 import {
   getAdminServerFn,
   getAdminServerStatusFn,
@@ -20,37 +46,12 @@ import {
   removeAdminServerAllocationFn,
   setPrimaryAdminServerAllocationFn,
 } from '~/server/functions/admin-servers';
-import { listRecipeOptionsFn } from '~/server/functions/admin';
 import { listUsersFn } from '~/server/functions/users';
 import {
   updateAdminServerFormSchema,
   adminServerAllocationActionSchema,
   type UpdateAdminServerFormDto,
 } from '~/validators/admin-server';
-import { ConfirmDialog } from '~/components/confirm-dialog';
-import { DataPicker } from '~/components/data-table/data-picker';
-import { DataTable } from '~/components/data-table/data-table';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
-import { adminServersList } from '~/lists/servers';
-import { adminUsersList } from '~/lists/users';
-import { hasPermissions } from '~/lib/permissions';
-import { useAuth } from '~/contexts/use-auth';
-import type { ServerStatusDb } from '~/db/types';
-import { StatusBadge, isLiveData, statusLabel } from '~/components/status-badge';
-import { CardSection, TabsCard, type TabsCardTab } from '~/components/tabs-card';
-import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
-import { Separator } from '~/components/ui/separator';
-import { Skeleton } from '~/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
 
 /**
  * /admin/servers/$serverId — Pelican admin EditServer equivalent: a single
@@ -85,7 +86,13 @@ interface AdminServerDto {
     syncedAt?: Date | string | null;
   };
   owner: { id: string; name: string | null; email: string } | null;
-  allocations: Array<{ id: string; ip: string; port: number; alias: string | null; primary: boolean }>;
+  allocations: Array<{
+    id: string;
+    ip: string;
+    port: number;
+    alias: string | null;
+    primary: boolean;
+  }>;
   subuserCount: number;
   backupCount: number;
 }
@@ -98,10 +105,18 @@ interface OwnerSelection {
 }
 
 /** Read-only info entry (Pelican TextEntry equivalent). */
-function InfoEntry({ label, value, muted }: { label: string; value: React.ReactNode; muted?: boolean }) {
+function InfoEntry({
+  label,
+  value,
+  muted,
+}: {
+  label: string;
+  value: React.ReactNode;
+  muted?: boolean;
+}) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-muted-foreground text-xs tracking-wide uppercase">{label}</p>
       <p className={`mt-1 font-medium ${muted ? 'text-muted-foreground' : ''}`}>{value}</p>
     </div>
   );
@@ -160,18 +175,21 @@ function AdminServerPage() {
               />
             )}
             {server.suspended && (
-              <span className="rounded-full border border-destructive/50 px-2 py-0.5 text-xs text-destructive">
+              <span className="border-destructive/50 text-destructive rounded-full border px-2 py-0.5 text-xs">
                 Suspendu
               </span>
             )}
           </div>
-          <p className="mt-1 text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             {server.recipe.name} · {server.node.name} ·{' '}
             {server.owner ? `${server.owner.name ?? ''} (${server.owner.email})` : '—'}
           </p>
         </div>
         {/* Pelican EditServer "console" header action — jump to the user area */}
-        <Button variant="outline" render={<Link to="/servers/$serverId/console" params={{ serverId }} />}>
+        <Button
+          variant="outline"
+          render={<Link to="/servers/$serverId/console" params={{ serverId }} />}
+        >
           <ExternalLink />
           Ouvrir la console
         </Button>
@@ -205,7 +223,9 @@ function ServerRecordTabs({
   const listUsers = useServerFn(listUsersFn);
   // undefined = untouched (falls back to the server's owner), null = cleared by
   // the picker, object = picked. The form field mirrors it: '' when cleared.
-  const [ownerSelection, setOwnerSelection] = useState<OwnerSelection | null | undefined>(undefined);
+  const [ownerSelection, setOwnerSelection] = useState<OwnerSelection | null | undefined>(
+    undefined,
+  );
   const ownerValue =
     ownerSelection !== undefined
       ? ownerSelection
@@ -280,7 +300,7 @@ function ServerRecordTabs({
                       <p className="py-2 font-medium">{field.state.value}</p>
                     )}
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}
@@ -295,7 +315,7 @@ function ServerRecordTabs({
                       <Label>Propriétaire</Label>
                       {canUpdate ? (
                         canListUsers ? (
-                            <DataPicker
+                          <DataPicker
                             list={adminUsersList}
                             fetchPage={(query) => listUsers({ data: query })}
                             toSelection={(candidate) => ({
@@ -317,18 +337,20 @@ function ServerRecordTabs({
                             placeholder="Rechercher un propriétaire"
                           />
                         ) : (
-                          <p className="py-2 text-sm text-muted-foreground">
-                            {server.owner?.email ?? '—'} — transfert non autorisé (permission
-                            de lister les utilisateurs manquante)
+                          <p className="text-muted-foreground py-2 text-sm">
+                            {server.owner?.email ?? '—'} — transfert non autorisé (permission de
+                            lister les utilisateurs manquante)
                           </p>
                         )
                       ) : (
                         <p className="py-2 font-medium">
-                          {server.owner ? `${server.owner.name ?? '—'} · ${server.owner.email}` : '—'}
+                          {server.owner
+                            ? `${server.owner.name ?? '—'} · ${server.owner.email}`
+                            : '—'}
                         </p>
                       )}
                       {field.state.meta.errors.length > 0 && (
-                        <p className="text-sm text-destructive">
+                        <p className="text-destructive text-sm">
                           {field.state.meta.errors[0]?.message}
                         </p>
                       )}
@@ -376,93 +398,93 @@ function ServerRecordTabs({
             form.handleSubmit();
           }}
         >
-        <CardSection
-          title="Limites de ressources"
-          description="La mémoire et le CPU sont poussés à l'agent au prochain démarrage (start/restart) — la limite de sauvegardes s'applique immédiatement."
-        >
-          <div className="grid gap-4 sm:grid-cols-3">
-            <form.Field name="memoryMb">
-              {(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="admin-server-memory">Mémoire (Mo, 0 = illimité)</Label>
-                  {canUpdate ? (
-                    <Input
-                      id="admin-server-memory"
-                      type="number"
-                      min="0"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(Number(e.target.value))}
-                      onBlur={field.handleBlur}
-                    />
-                  ) : (
-                    <p className="py-2 font-medium">
-                      {field.state.value === 0 ? 'Illimité' : `${field.state.value} Mo`}
-                    </p>
-                  )}
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
-                      {field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            </form.Field>
+          <CardSection
+            title="Limites de ressources"
+            description="La mémoire et le CPU sont poussés à l'agent au prochain démarrage (start/restart) — la limite de sauvegardes s'applique immédiatement."
+          >
+            <div className="grid gap-4 sm:grid-cols-3">
+              <form.Field name="memoryMb">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-server-memory">Mémoire (Mo, 0 = illimité)</Label>
+                    {canUpdate ? (
+                      <Input
+                        id="admin-server-memory"
+                        type="number"
+                        min="0"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(Number(e.target.value))}
+                        onBlur={field.handleBlur}
+                      />
+                    ) : (
+                      <p className="py-2 font-medium">
+                        {field.state.value === 0 ? 'Illimité' : `${field.state.value} Mo`}
+                      </p>
+                    )}
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-destructive text-sm">
+                        {field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
 
-            <form.Field name="cpuCores">
-              {(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="admin-server-cpu">CPU (cœurs, 0 = illimité)</Label>
-                  {canUpdate ? (
-                    <Input
-                      id="admin-server-cpu"
-                      type="number"
-                      step="0.5"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(Number(e.target.value))}
-                      onBlur={field.handleBlur}
-                    />
-                  ) : (
-                    <p className="py-2 font-medium">
-                      {field.state.value > 0 ? `${field.state.value} cœur(s)` : 'Illimité'}
-                    </p>
-                  )}
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
-                      {field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            </form.Field>
+              <form.Field name="cpuCores">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-server-cpu">CPU (cœurs, 0 = illimité)</Label>
+                    {canUpdate ? (
+                      <Input
+                        id="admin-server-cpu"
+                        type="number"
+                        step="0.5"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(Number(e.target.value))}
+                        onBlur={field.handleBlur}
+                      />
+                    ) : (
+                      <p className="py-2 font-medium">
+                        {field.state.value > 0 ? `${field.state.value} cœur(s)` : 'Illimité'}
+                      </p>
+                    )}
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-destructive text-sm">
+                        {field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
 
-            <form.Field name="backupLimit">
-              {(field) => (
-                <div className="space-y-2">
-                  <Label htmlFor="admin-server-backup-limit">Limite de sauvegardes</Label>
-                  {canUpdate ? (
-                    <Input
-                      id="admin-server-backup-limit"
-                      type="number"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(Number(e.target.value))}
-                      onBlur={field.handleBlur}
-                    />
-                  ) : (
-                    <p className="py-2 font-medium">
-                      {field.state.value === 0 ? 'Désactivées' : String(field.state.value)}
-                    </p>
-                  )}
-                  {field.state.meta.errors.length > 0 && (
-                    <p className="text-sm text-destructive">
-                      {field.state.meta.errors[0]?.message}
-                    </p>
-                  )}
-                </div>
-              )}
-            </form.Field>
-          </div>
-          {canUpdate && <div className="mt-4">{saveButton}</div>}
-        </CardSection>
+              <form.Field name="backupLimit">
+                {(field) => (
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-server-backup-limit">Limite de sauvegardes</Label>
+                    {canUpdate ? (
+                      <Input
+                        id="admin-server-backup-limit"
+                        type="number"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(Number(e.target.value))}
+                        onBlur={field.handleBlur}
+                      />
+                    ) : (
+                      <p className="py-2 font-medium">
+                        {field.state.value === 0 ? 'Désactivées' : String(field.state.value)}
+                      </p>
+                    )}
+                    {field.state.meta.errors.length > 0 && (
+                      <p className="text-destructive text-sm">
+                        {field.state.meta.errors[0]?.message}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
+            </div>
+            {canUpdate && <div className="mt-4">{saveButton}</div>}
+          </CardSection>
         </form>
       ),
     },
@@ -540,8 +562,7 @@ function AdminServerAllocationsPanel({
   };
 
   const add = useMutation({
-    mutationFn: (allocationId: string) =>
-      addAllocation({ data: { serverId, allocationId } }),
+    mutationFn: (allocationId: string) => addAllocation({ data: { serverId, allocationId } }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Allocation ajoutée');
@@ -550,8 +571,7 @@ function AdminServerAllocationsPanel({
   });
 
   const remove = useMutation({
-    mutationFn: (allocationId: string) =>
-      removeAllocation({ data: { serverId, allocationId } }),
+    mutationFn: (allocationId: string) => removeAllocation({ data: { serverId, allocationId } }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Allocation retirée — elle retourne dans le pool du node');
@@ -560,8 +580,7 @@ function AdminServerAllocationsPanel({
   });
 
   const primary = useMutation({
-    mutationFn: (allocationId: string) =>
-      setPrimary({ data: { serverId, allocationId } }),
+    mutationFn: (allocationId: string) => setPrimary({ data: { serverId, allocationId } }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Allocation principale mise à jour — appliquée au prochain démarrage');
@@ -656,13 +675,13 @@ function AdminServerAllocationsPanel({
             </Button>
           </form>
         ) : (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Lecture seule — la modification des allocations requiert la permission
             panel.servers.update.
           </p>
         )}
         {free.length === 0 && !freeQuery.isPending && (
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="text-muted-foreground mt-2 text-sm">
             Aucune allocation libre sur ce node — crées-en dans la page du node.
           </p>
         )}
@@ -820,7 +839,7 @@ function ServerActionsPanel({
 
   if (!canUpdate && !canDelete) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         Aucune action disponible — permissions d’administration manquantes.
       </p>
     );
@@ -849,11 +868,7 @@ function ServerActionsPanel({
               }
             }}
           >
-            {suspend.isPending
-              ? '…'
-              : suspended
-                ? 'Réactiver'
-                : 'Suspendre'}
+            {suspend.isPending ? '…' : suspended ? 'Réactiver' : 'Suspendre'}
           </Button>
         </CardSection>
       )}
@@ -897,7 +912,7 @@ function ServerActionsPanel({
                 {reloadMutation.isPending ? 'Rechargement…' : 'Recharger la recette'}
               </Button>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 {recipeSyncedAt
                   ? `Dernière version appliquée le ${new Date(recipeSyncedAt).toLocaleString('fr-FR')}.`
                   : 'Version appliquée inconnue (serveur antérieur aux instantanés).'}
@@ -913,17 +928,16 @@ function ServerActionsPanel({
             description="Le serveur passera à la recette choisie et sera réinstallé avec — les variables gardent leurs valeurs pour les noms d’environnement que la nouvelle recette déclare encore."
           >
             <div className="flex w-full max-w-md gap-2">
-              <Select value={targetRecipeId} onValueChange={(value) => setTargetRecipeId(value ?? '')}>
+              <Select
+                value={targetRecipeId}
+                onValueChange={(value) => setTargetRecipeId(value ?? '')}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Choisir une recette" />
                 </SelectTrigger>
                 <SelectContent>
                   {(recipesQuery.data ?? []).map((recipe) => (
-                    <SelectItem
-                      key={recipe.id}
-                      value={recipe.id}
-                      disabled={recipe.id === recipeId}
-                    >
+                    <SelectItem key={recipe.id} value={recipe.id} disabled={recipe.id === recipeId}>
                       {recipe.name}
                       {recipe.id === recipeId ? ' (actuelle)' : ''}
                     </SelectItem>
@@ -931,7 +945,9 @@ function ServerActionsPanel({
                 </SelectContent>
               </Select>
               <Button
-                disabled={!targetRecipeId || targetRecipeId === recipeId || changeMutation.isPending}
+                disabled={
+                  !targetRecipeId || targetRecipeId === recipeId || changeMutation.isPending
+                }
                 onClick={() => setConfirmChangeOpen(true)}
               >
                 {changeMutation.isPending ? 'Application…' : 'Appliquer'}
@@ -1039,9 +1055,7 @@ function ServerActionsPanel({
           }
         }}
         title={
-          targetRecipe
-            ? `Passer « ${name} » de « ${recipeName} » à « ${targetRecipe.name} » ?`
-            : ''
+          targetRecipe ? `Passer « ${name} » de « ${recipeName} » à « ${targetRecipe.name} » ?` : ''
         }
         description="Le serveur sera réinstallé avec la nouvelle recette — les fichiers peuvent être modifiés ou supprimés, et les étapes d’installation de la nouvelle recette s’appliqueront. Pense à sauvegarder les données."
         confirmLabel="Changer et réinstaller"
@@ -1091,4 +1105,3 @@ function ServerActionsPanel({
     </div>
   );
 }
-

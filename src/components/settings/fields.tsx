@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
 import { Lock } from 'lucide-react';
+import type { ReactNode } from 'react';
+
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
 
@@ -30,7 +31,7 @@ export function firstErrorMessage(errors: readonly unknown[] | undefined): strin
  */
 export function ForcedHint({ env }: { env: string }) {
   return (
-    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
       <Lock className="size-3 shrink-0" />
       Forcé par la variable d’environnement <code>{env}</code>
     </p>
@@ -64,8 +65,8 @@ export function SettingFieldShell({
       <Label htmlFor={id}>{label}</Label>
       {children}
       {forced && <ForcedHint env={forced} />}
-      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {hint && !error && <p className="text-muted-foreground text-xs">{hint}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
 }
@@ -93,7 +94,7 @@ export function SettingSwitchRow({
     <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
       <div className="min-w-0">
         <Label htmlFor={id}>{label}</Label>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
         {forced && <ForcedHint env={forced} />}
       </div>
       <Switch

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+
 import { isRuntimeRecipeJson, parseRecipe, parseRuntimeRecipe } from '~/contract';
 import { canonicalJson } from '~/lib/canonical-json';
 import { recipeErrorMessage } from '~/lib/recipe-source';
@@ -37,7 +38,8 @@ export function sha256Text(text: string): string {
  * A file that matches but does not validate still shows up (with its
  * `error`) — only the NAMING decides what is a candidate.
  */
-export const RECIPE_FILE_PATTERN = /(^|\/)recipe-[^/\\]+\.json$|(^|\/)[a-z0-9-]+\/[a-z0-9-]+\.json$/;
+export const RECIPE_FILE_PATTERN =
+  /(^|\/)recipe-[^/\\]+\.json$|(^|\/)[a-z0-9-]+\/[a-z0-9-]+\.json$/;
 
 /** Upper bound per recipe file — same cap as a URL import. */
 export const MAX_RECIPE_FILE_BYTES = 2_000_000;

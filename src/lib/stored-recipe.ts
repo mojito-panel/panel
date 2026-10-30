@@ -19,9 +19,7 @@
  * → 4, legacy `docker_image`/`docker_images` fields dropped. Already-v4
  * recipes are returned as-is.
  */
-export function normalizeStoredRecipe<T extends Record<string, unknown>>(
-  json: T,
-): T {
+export function normalizeStoredRecipe<T extends Record<string, unknown>>(json: T): T {
   if (json.schema_version === 4) return json;
   const {
     docker_image: _dockerImage,

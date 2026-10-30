@@ -1,5 +1,7 @@
 import type { InferEntity } from '@mikro-orm/core';
+
 import type { ServerStatus } from '~/contract';
+
 import type {
   User,
   Session,

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import { cn } from 'cn';
+import { useEffect, useState } from 'react';
 
 /**
  * User avatar — initials by default. When the panel setting `app:gravatar`
@@ -58,7 +58,7 @@ export function UserAvatar({
   return (
     <div
       className={cn(
-        'flex items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold',
+        'bg-sidebar-accent flex items-center justify-center rounded-full text-xs font-semibold',
         className,
       )}
     >

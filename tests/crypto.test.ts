@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { encryptSecret, decryptSecret } from '../src/server/crypto';
 
 const SECRET = 'crypto-secret-0123456789abcdef0123456789';

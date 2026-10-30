@@ -1,7 +1,6 @@
 import { Migration } from '@mikro-orm/migrations';
 
 export class Migration20261023100000 extends Migration {
-
   override name = 'Migration20261023100000';
 
   override up(): void | Promise<void> {
@@ -21,5 +20,4 @@ export class Migration20261023100000 extends Migration {
     this.addSql(`alter table "server" drop column "runtime_snapshots";`);
     this.addSql(`alter table "server" drop column "recipe_synced_at";`);
   }
-
 }

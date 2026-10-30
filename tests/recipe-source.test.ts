@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
 import { canonicalJson } from '~/lib/canonical-json';
 import {
   canonicalGitUrl,
@@ -15,7 +16,9 @@ import {
 
 describe('canonicalJson', () => {
   it('is invariant to key order and whitespace', () => {
-    const a = canonicalJson(JSON.parse('{ "name": "a", "list": [1, 2, 3], "nested": { "b": 1, "a": 2 } }'));
+    const a = canonicalJson(
+      JSON.parse('{ "name": "a", "list": [1, 2, 3], "nested": { "b": 1, "a": 2 } }'),
+    );
     const b = canonicalJson(JSON.parse('{"nested":{"a":2,"b":1},  "list":[1,2,3],"name":"a"}'));
     expect(a).toBe(b);
   });
@@ -97,10 +100,12 @@ describe('parseRecipeSource / formatGitSource', () => {
   });
 
   it('reads a URL without a fragment as a direct source', () => {
-    expect(parseRecipeSource('https://raw.githubusercontent.com/o/r/main/x/recipe-x.json')).toEqual({
-      kind: 'direct',
-      url: 'https://raw.githubusercontent.com/o/r/main/x/recipe-x.json',
-    });
+    expect(parseRecipeSource('https://raw.githubusercontent.com/o/r/main/x/recipe-x.json')).toEqual(
+      {
+        kind: 'direct',
+        url: 'https://raw.githubusercontent.com/o/r/main/x/recipe-x.json',
+      },
+    );
   });
 
   it('returns null on a malformed fragment', () => {
@@ -172,9 +177,9 @@ describe('computeEntryStatus', () => {
   });
 
   it('detects local edits (outranks an available update)', () => {
-    expect(
-      computeEntryStatus({ ...entry, sha: 'bbb' }, { ...recipe, storedSha: 'zzz' }),
-    ).toBe('modified_locally');
+    expect(computeEntryStatus({ ...entry, sha: 'bbb' }, { ...recipe, storedSha: 'zzz' })).toBe(
+      'modified_locally',
+    );
   });
 });
 

@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import type { ReactNode } from 'react';
+import { z } from 'zod';
 
 /**
  * Reusable list contract — everything a list needs in ONE place: its columns
@@ -142,11 +142,7 @@ export interface ListFilterNullable {
   labels?: readonly [string, string];
 }
 
-export type ListFilter =
-  | ListFilterText
-  | ListFilterChoice
-  | ListFilterBoolean
-  | ListFilterNullable;
+export type ListFilter = ListFilterText | ListFilterChoice | ListFilterBoolean | ListFilterNullable;
 
 /** One column of a list: how it renders, and how it sorts/filters server-side. */
 export interface ListColumn<TData, TContext = void> {
@@ -292,7 +288,10 @@ function filterValueSchema(filter: ListFilter): z.ZodType<unknown> {
       }
 
       if (!filter.multiple) {
-        return z.enum(values as [string, ...string[]]).optional().catch(undefined);
+        return z
+          .enum(values as [string, ...string[]])
+          .optional()
+          .catch(undefined);
       }
 
       // Multiple choice keeps the comma-separated STRING form in the query: the
@@ -394,10 +393,7 @@ export function defineList<TData, TContext = void>(
       );
     }
 
-    if (
-      filter.control === 'choice' &&
-      Boolean(filter.options) === Boolean(filter.dynamic)
-    ) {
+    if (filter.control === 'choice' && Boolean(filter.options) === Boolean(filter.dynamic)) {
       throw new Error(
         `List "${name}": filter "${column}" needs either static options or dynamic options.`,
       );
@@ -426,7 +422,10 @@ export function defineList<TData, TContext = void>(
       throw new Error(`List "${name}": a sortable list needs a defaultSort.`);
     }
     defaultSort = [{ id: options.defaultSort.column, desc: options.defaultSort.desc ?? true }];
-    shape.sort = z.enum(sortable as [string, ...string[]]).optional().catch(undefined);
+    shape.sort = z
+      .enum(sortable as [string, ...string[]])
+      .optional()
+      .catch(undefined);
   }
 
   const querySchema = listBaseSchema.extend(shape) as unknown as z.ZodType<ListQuery>;

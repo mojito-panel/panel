@@ -1,23 +1,13 @@
-import { HEALTH_STATS_INTERVAL_MS, type NodeStats } from '~/contract';
+import { Area, AreaChart, CartesianGrid, Customized, XAxis, YAxis } from 'recharts';
+
+import { useFlowSamples } from '~/components/health/use-flow-samples';
+import { useNodeStatsStream } from '~/components/health/use-node-stats-stream';
 import { LiveIndicator } from '~/components/status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import { useNodeStatsStream } from '~/components/health/use-node-stats-stream';
-import { useFlowSamples } from '~/components/health/use-flow-samples';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '~/components/ui/chart';
 import { Skeleton } from '~/components/ui/skeleton';
+import { HEALTH_STATS_INTERVAL_MS, type NodeStats } from '~/contract';
 import { isHttpsScheme } from '~/validators/node';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '~/components/ui/chart';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Customized,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
 /**
  * One node card on /admin/health: identity + latency from the panel's REST
@@ -71,7 +61,7 @@ function formatTime(timestamp: string): string {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-24">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-muted-foreground text-xs">{label}</p>
       <p className="text-sm font-medium tabular-nums">{value}</p>
     </div>
   );
@@ -119,25 +109,26 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
             <CardTitle className="text-base">{node.name}</CardTitle>
             {online && <LiveIndicator live={connection === 'live'} />}
           </div>
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="text-muted-foreground font-mono text-xs">
             {node.fqdn}
-            {node.publicPort !== (isHttpsScheme(node.scheme) ? 443 : 80) &&
-              `:${node.publicPort}`}
+            {node.publicPort !== (isHttpsScheme(node.scheme) ? 443 : 80) && `:${node.publicPort}`}
           </span>
         </div>
       </CardHeader>
       <CardContent>
         {!online ? (
-          <p className="text-sm text-muted-foreground">
-            Agent injoignable — vérifiez qu’il tourne et que le token est
-            valide. Dernier contact :{' '}
+          <p className="text-muted-foreground text-sm">
+            Agent injoignable — vérifiez qu’il tourne et que le token est valide. Dernier contact :{' '}
             {node.lastSeenAt ? new Date(node.lastSeenAt).toLocaleString('fr-FR') : 'jamais'}.
           </p>
         ) : (
           <div className="space-y-4">
             {/* ─── Stats row ─── */}
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <Stat label="Latence" value={node.latencyMs !== null ? `${node.latencyMs} ms` : '—'} />
+              <Stat
+                label="Latence"
+                value={node.latencyMs !== null ? `${node.latencyMs} ms` : '—'}
+              />
               <Stat label="Version" value={stats?.version ?? '—'} />
               <Stat label="Uptime" value={stats ? formatUptime(stats.uptimeSeconds) : '—'} />
               <Stat label="Serveurs actifs" value={String(stats?.serversRunning ?? '—')} />
@@ -153,7 +144,7 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
 
             {/* Disk gauge (volume usage — not worth a time series) */}
             {diskPercent !== null && (
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
                 <div
                   className="h-full rounded-full bg-green-500 transition-all duration-500 ease-out"
                   style={{ width: `${diskPercent}%` }}
@@ -170,7 +161,7 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="mb-1 text-xs text-muted-foreground">
+                  <p className="text-muted-foreground mb-1 text-xs">
                     CPU {stats ? `${stats.cpuPercent}%` : ''}
                   </p>
                   <ChartContainer config={CPU_CONFIG} className="h-32 w-full">
@@ -217,8 +208,11 @@ export function NodeHealthCard({ node }: { node: NodeHealthDto }) {
                 </div>
 
                 <div>
-                  <p className="mb-1 text-xs text-muted-foreground">
-                    RAM {stats ? `${formatMb(stats.memoryUsedMb)} / ${formatMb(stats.memoryTotalMb)}` : ''}
+                  <p className="text-muted-foreground mb-1 text-xs">
+                    RAM{' '}
+                    {stats
+                      ? `${formatMb(stats.memoryUsedMb)} / ${formatMb(stats.memoryTotalMb)}`
+                      : ''}
                   </p>
                   <ChartContainer config={RAM_CONFIG} className="h-32 w-full">
                     <AreaChart data={chartData} margin={{ top: 4, bottom: 0, left: 0, right: 4 }}>

@@ -1,6 +1,8 @@
-import { MikroORM } from '@mikro-orm/postgresql';
-import { Migrator } from '@mikro-orm/migrations';
 import { basename, extname } from 'node:path';
+
+import { Migrator } from '@mikro-orm/migrations';
+import { MikroORM } from '@mikro-orm/postgresql';
+
 import {
   User,
   Session,
@@ -22,8 +24,7 @@ import {
   ScheduleTask,
 } from './entities';
 
-const databaseUrl =
-  process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
+const databaseUrl = process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
 // Bundled migrations (like custodia) — the migrator does not need to
 // resolve a path on disk; works in dev as well as in build.

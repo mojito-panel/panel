@@ -1,11 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { RefreshCw } from 'lucide-react';
-import { getHealthNodesFn } from '~/server/functions/admin';
+
+import { NodeHealthCard } from '~/components/health/node-health-card';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
-import { NodeHealthCard } from '~/components/health/node-health-card';
+import { getHealthNodesFn } from '~/server/functions/admin';
 
 /** /admin/health — node health (real-time graphs via direct WS). */
 export const Route = createFileRoute('/admin/health')({ component: AdminHealthPage });
@@ -43,14 +44,12 @@ function AdminHealthPage() {
         </Button>
       </div>
 
-      {query.isError && (
-        <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-      )}
+      {query.isError && <p className="text-destructive text-sm">Erreur : {query.error.message}</p>}
 
       {(nodes === undefined || nodes.length === 0) && (
         <Card>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               {nodes === undefined
                 ? 'Chargement des nodes…'
                 : 'Aucun node enregistré — ajoutez-en un depuis la page Nodes.'}

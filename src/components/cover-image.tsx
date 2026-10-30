@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { cn } from 'cn';
+import { useState } from 'react';
 
 /**
  * Cover artwork of a marketplace card (a recipe of a registry, or the
@@ -60,9 +60,7 @@ export function CoverImage({
   const showImage = cover !== null && cover !== undefined && cover !== brokenUrl;
 
   return (
-    <div
-      className={cn('relative aspect-[2/3] w-full overflow-hidden bg-muted', className)}
-    >
+    <div className={cn('bg-muted relative aspect-[2/3] w-full overflow-hidden', className)}>
       {/* Gradient always painted underneath — the fallback of a missing
           OR failed cover, and the backdrop that shows through the
           transparent areas of a loaded one. */}

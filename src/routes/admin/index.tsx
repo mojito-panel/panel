@@ -1,21 +1,16 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { Network, Puzzle, RefreshCw, Server, Users } from 'lucide-react';
-import { getAdminOverviewFn, getAdminOverviewHealthFn } from '~/server/functions/admin';
-import { adminNodesList } from '~/lists/nodes';
+
 import { StatusBadge, isLiveData } from '~/components/status-badge';
 import { TimeAgo } from '~/components/time-ago';
-import { isHttpsScheme } from '~/validators/node';
-import { Skeleton } from '~/components/ui/skeleton';
 import { Button } from '~/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '~/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { Skeleton } from '~/components/ui/skeleton';
+import { adminNodesList } from '~/lists/nodes';
+import { getAdminOverviewFn, getAdminOverviewHealthFn } from '~/server/functions/admin';
+import { isHttpsScheme } from '~/validators/node';
 
 /** /admin — admin overview page (Pelican admin overview). */
 export const Route = createFileRoute('/admin/')({
@@ -36,12 +31,12 @@ function StatCard({
   return (
     <Card>
       <CardContent className="flex items-center gap-4">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <Icon className="size-5 text-muted-foreground" />
+        <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg">
+          <Icon className="text-muted-foreground size-5" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-2xl font-bold leading-none">{value}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="truncate text-2xl leading-none font-bold">{value}</p>
+          <p className="text-muted-foreground mt-1 text-sm">
             {label}
             {hint && <span className="ml-1 text-xs">· {hint}</span>}
           </p>
@@ -93,9 +88,7 @@ function AdminOverviewPage() {
         </Button>
       </div>
 
-      {query.isError && (
-        <p className="text-sm text-destructive">Erreur : {query.error.message}</p>
-      )}
+      {query.isError && <p className="text-destructive text-sm">Erreur : {query.error.message}</p>}
 
       {/* ─── Counters ─── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -118,9 +111,7 @@ function AdminOverviewPage() {
       <Card>
         <CardHeader>
           <CardTitle>Nodes</CardTitle>
-          <CardDescription>
-            Santé des agents.
-          </CardDescription>
+          <CardDescription>Santé des agents.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="divide-y">
@@ -136,7 +127,7 @@ function AdminOverviewPage() {
                     >
                       {node.name}
                     </Link>
-                    <p className="truncate font-mono text-xs text-muted-foreground">
+                    <p className="text-muted-foreground truncate font-mono text-xs">
                       {node.fqdn}
                       {node.publicPort !== (isHttpsScheme(node.scheme) ? 443 : 80) &&
                         `:${node.publicPort}`}
@@ -149,7 +140,7 @@ function AdminOverviewPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       {node.serverCount} serveur{node.serverCount > 1 ? 's' : ''}
                     </span>
                     {healthQuery.isPending ? (
@@ -170,11 +161,7 @@ function AdminOverviewPage() {
             {data?.nodes.length === 0 && (
               <p className="text-muted-foreground">
                 Aucun node.{' '}
-                <Link
-                  to="/admin/nodes"
-                  search={adminNodesList.defaultSearch}
-                  className="underline"
-                >
+                <Link to="/admin/nodes" search={adminNodesList.defaultSearch} className="underline">
                   En ajouter un
                 </Link>
                 .
@@ -202,12 +189,12 @@ function AdminOverviewPage() {
                   >
                     {server.name}
                   </Link>
-                  <p className="truncate text-sm text-muted-foreground">
+                  <p className="text-muted-foreground truncate text-sm">
                     {server.recipeName} · {server.nodeName} · {server.ownerEmail}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="hidden text-sm text-muted-foreground sm:inline">
+                  <span className="text-muted-foreground hidden text-sm sm:inline">
                     {new Date(server.createdAt).toLocaleDateString('fr-FR')}
                   </span>
                   <StatusBadge status={server.status} />

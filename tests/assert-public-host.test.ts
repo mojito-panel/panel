@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { isPublicAddress, assertPublicHost } from '../src/server/assert-public-host';
 
 /**
@@ -77,8 +78,6 @@ describe('assertPublicHost', () => {
   });
 
   it('rejects a hostname that does not resolve', async () => {
-    await expect(
-      assertPublicHost('http://mojito-ssrf-test.invalid/recipe.json'),
-    ).rejects.toThrow();
+    await expect(assertPublicHost('http://mojito-ssrf-test.invalid/recipe.json')).rejects.toThrow();
   });
 });

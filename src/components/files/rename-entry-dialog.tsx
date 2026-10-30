@@ -62,9 +62,7 @@ export function RenameEntryDialog({
                   onBlur={field.handleBlur}
                 />
                 {field.state.meta.errors.length > 0 && (
-                  <p className="text-sm text-destructive">
-                    {field.state.meta.errors[0]?.message}
-                  </p>
+                  <p className="text-destructive text-sm">{field.state.meta.errors[0]?.message}</p>
                 )}
               </div>
             )}

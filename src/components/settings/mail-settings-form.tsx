@@ -1,19 +1,8 @@
+import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
-import { updateMailSettingsFn } from '~/server/functions/settings';
-import {
-  updateMailSettingsSchema,
-  type ForcedSettings,
-  type MailSettingsDto,
-  type UpdateMailSettingsDto,
-} from '~/validators/settings';
-import {
-  MAIL_ENCRYPTIONS,
-  type MailDriver,
-  type MailEncryption,
-} from '~/lib/settings';
+
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import {
@@ -23,6 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { MAIL_ENCRYPTIONS, type MailDriver, type MailEncryption } from '~/lib/settings';
+import { updateMailSettingsFn } from '~/server/functions/settings';
+import {
+  updateMailSettingsSchema,
+  type ForcedSettings,
+  type MailSettingsDto,
+  type UpdateMailSettingsDto,
+} from '~/validators/settings';
+
 import { SettingFieldShell } from './fields';
 
 const MAIL_ENCRYPTION_LABELS: Record<MailEncryption, string> = {
@@ -92,9 +90,7 @@ export function MailSettingsForm({
           >
             <Select
               value={field.state.value}
-              onValueChange={(value) =>
-                value !== null && field.handleChange(value as MailDriver)
-              }
+              onValueChange={(value) => value !== null && field.handleChange(value as MailDriver)}
             >
               <SelectTrigger id="settings-mail-driver" className="w-56">
                 <SelectValue />

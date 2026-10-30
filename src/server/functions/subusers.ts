@@ -1,22 +1,24 @@
 import { createServerFn } from '@tanstack/react-start';
-import { withOrmContext } from '../middleware';
 import { z } from 'zod';
+
 import { ServerUser, User } from '~/db/entities';
-import { serverSubusersList } from '~/lists/subusers';
-import { listQueryBuilder, runListQuery } from '~/server/list/query';
-import { requireUser, HttpError, loadServerWithPermission } from '../session';
-import { logActivity } from '../activity';
 import {
   flattenPermissions,
   sanitizeStatements,
   isSubset,
   type PermissionStatements,
 } from '~/lib/permissions';
+import { serverSubusersList } from '~/lists/subusers';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import {
   addServerUserSchema,
   updateServerUserSchema,
   removeServerUserSchema,
 } from '~/validators/server';
+
+import { logActivity } from '../activity';
+import { withOrmContext } from '../middleware';
+import { requireUser, HttpError, loadServerWithPermission } from '../session';
 
 /**
  * Sub-user management (Pelican "Users" tab of a server): per-server
@@ -36,10 +38,7 @@ function assertWithinCeiling(
   viewer: { isSubuser: boolean; permissions: string[] },
 ): void {
   if (viewer.isSubuser && !isSubset(grant, viewer.permissions)) {
-    throw new HttpError(
-      403,
-      'Tu ne peux accorder que les permissions que tu possèdes toi-même',
-    );
+    throw new HttpError(403, 'Tu ne peux accorder que les permissions que tu possèdes toi-même');
   }
 }
 
@@ -102,11 +101,9 @@ export const addServerUserFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server, viewer } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.users': ['create'] },
-    );
+    const { em, server, viewer } = await loadServerWithPermission(data.serverId, user, {
+      'server.users': ['create'],
+    });
 
     const statements = sanitizeStatements(data.permissions);
     const grant = flattenPermissions(statements);
@@ -161,11 +158,9 @@ export const updateServerUserFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server, viewer } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.users': ['update'] },
-    );
+    const { em, server, viewer } = await loadServerWithPermission(data.serverId, user, {
+      'server.users': ['update'],
+    });
 
     const row = await em.findOne(ServerUser, {
       serverId: server.id,
@@ -201,11 +196,9 @@ export const removeServerUserFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.users': ['delete'] },
-    );
+    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+      'server.users': ['delete'],
+    });
 
     const row = await em.findOne(ServerUser, {
       serverId: server.id,

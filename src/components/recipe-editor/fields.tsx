@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -46,8 +47,8 @@ export function FieldShell({
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       {children}
-      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {hint && !error && <p className="text-muted-foreground text-xs">{hint}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
 }
@@ -132,7 +133,7 @@ export function KvRows({
                 <Trash2 />
               </Button>
             </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {error && <p className="text-destructive text-xs">{error}</p>}
           </div>
         );
       })}
@@ -182,15 +183,13 @@ export function CollapseCard({
           aria-expanded={open}
         >
           {open ? (
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronDown className="text-muted-foreground size-4 shrink-0" />
           ) : (
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            <ChevronRight className="text-muted-foreground size-4 shrink-0" />
           )}
           {badge}
           <span className="truncate font-medium">{title}</span>
-          {subtitle && (
-            <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
-          )}
+          {subtitle && <span className="text-muted-foreground truncate text-xs">{subtitle}</span>}
         </button>
         {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
       </div>
@@ -227,13 +226,7 @@ export function ItemActions({
           ↓
         </Button>
       )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        aria-label="Supprimer"
-        onClick={onRemove}
-      >
+      <Button type="button" variant="ghost" size="icon" aria-label="Supprimer" onClick={onRemove}>
         <Trash2 />
       </Button>
     </>

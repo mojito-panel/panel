@@ -1,16 +1,17 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
+import { ArrowUp, FilePlus, FolderPlus, Trash2, Upload } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { toast } from 'sonner';
-import { ArrowUp, FilePlus, FolderPlus, Trash2, Upload } from 'lucide-react';
 
-import { MAX_EDITABLE_FILE_SIZE, MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
-import { isEditableFile } from '~/lib/text-files';
+import { ConfirmDialog } from '~/components/confirm-dialog';
 import { ListTable } from '~/components/data-table/list-table';
+import { ErrorState } from '~/components/error/error-state';
+import { SftpConnectionDialog } from '~/components/sftp-card';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
-import { ConfirmDialog } from '~/components/confirm-dialog';
-import { SftpConnectionDialog } from '~/components/sftp-card';
+import { MAX_EDITABLE_FILE_SIZE, MAX_UPLOAD_SIZE, type FileObject } from '~/contract';
+import { isEditableFile } from '~/lib/text-files';
 import { mergeQuery, type ListQuery } from '~/lists/define';
 import { filesList } from '~/lists/files';
 import {
@@ -20,10 +21,10 @@ import {
   deleteEntriesFn,
   uploadFileFn,
 } from '~/server/functions/files';
+
 import { CreateEntryForm } from './create-entry-form';
-import { RenameEntryDialog } from './rename-entry-dialog';
 import { formatSize } from './format-size';
-import { ErrorState } from '~/components/error/error-state';
+import { RenameEntryDialog } from './rename-entry-dialog';
 
 /** Directory listing — toolbar + breadcrumb + the listing table inside a card. */
 export function FileBrowser({
@@ -129,7 +130,12 @@ export function FileBrowser({
   const upload = useMutation({
     mutationFn: (data: { filename: string; contentBase64: string }) =>
       uploadFile({
-        data: { serverId, directory: dir, filename: data.filename, contentBase64: data.contentBase64 },
+        data: {
+          serverId,
+          directory: dir,
+          filename: data.filename,
+          contentBase64: data.contentBase64,
+        },
       }),
     onSuccess: () => {
       setError(null);
@@ -184,17 +190,14 @@ export function FileBrowser({
       {/* Breadcrumb + actions */}
       <div className="flex flex-wrap items-center gap-2">
         <nav className="flex flex-wrap items-center gap-1 text-sm">
-          <button
-            className="rounded px-2 py-1 hover:bg-muted"
-            onClick={() => onNavigate('')}
-          >
+          <button className="hover:bg-muted rounded px-2 py-1" onClick={() => onNavigate('')}>
             Racine
           </button>
           {segments.map((segment, index) => (
             <span key={segments.slice(0, index + 1).join('/')} className="flex items-center gap-1">
               <span className="text-muted-foreground">/</span>
               <button
-                className="rounded px-2 py-1 hover:bg-muted"
+                className="hover:bg-muted rounded px-2 py-1"
                 onClick={() => onNavigate(segments.slice(0, index + 1).join('/'))}
               >
                 {segment}
@@ -241,11 +244,11 @@ export function FileBrowser({
         </div>
       </div>
 
-      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p className="text-destructive mt-3 text-sm">{error}</p>}
 
       {/* Bulk selection bar — bulk delete of the checked entries */}
       {canDelete && selected.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
+        <div className="bg-muted/50 mt-3 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 text-sm">
           <span>
             {selected.length} élément{selected.length > 1 ? 's' : ''} sélectionné
             {selected.length > 1 ? 's' : ''}
@@ -300,9 +303,7 @@ export function FileBrowser({
                 list={filesList}
                 rows={entries}
                 search={tableQuery}
-                onSearchChange={(patch) =>
-                  setTableQuery((previous) => mergeQuery(previous, patch))
-                }
+                onSearchChange={(patch) => setTableQuery((previous) => mergeQuery(previous, patch))}
                 isPending={query.isPending}
                 emptyMessage="Dossier vide"
                 rowContext={{
@@ -350,7 +351,11 @@ export function FileBrowser({
             // dialog stays open for the retry.
           }
         }}
-        title={toDelete ? `Supprimer « ${toDelete.name} »${toDelete.isDirectory ? ' et son contenu' : ''} ?` : ''}
+        title={
+          toDelete
+            ? `Supprimer « ${toDelete.name} »${toDelete.isDirectory ? ' et son contenu' : ''} ?`
+            : ''
+        }
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
         destructive

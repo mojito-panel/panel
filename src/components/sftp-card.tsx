@@ -1,6 +1,5 @@
-import { useAuth } from '~/contexts/use-auth';
-import { buildSftpUsername } from '~/lib/sftp';
 import { KeyRound } from 'lucide-react';
+
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -10,6 +9,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
+import { useAuth } from '~/contexts/use-auth';
+import { buildSftpUsername } from '~/lib/sftp';
 
 /** Read-only info row of the SFTP connection details. */
 function SftpInfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -49,15 +50,17 @@ export function SftpConnectionDialog({
         <DialogHeader>
           <DialogTitle>Connexion SFTP</DialogTitle>
           <DialogDescription>
-            Accès direct aux fichiers du serveur avec un client SFTP
-            (FileZilla, WinSCP…). Le mot de passe est celui de ton compte
-            panel.
+            Accès direct aux fichiers du serveur avec un client SFTP (FileZilla, WinSCP…). Le mot de
+            passe est celui de ton compte panel.
           </DialogDescription>
         </DialogHeader>
         <div className="divide-y">
           <SftpInfoRow label="Hôte" value={`${fqdn}:${sftpPort}`} />
           <SftpInfoRow label="Port" value={sftpPort} />
-          <SftpInfoRow label="Identifiant" value={buildSftpUsername(user?.username ?? '…', serverId)} />
+          <SftpInfoRow
+            label="Identifiant"
+            value={buildSftpUsername(user?.username ?? '…', serverId)}
+          />
           <SftpInfoRow label="Mot de passe" value="Ton mot de passe panel" />
         </div>
       </DialogContent>

@@ -1,10 +1,11 @@
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+
 import { DataTable } from '~/components/data-table/data-table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
-import { mergeQuery, type ListQuery } from '~/lists/define';
 import { activityList } from '~/lists/activity';
+import { mergeQuery, type ListQuery } from '~/lists/define';
 import { listServerActivityFn } from '~/server/functions/activity';
 
 export const Route = createFileRoute('/servers/$serverId/activity')({
@@ -38,8 +39,7 @@ function ServerActivityPage() {
         <CardHeader>
           <CardTitle>Activité</CardTitle>
           <CardDescription>
-            Journal d'audit du serveur : actions des utilisateurs, démarrages/arrêts,
-            sauvegardes.
+            Journal d'audit du serveur : actions des utilisateurs, démarrages/arrêts, sauvegardes.
           </CardDescription>
         </CardHeader>
         <CardContent>

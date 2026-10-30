@@ -1,5 +1,6 @@
-import type { ServerStatusDb } from '~/db/types';
 import { cn } from 'cn';
+
+import type { ServerStatusDb } from '~/db/types';
 
 /**
  * Status display components — one place to restyle every status in the
@@ -153,10 +154,10 @@ export function StatusBall({
               padding box, not laid out inside it, so it would not scale
               about the dot's center. An explicit 100% size keeps the
               transform origin on the wrapper's center. */}
-          <span className={cn('absolute size-full animate-live-ring rounded-full', t.dot)} />
+          <span className={cn('animate-live-ring absolute size-full rounded-full', t.dot)} />
           <span
             className={cn(
-              'absolute size-full animate-live-ring rounded-full [animation-delay:0.66s]',
+              'animate-live-ring absolute size-full rounded-full [animation-delay:0.66s]',
               t.dot,
             )}
           />
@@ -244,16 +245,14 @@ export function LiveIndicator({ live }: { live: boolean }) {
     <span
       className={cn(
         'inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
-        live
-          ? TONES.positive.chip
-          : 'border-border bg-muted/60 text-muted-foreground',
+        live ? TONES.positive.chip : 'border-border bg-muted/60 text-muted-foreground',
       )}
     >
       <span className="relative inline-flex size-1.5">
         {live && (
           <>
-            <span className="absolute size-full animate-live-ring rounded-full bg-emerald-500" />
-            <span className="absolute size-full animate-live-ring rounded-full bg-emerald-500 [animation-delay:0.66s]" />
+            <span className="animate-live-ring absolute size-full rounded-full bg-emerald-500" />
+            <span className="animate-live-ring absolute size-full rounded-full bg-emerald-500 [animation-delay:0.66s]" />
           </>
         )}
         <span

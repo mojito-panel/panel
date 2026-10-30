@@ -1,27 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
-import { withOrmContext } from '../middleware';
-import { orm } from '../orm';
+
 import { Node } from '~/db/entities';
 import type { IUser } from '~/db/types';
-import {
-  requireUser,
-  HttpError,
-  loadServerWithPermission,
-} from '../session';
 import type { PermissionRequest } from '~/lib/permissions';
-import { decryptSecret } from '../crypto';
-import { signFileDownloadToken } from '../jwt';
-import { isHttpsScheme } from '~/validators/node';
-import { AgentError } from '../agent/client';
-import {
-  agentListFiles,
-  agentReadFile,
-  agentWriteFile,
-  agentCreateEntry,
-  agentRenameEntry,
-  agentDeleteEntries,
-  agentUploadFile,
-} from '../agent/client';
 import {
   filesQuerySchema,
   filePathQuerySchema,
@@ -32,6 +13,23 @@ import {
   deleteEntriesSchema,
   uploadFileSchema,
 } from '~/validators/files';
+import { isHttpsScheme } from '~/validators/node';
+
+import { AgentError } from '../agent/client';
+import {
+  agentListFiles,
+  agentReadFile,
+  agentWriteFile,
+  agentCreateEntry,
+  agentRenameEntry,
+  agentDeleteEntries,
+  agentUploadFile,
+} from '../agent/client';
+import { decryptSecret } from '../crypto';
+import { signFileDownloadToken } from '../jwt';
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
+import { requireUser, HttpError, loadServerWithPermission } from '../session';
 
 /**
  * File browser server functions — the panel PROXIES every operation to the
@@ -51,11 +49,7 @@ import {
  * Mirrors `loadServerWithPermission` (session.ts) — but returns the NODE,
  * since the handlers only ever proxy to the agent.
  */
-async function loadNodeWithPermission(
-  serverId: string,
-  user: IUser,
-  request: PermissionRequest,
-) {
+async function loadNodeWithPermission(serverId: string, user: IUser, request: PermissionRequest) {
   const { server } = await loadServerWithPermission(serverId, user, request);
   const node = await orm.em.findOne(Node, { id: server.nodeId });
   if (!node) throw new HttpError(500, 'Node introuvable');
@@ -80,8 +74,7 @@ function isNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if (err.message === 'fetch failed') return true;
   const code =
-    (err as { code?: unknown }).code ??
-    (err.cause as { code?: unknown } | undefined)?.code;
+    (err as { code?: unknown }).code ?? (err.cause as { code?: unknown } | undefined)?.code;
   return typeof code === 'string' && NETWORK_ERROR_CODES.has(code);
 }
 

@@ -24,7 +24,7 @@ interface InstallNoticeProps {
 export function InstallNotice({ status, onRetry, retryPending, retryError }: InstallNoticeProps) {
   if (status?.status === 'failed') {
     return (
-      <div className="flex flex-wrap items-center gap-3 text-sm text-destructive">
+      <div className="text-destructive flex flex-wrap items-center gap-3 text-sm">
         <span>Échec de l'installation</span>
         {onRetry && (
           <Button size="sm" variant="outline" onClick={onRetry} disabled={retryPending}>
@@ -37,7 +37,7 @@ export function InstallNotice({ status, onRetry, retryPending, retryError }: Ins
     );
   }
   return (
-    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+    <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
       <InProgressBadge label="Installation en cours" tone="active" />
       <span>— suivez la progression ci-dessous.</span>
     </p>

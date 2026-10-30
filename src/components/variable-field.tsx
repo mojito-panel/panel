@@ -1,4 +1,3 @@
-import type { RecipeVariable } from '~/contract';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import {
@@ -8,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import type { RecipeVariable } from '~/contract';
 
 /** Type sent by the recipe vs value kept in the form state. */
 export type VariableValue = string | number | boolean;
@@ -36,7 +36,7 @@ export function VariableField({
     <div className="space-y-2">
       <Label htmlFor={variable.env}>
         {variable.name}
-        <span className="ml-2 font-mono text-xs text-muted-foreground">{variable.env}</span>
+        <span className="text-muted-foreground ml-2 font-mono text-xs">{variable.env}</span>
       </Label>
       {variable.type === 'boolean' ? (
         <Select
@@ -89,9 +89,9 @@ export function VariableField({
         />
       )}
       {variable.description && (
-        <p className="text-xs text-muted-foreground">{variable.description}</p>
+        <p className="text-muted-foreground text-xs">{variable.description}</p>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
 }

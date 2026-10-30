@@ -9,8 +9,9 @@
  * by the services and the thin server functions of `src/server/functions/`.
  */
 import { Recipe } from '~/db/entities';
-import { orm } from './orm';
 import { normalizeStoredRecipe } from '~/lib/stored-recipe';
+
+import { orm } from './orm';
 
 export class RuntimeResolutionError extends Error {}
 

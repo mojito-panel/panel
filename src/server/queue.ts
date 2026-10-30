@@ -17,8 +17,7 @@ import { PgBoss } from 'pg-boss';
  * `src/server/schedules.ts`. pg-boss only carries the durable task chain.
  */
 
-const databaseUrl =
-  process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
+const databaseUrl = process.env.DATABASE_URL ?? 'postgres://mojito:mojito@localhost:5432/mojito';
 
 let queue: PgBoss | null = null;
 let started: Promise<PgBoss> | null = null;
@@ -49,9 +48,11 @@ export function getQueue(): PgBoss {
 export function startQueue(): Promise<PgBoss> {
   // Reuse the in-flight/finished promise: a module re-evaluation (SSR
   // reload in dev) must not start a second instance on top of the first.
-  started ??= getQueue().start().then((boss) => {
-    console.log('[bootstrap] pg-boss queue started (schema "pgboss")');
-    return boss;
-  });
+  started ??= getQueue()
+    .start()
+    .then((boss) => {
+      console.log('[bootstrap] pg-boss queue started (schema "pgboss")');
+      return boss;
+    });
   return started;
 }

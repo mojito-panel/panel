@@ -102,7 +102,10 @@ function validateXml(model: monaco.editor.ITextModel): void {
     if (errorNode) {
       const text = errorNode.textContent ?? 'XML invalide';
       const message =
-        text.split('\n').find((line) => /error/i.test(line))?.trim() || text.trim().slice(0, 200);
+        text
+          .split('\n')
+          .find((line) => /error/i.test(line))
+          ?.trim() || text.trim().slice(0, 200);
       const { line, column } = parseErrorPosition(text);
       markers.push({
         severity: monaco.MarkerSeverity.Error,
@@ -125,64 +128,67 @@ function validateIni(model: monaco.editor.ITextModel): void {
   const seen = new Set<string>();
   let section = '';
 
-  model.getValue().split('\n').forEach((raw, index) => {
-    const line = raw.trim();
-    if (!line || line.startsWith('#') || line.startsWith(';')) return;
+  model
+    .getValue()
+    .split('\n')
+    .forEach((raw, index) => {
+      const line = raw.trim();
+      if (!line || line.startsWith('#') || line.startsWith(';')) return;
 
-    if (line.startsWith('[')) {
-      if (!line.endsWith(']') || line.length < 3) {
+      if (line.startsWith('[')) {
+        if (!line.endsWith(']') || line.length < 3) {
+          markers.push({
+            severity: monaco.MarkerSeverity.Error,
+            message: 'Section mal formée — attendu [nom]',
+            startLineNumber: index + 1,
+            startColumn: 1,
+            endLineNumber: index + 1,
+            endColumn: line.length + 1,
+          });
+        } else {
+          section = line.slice(1, -1).trim().toLowerCase();
+        }
+        return;
+      }
+
+      const separator = line.indexOf('=');
+      if (separator === -1) {
         markers.push({
           severity: monaco.MarkerSeverity.Error,
-          message: 'Section mal formée — attendu [nom]',
+          message: 'Une entrée doit être de la forme clé=valeur',
           startLineNumber: index + 1,
           startColumn: 1,
           endLineNumber: index + 1,
           endColumn: line.length + 1,
         });
-      } else {
-        section = line.slice(1, -1).trim().toLowerCase();
+        return;
       }
-      return;
-    }
-
-    const separator = line.indexOf('=');
-    if (separator === -1) {
-      markers.push({
-        severity: monaco.MarkerSeverity.Error,
-        message: 'Une entrée doit être de la forme clé=valeur',
-        startLineNumber: index + 1,
-        startColumn: 1,
-        endLineNumber: index + 1,
-        endColumn: line.length + 1,
-      });
-      return;
-    }
-    const key = line.slice(0, separator).trim();
-    if (!key) {
-      markers.push({
-        severity: monaco.MarkerSeverity.Error,
-        message: 'Clé vide avant « = »',
-        startLineNumber: index + 1,
-        startColumn: separator + 1,
-        endLineNumber: index + 1,
-        endColumn: separator + 2,
-      });
-      return;
-    }
-    const id = `${section}\u0000${key.toLowerCase()}`;
-    if (seen.has(id)) {
-      markers.push({
-        severity: monaco.MarkerSeverity.Warning,
-        message: `Clé « ${key} » déjà définie${section ? ` dans [${section}]` : ''} — la dernière valeur gagne`,
-        startLineNumber: index + 1,
-        startColumn: 1,
-        endLineNumber: index + 1,
-        endColumn: separator + 1,
-      });
-    } else {
-      seen.add(id);
-    }
-  });
+      const key = line.slice(0, separator).trim();
+      if (!key) {
+        markers.push({
+          severity: monaco.MarkerSeverity.Error,
+          message: 'Clé vide avant « = »',
+          startLineNumber: index + 1,
+          startColumn: separator + 1,
+          endLineNumber: index + 1,
+          endColumn: separator + 2,
+        });
+        return;
+      }
+      const id = `${section}\u0000${key.toLowerCase()}`;
+      if (seen.has(id)) {
+        markers.push({
+          severity: monaco.MarkerSeverity.Warning,
+          message: `Clé « ${key} » déjà définie${section ? ` dans [${section}]` : ''} — la dernière valeur gagne`,
+          startLineNumber: index + 1,
+          startColumn: 1,
+          endLineNumber: index + 1,
+          endColumn: separator + 1,
+        });
+      } else {
+        seen.add(id);
+      }
+    });
 
   monaco.editor.setModelMarkers(model, 'mojito-ini', markers);
 }

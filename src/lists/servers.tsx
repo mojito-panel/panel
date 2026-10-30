@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Trash2 } from 'lucide-react';
+
 import { StatusBadge } from '~/components/status-badge';
 import { Button } from '~/components/ui/button';
 import { defineList, field } from '~/lists/define';
@@ -68,7 +69,7 @@ export const adminServersList = defineList<AdminServerRow, AdminServersContext>(
           >
             {server.name}
           </Link>
-          <p className="text-xs text-muted-foreground">{server.recipeName}</p>
+          <p className="text-muted-foreground text-xs">{server.recipeName}</p>
         </div>
       ),
       filter: { control: 'text', target: field('name') },
@@ -79,7 +80,7 @@ export const adminServersList = defineList<AdminServerRow, AdminServersContext>(
       cell: (server) => (
         <div>
           <p className="font-medium">{server.ownerName ?? '—'}</p>
-          <p className="text-xs text-muted-foreground">{server.ownerEmail}</p>
+          <p className="text-muted-foreground text-xs">{server.ownerEmail}</p>
         </div>
       ),
       filter: { control: 'text', target: field('u.email') },

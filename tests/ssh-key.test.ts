@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   parsePublicKey,
   publicKeyTypeLabel,
@@ -33,8 +34,7 @@ describe('parsePublicKey', () => {
   it('parses an RSA public key line', () => {
     // Real 2048-bit RSA public key, truncated blob is fine for the parser
     // (the declared-type check reads the first field only).
-    const rsa =
-      'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDLxA9JhNjK9PAvHZGl8KLvJMDCDE1f user@host';
+    const rsa = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDLxA9JhNjK9PAvHZGl8KLvJMDCDE1f user@host';
     expect(parsePublicKey(rsa)?.type).toBe('ssh-rsa');
     expect(parsePublicKey(rsa)?.comment).toBe('user@host');
   });
@@ -53,7 +53,9 @@ describe('parsePublicKey', () => {
 
   it('rejects an unknown key type', () => {
     expect(
-      parsePublicKey('ssh-dss AAAAC3NzaC1lZDI1NTE5AAAAIPb6e7BrXlDDwMTLic0r0wR36Ka1OrAsTh0BsUmvEsD2'),
+      parsePublicKey(
+        'ssh-dss AAAAC3NzaC1lZDI1NTE5AAAAIPb6e7BrXlDDwMTLic0r0wR36Ka1OrAsTh0BsUmvEsD2',
+      ),
     ).toBeNull();
   });
 
@@ -85,7 +87,9 @@ describe('looksLikePrivateKey', () => {
   });
 
   it('accepts CRLF line endings', () => {
-    expect(looksLikePrivateKey('-----BEGIN OPENSSH PRIVATE KEY-----\r\nb3BlbnNzaC1rZXk')).toBe(true);
+    expect(looksLikePrivateKey('-----BEGIN OPENSSH PRIVATE KEY-----\r\nb3BlbnNzaC1rZXk')).toBe(
+      true,
+    );
   });
 
   it('rejects a public key line or free text', () => {

@@ -1,6 +1,5 @@
 import { CardSection } from '~/components/tabs-card';
 import { Input } from '~/components/ui/input';
-import { Textarea } from '~/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -8,6 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Textarea } from '~/components/ui/textarea';
+
 import { FieldShell, KvRows, TagsInput } from './fields';
 import type { RecipeForm } from './recipe-editor';
 
@@ -22,7 +23,9 @@ export function pairErrors(
   fields: Record<string, readonly unknown[]>,
 ): Record<number, readonly unknown[]> {
   const map: Record<number, readonly unknown[]> = {};
-  const pattern = new RegExp(`^${prefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\[(\\d+)\\]\\.key$`);
+  const pattern = new RegExp(
+    `^${prefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\[(\\d+)\\]\\.key$`,
+  );
   for (const [fieldName, issues] of Object.entries(fields)) {
     const match = fieldName.match(pattern);
     if (match) map[Number(match[1])] = issues;
@@ -33,10 +36,7 @@ export function pairErrors(
 export function ConfigurationTab({ form }: { form: RecipeForm }) {
   return (
     <div className="divide-y">
-      <CardSection
-        title="Identité"
-        description="Nom, auteur et description de la recette."
-      >
+      <CardSection title="Identité" description="Nom, auteur et description de la recette.">
         <div className="grid gap-4 md:grid-cols-2">
           <form.Field name="recipeType">
             {(field) => (
@@ -229,8 +229,11 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
                   >
                     <form.Subscribe
                       selector={(s) =>
-                        (s.errorMap.onChange as { fields?: Record<string, readonly unknown[]> } | undefined)
-                          ?.fields ?? {}
+                        (
+                          s.errorMap.onChange as
+                            | { fields?: Record<string, readonly unknown[]> }
+                            | undefined
+                        )?.fields ?? {}
                       }
                     >
                       {(errorFields) => (
@@ -264,129 +267,145 @@ export function ConfigurationTab({ form }: { form: RecipeForm }) {
                 title="Environnement fixe"
                 description="Variables injectées au spawn du serveur — utilisables dans les templates {{VAR}}."
               >
-        <form.Field name="env">
-          {(field) => (
-            <FieldShell
-              id="recipe-env"
-              label="Variables d'environnement"
-              hint="Ex : SERVER_JARFILE → server.jar."
-              errors={field.state.meta.errors}
-            >
-              <form.Subscribe
-                selector={(s) =>
-                  (s.errorMap.onChange as { fields?: Record<string, readonly unknown[]> } | undefined)
-                    ?.fields ?? {}
-                }
+                <form.Field name="env">
+                  {(field) => (
+                    <FieldShell
+                      id="recipe-env"
+                      label="Variables d'environnement"
+                      hint="Ex : SERVER_JARFILE → server.jar."
+                      errors={field.state.meta.errors}
+                    >
+                      <form.Subscribe
+                        selector={(s) =>
+                          (
+                            s.errorMap.onChange as
+                              | { fields?: Record<string, readonly unknown[]> }
+                              | undefined
+                          )?.fields ?? {}
+                        }
+                      >
+                        {(errorFields) => (
+                          <KvRows
+                            pairs={field.state.value}
+                            onChange={field.handleChange}
+                            keyPlaceholder="SERVER_JARFILE"
+                            valuePlaceholder="server.jar"
+                            addLabel="Ajouter une variable"
+                            errors={pairErrors('env', errorFields)}
+                          />
+                        )}
+                      </form.Subscribe>
+                    </FieldShell>
+                  )}
+                </form.Field>
+              </CardSection>
+
+              <CardSection
+                title="Prérequis"
+                description="Refusés par l'agent si la machine ne convient pas (0 = aucun)."
               >
-                {(errorFields) => (
-                  <KvRows
-                    pairs={field.state.value}
-                    onChange={field.handleChange}
-                    keyPlaceholder="SERVER_JARFILE"
-                    valuePlaceholder="server.jar"
-                    addLabel="Ajouter une variable"
-                    errors={pairErrors('env', errorFields)}
-                  />
-                )}
-              </form.Subscribe>
-            </FieldShell>
-          )}
-        </form.Field>
-      </CardSection>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <form.Field name="requirements.minRamMb">
+                    {(field) => (
+                      <FieldShell
+                        id="recipe-min-ram"
+                        label="RAM minimale (Mo)"
+                        errors={field.state.meta.errors}
+                      >
+                        <Input
+                          id="recipe-min-ram"
+                          type="number"
+                          value={String(field.state.value)}
+                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                          onBlur={field.handleBlur}
+                        />
+                      </FieldShell>
+                    )}
+                  </form.Field>
 
-      <CardSection
-        title="Prérequis"
-        description="Refusés par l'agent si la machine ne convient pas (0 = aucun)."
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <form.Field name="requirements.minRamMb">
-            {(field) => (
-              <FieldShell id="recipe-min-ram" label="RAM minimale (Mo)" errors={field.state.meta.errors}>
-                <Input
-                  id="recipe-min-ram"
-                  type="number"
-                  value={String(field.state.value)}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                  onBlur={field.handleBlur}
-                />
-              </FieldShell>
-            )}
-          </form.Field>
+                  <form.Field name="requirements.minDiskMb">
+                    {(field) => (
+                      <FieldShell
+                        id="recipe-min-disk"
+                        label="Disque minimal (Mo)"
+                        errors={field.state.meta.errors}
+                      >
+                        <Input
+                          id="recipe-min-disk"
+                          type="number"
+                          value={String(field.state.value)}
+                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                          onBlur={field.handleBlur}
+                        />
+                      </FieldShell>
+                    )}
+                  </form.Field>
 
-          <form.Field name="requirements.minDiskMb">
-            {(field) => (
-              <FieldShell id="recipe-min-disk" label="Disque minimal (Mo)" errors={field.state.meta.errors}>
-                <Input
-                  id="recipe-min-disk"
-                  type="number"
-                  value={String(field.state.value)}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                  onBlur={field.handleBlur}
-                />
-              </FieldShell>
-            )}
-          </form.Field>
+                  <form.Field name="requirements.minCpuPercent">
+                    {(field) => (
+                      <FieldShell
+                        id="recipe-min-cpu"
+                        label="CPU minimal (%)"
+                        errors={field.state.meta.errors}
+                      >
+                        <Input
+                          id="recipe-min-cpu"
+                          type="number"
+                          value={String(field.state.value)}
+                          onChange={(e) => field.handleChange(Number(e.target.value))}
+                          onBlur={field.handleBlur}
+                        />
+                      </FieldShell>
+                    )}
+                  </form.Field>
 
-          <form.Field name="requirements.minCpuPercent">
-            {(field) => (
-              <FieldShell id="recipe-min-cpu" label="CPU minimal (%)" errors={field.state.meta.errors}>
-                <Input
-                  id="recipe-min-cpu"
-                  type="number"
-                  value={String(field.state.value)}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                  onBlur={field.handleBlur}
-                />
-              </FieldShell>
-            )}
-          </form.Field>
+                  <form.Field name="requirements.requiredCommands">
+                    {(field) => (
+                      <FieldShell
+                        id="recipe-required-commands"
+                        label="Commandes requises"
+                        hint="Exécutables qui doivent exister sur l'hôte, séparés par des virgules."
+                        errors={field.state.meta.errors}
+                      >
+                        <TagsInput
+                          id="recipe-required-commands"
+                          value={field.state.value}
+                          onChange={field.handleChange}
+                          onBlur={field.handleBlur}
+                          placeholder="java, curl"
+                        />
+                      </FieldShell>
+                    )}
+                  </form.Field>
+                </div>
+              </CardSection>
 
-          <form.Field name="requirements.requiredCommands">
-            {(field) => (
-              <FieldShell
-                id="recipe-required-commands"
-                label="Commandes requises"
-                hint="Exécutables qui doivent exister sur l'hôte, séparés par des virgules."
-                errors={field.state.meta.errors}
+              <CardSection
+                title="Sauvegardes"
+                description="Motifs d'inclusion (globs relatifs à la racine du serveur) du contenu des sauvegardes. Vide = tout le serveur ; le dossier .bin de l'agent est toujours exclu."
               >
-                <TagsInput
-                  id="recipe-required-commands"
-                  value={field.state.value}
-                  onChange={field.handleChange}
-                  onBlur={field.handleBlur}
-                  placeholder="java, curl"
-                />
-              </FieldShell>
-            )}
-          </form.Field>
-        </div>
-      </CardSection>
-
-      <CardSection
-        title="Sauvegardes"
-        description="Motifs d'inclusion (globs relatifs à la racine du serveur) du contenu des sauvegardes. Vide = tout le serveur ; le dossier .bin de l'agent est toujours exclu."
-      >
-        <form.Field name="backup.include">
-            {(field) => (
-              <FieldShell
-                id="recipe-backup-include"
-                label="Contenu inclus"
-                hint="Ex : world, plugins/*, *.properties — pas de « .. », pas de chemin absolu."
-                errors={field.state.meta.errors}
-              >
-                <TagsInput
-                  id="recipe-backup-include"
-                  value={field.state.value}
-                  onChange={field.handleChange}
-                  onBlur={field.handleBlur}
-                  placeholder="world, plugins, server.properties"
-                />
-              </FieldShell>
-            )}
-          </form.Field>
+                <form.Field name="backup.include">
+                  {(field) => (
+                    <FieldShell
+                      id="recipe-backup-include"
+                      label="Contenu inclus"
+                      hint="Ex : world, plugins/*, *.properties — pas de « .. », pas de chemin absolu."
+                      errors={field.state.meta.errors}
+                    >
+                      <TagsInput
+                        id="recipe-backup-include"
+                        value={field.state.value}
+                        onChange={field.handleChange}
+                        onBlur={field.handleBlur}
+                        placeholder="world, plugins, server.properties"
+                      />
+                    </FieldShell>
+                  )}
+                </form.Field>
               </CardSection>
             </>
-          )}
+          )
+        }
       </form.Subscribe>
     </div>
   );

@@ -1,24 +1,25 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
 import { useForm } from '@tanstack/react-form';
-import { toast } from 'sonner';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useServerFn } from '@tanstack/react-start';
 import { ArrowLeft, Play, Save, Trash2 } from 'lucide-react';
-import { Button } from '~/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
 import { ConfirmDialog } from '~/components/confirm-dialog';
 import { ScheduleFormFields } from '~/components/schedule-form';
+import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { cronToHuman } from '~/lib/cron';
 import { hasServerPermissions } from '~/lib/permissions';
 import { serverSchedulesList } from '~/lists/schedules';
-import { getServerFn } from '~/server/functions/servers';
 import {
   getScheduleFn,
   updateScheduleFn,
   runScheduleNowFn,
   deleteScheduleFn,
 } from '~/server/functions/schedules';
+import { getServerFn } from '~/server/functions/servers';
 import { scheduleEditFormSchema, type ScheduleEditFormDto } from '~/validators/schedules';
 
 /**
@@ -42,7 +43,14 @@ interface ScheduleDetail {
   onlyWhenOnline: boolean;
   lastRunAt: Date | null;
   nextRunAt: Date | null;
-  tasks: { id: string; sequenceId: number; action: 'power' | 'command' | 'backup'; payload: string; timeOffset: number; continueOnFailure: boolean }[];
+  tasks: {
+    id: string;
+    sequenceId: number;
+    action: 'power' | 'command' | 'backup';
+    payload: string;
+    timeOffset: number;
+    continueOnFailure: boolean;
+  }[];
 }
 
 /** Task rows → the form's discriminated task union (payload cast is validated server-side). */
@@ -142,12 +150,12 @@ function ServerScheduleDetailPage() {
   });
 
   if (query.isPending) {
-    return <p className="text-sm text-muted-foreground">Chargement…</p>;
+    return <p className="text-muted-foreground text-sm">Chargement…</p>;
   }
   if (query.error || !query.data) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-destructive">
+        <p className="text-destructive text-sm">
           {query.error?.message ?? 'Planification introuvable'}
         </p>
         <Button
@@ -191,7 +199,7 @@ function ServerScheduleDetailPage() {
                   Active
                 </span>
               ) : (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium">
                   Inactive
                 </span>
               )}
@@ -214,7 +222,7 @@ function ServerScheduleDetailPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
+        <CardContent className="text-muted-foreground text-sm">
           Prochaine exécution :{' '}
           {schedule.isActive ? (schedule.nextRunAt?.toLocaleString('fr-FR') ?? '—') : '—'} ·
           Dernière exécution :{' '}
@@ -246,9 +254,8 @@ function ServerScheduleDetailPage() {
         <CardHeader>
           <CardTitle>Modifier la planification</CardTitle>
           <CardDescription>
-            Toute la liste de tâches est remplacée à l’enregistrement ;
-            l’expression cron est réévaluée et la prochaine exécution
-            recalculée.
+            Toute la liste de tâches est remplacée à l’enregistrement ; l’expression cron est
+            réévaluée et la prochaine exécution recalculée.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -266,7 +273,7 @@ function ServerScheduleDetailPage() {
               onSubmit={(value) => update.mutate(value)}
             />
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Tu n’as pas la permission de modifier cette planification.
             </p>
           )}

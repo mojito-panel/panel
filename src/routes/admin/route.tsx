@@ -1,8 +1,9 @@
 import { createFileRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router';
+
+import { AppShell } from '~/components/app-shell';
+import { AppSidebar } from '~/components/app-sidebar';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { AppSidebar } from '~/components/app-sidebar';
-import { AppShell } from '~/components/app-shell';
 import { hasAdminAreaAccess } from '~/lib/permissions';
 import { userServersList } from '~/lists/user-servers';
 
@@ -38,11 +39,7 @@ function AdminLayout() {
         <AppSidebar variant="admin" />
         <AppShell
           wide={wide}
-          header={
-            <span className="text-sm font-medium text-muted-foreground">
-              Administration
-            </span>
-          }
+          header={<span className="text-muted-foreground text-sm font-medium">Administration</span>}
         >
           <Outlet />
         </AppShell>

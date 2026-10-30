@@ -4,8 +4,10 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { isSshRemote } from '~/lib/ssh-key';
+
 import { manifestCoverPath } from '~/lib/registry-manifest';
+import { isSshRemote } from '~/lib/ssh-key';
+
 import { MAX_RECIPE_FILE_BYTES, RECIPE_FILE_PATTERN } from './registry-entries';
 
 const execFileAsync = promisify(execFile);
@@ -205,7 +207,10 @@ export async function readGitFile(
 }
 
 /** Runs `git <args>`, mapping failures to readable errors (registry.lastError). */
-async function gitExec(args: string[], env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
+async function gitExec(
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): Promise<{ stdout: string; stderr: string }> {
   try {
     return await execFileAsync('git', args, {
       timeout: CLONE_TIMEOUT_MS,
@@ -245,7 +250,8 @@ async function cloneRepository(
   await gitExec(
     [
       'clone',
-      '--depth', '1',
+      '--depth',
+      '1',
       '--single-branch',
       // No --branch = the repository's default branch (the remote HEAD).
       ...(branch ? ['--branch', branch] : []),
@@ -256,7 +262,10 @@ async function cloneRepository(
   );
 
   const { stdout: headSha } = await gitExec(['-C', dir, 'rev-parse', 'HEAD'], env);
-  const { stdout: branchName } = await gitExec(['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], env);
+  const { stdout: branchName } = await gitExec(
+    ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'],
+    env,
+  );
 
   return {
     headSha: headSha.trim(),

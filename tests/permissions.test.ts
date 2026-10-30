@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   statement,
   adminRole,
@@ -90,21 +91,19 @@ describe('can()', () => {
   it('requires ANY requested resource with the OR connector (AND within a resource)', () => {
     const subuser = subuserRole({ 'server.files': ['read'], 'server.console': ['read'] });
     // OR across resources — one authorized resource is enough
-    expect(
-      can(subuser, { 'server.files': ['write'], 'server.console': ['read'] }, 'OR'),
-    ).toBe(true);
+    expect(can(subuser, { 'server.files': ['write'], 'server.console': ['read'] }, 'OR')).toBe(
+      true,
+    );
     // No authorized resource at all
-    expect(
-      can(subuser, { 'server.files': ['write'], 'server.power': ['start'] }, 'OR'),
-    ).toBe(false);
+    expect(can(subuser, { 'server.files': ['write'], 'server.power': ['start'] }, 'OR')).toBe(
+      false,
+    );
     // Inside ONE resource, an array still means AND (better-auth semantics)
-    expect(
-      can(subuser, { 'server.files': ['read', 'write'] }, 'OR'),
-    ).toBe(false);
+    expect(can(subuser, { 'server.files': ['read', 'write'] }, 'OR')).toBe(false);
     // Object form — OR inside a single resource
-    expect(
-      can(subuser, { 'server.files': { actions: ['read', 'write'], connector: 'OR' } }),
-    ).toBe(true);
+    expect(can(subuser, { 'server.files': { actions: ['read', 'write'], connector: 'OR' } })).toBe(
+      true,
+    );
   });
 
   it('refuses requests on resources the role does not know', () => {
@@ -204,9 +203,7 @@ describe('subuserPermissionsSchema', () => {
     const valid = { 'server.files': ['read', 'write'] };
     expect(subuserPermissionsSchema.parse(valid)).toEqual(valid);
 
-    expect(() =>
-      subuserPermissionsSchema.parse({ 'server.files': ['read', 'hack'] }),
-    ).toThrow();
+    expect(() => subuserPermissionsSchema.parse({ 'server.files': ['read', 'hack'] })).toThrow();
     expect(() => subuserPermissionsSchema.parse({ 'server.hack': ['read'] })).toThrow();
     // Panel-level resources are NOT grantable to a sub-user
     expect(() => subuserPermissionsSchema.parse({ 'panel.nodes': ['create'] })).toThrow();
@@ -227,7 +224,14 @@ describe('toConsolePermissions()', () => {
         'server.files.read',
       ]).sort(),
     ).toEqual(
-      ['console.read', 'console.write', 'power.start', 'power.kill', 'variables.read', 'variables.write'].sort(),
+      [
+        'console.read',
+        'console.write',
+        'power.start',
+        'power.kill',
+        'variables.read',
+        'variables.write',
+      ].sort(),
     );
   });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import type { MailDriver, MailEncryption, SettingKey } from '~/lib/settings';
 import { MAIL_ENCRYPTIONS, MAIL_DRIVERS } from '~/lib/settings';
 

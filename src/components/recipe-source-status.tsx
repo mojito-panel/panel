@@ -9,7 +9,11 @@ import type { RecipeSourceStatus, RegistryEntryStatus } from '~/lib/recipe-sourc
 
 const STATUS_META: Record<
   RecipeSourceStatus | RegistryEntryStatus,
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }
+  {
+    label: string;
+    variant: 'default' | 'secondary' | 'destructive' | 'outline';
+    className?: string;
+  }
 > = {
   local: { label: 'Locale', variant: 'outline' },
   unchecked: { label: 'Non vérifiée', variant: 'outline' },

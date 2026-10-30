@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { serverNameField } from './server';
 
 /**
@@ -89,6 +90,4 @@ export const adminServerAllocationActionSchema = z.object({
   allocationId: z.string().min(1),
 });
 
-export type AdminServerAllocationActionDto = z.infer<
-  typeof adminServerAllocationActionSchema
->;
+export type AdminServerAllocationActionDto = z.infer<typeof adminServerAllocationActionSchema>;

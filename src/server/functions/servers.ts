@@ -1,21 +1,43 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
+
+import { validateVariableValue } from '~/contract';
 import { Node, Server, ServerUser, Allocation, Backup, Schedule } from '~/db/entities';
-import { userServersList } from '~/lists/user-servers';
-import { serverAllocationsList } from '~/lists/allocations';
-import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import type { ServerStatusDb } from '~/db/types';
+import { toConsolePermissions } from '~/lib/permissions';
+import { serverAllocationsList } from '~/lists/allocations';
+import { userServersList } from '~/lists/user-servers';
+import { listQueryBuilder, runListQuery } from '~/server/list/query';
+import { isHttpsScheme } from '~/validators/node';
 import {
-  requireUser,
-  requirePanelPermission,
-  HttpError,
-  loadServerForViewer,
-  loadServerWithPermission,
-  requireServerOwner,
-} from '../session';
-import { withOrmContext } from '../middleware';
+  createServerSchema,
+  updateServerVariablesSchema,
+  serverActionInputSchema,
+  sendCommandSchema,
+  serverDetailQuerySchema,
+  serverIdQuerySchema,
+  deleteServerSchema,
+  serverAllocationActionSchema,
+} from '~/validators/server';
+
 import { logActivity } from '../activity';
+import {
+  agentGetInstallStatus,
+  agentInstallServer,
+  agentSendCommand,
+  agentUpdateServerVariables,
+  AgentError,
+} from '../agent/client';
+import { decryptSecret } from '../crypto';
+import { signConsoleToken } from '../jwt';
+import { withOrmContext } from '../middleware';
+import { claimServerAllocation, releaseServerAllocation, promoteServerAllocation } from '../nodes';
 import { orm } from '../orm';
+import {
+  serverRecipeSnapshot,
+  recipeGraphUpdatedAt,
+  isRecipeSnapshotOutdated,
+} from '../recipe-snapshot';
 import {
   requireNodeOf,
   installServer,
@@ -28,37 +50,13 @@ import {
   secondaryPorts,
 } from '../servers';
 import {
-  claimServerAllocation,
-  releaseServerAllocation,
-  promoteServerAllocation,
-} from '../nodes';
-import {
-  serverRecipeSnapshot,
-  recipeGraphUpdatedAt,
-  isRecipeSnapshotOutdated,
-} from '../recipe-snapshot';
-import { signConsoleToken } from '../jwt';
-import { decryptSecret } from '../crypto';
-import { toConsolePermissions } from '~/lib/permissions';
-import {
-  agentGetInstallStatus,
-  agentInstallServer,
-  agentSendCommand,
-  agentUpdateServerVariables,
-  AgentError,
-} from '../agent/client';
-import { validateVariableValue } from '~/contract';
-import {
-  createServerSchema,
-  updateServerVariablesSchema,
-  serverActionInputSchema,
-  sendCommandSchema,
-  serverDetailQuerySchema,
-  serverIdQuerySchema,
-  deleteServerSchema,
-  serverAllocationActionSchema,
-} from '~/validators/server';
-import { isHttpsScheme } from '~/validators/node';
+  requireUser,
+  requirePanelPermission,
+  HttpError,
+  loadServerForViewer,
+  loadServerWithPermission,
+  requireServerOwner,
+} from '../session';
 
 /**
  * Visibility scope of the viewer on the server table: an admin sees every
@@ -70,13 +68,9 @@ async function viewerServerScope(user: { id: string; role: string }) {
   if (user.role === 'admin') return null;
   const grants = await em.find(ServerUser, { userId: user.id });
   return {
-    $or: [
-      { ownerId: user.id },
-      { id: { $in: grants.map((grant) => grant.serverId) } },
-    ],
+    $or: [{ ownerId: user.id }, { id: { $in: grants.map((grant) => grant.serverId) } }],
   };
 }
-
 
 /**
  * Server list of the signed-in user — filter/search/sort/pagination run in the
@@ -148,7 +142,13 @@ export const installServerFn = createServerFn({ method: 'POST' })
     // a user) — plain users never self-serve a server.
     const user = await requirePanelPermission({ 'panel.servers': ['create'] });
     const server = await installServer(data, user);
-    await logActivity({ event: 'server:install', description: `Serveur « ${server.name} » installé sur le node ${data.nodeId}`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { recipeId: data.recipeId } });
+    await logActivity({
+      event: 'server:install',
+      description: `Serveur « ${server.name} » installé sur le node ${data.nodeId}`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { recipeId: data.recipeId },
+    });
     return server;
   });
 
@@ -159,11 +159,9 @@ export const getInstallStatusFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.console': ['read'] },
-    );
+    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+      'server.console': ['read'],
+    });
     const node = await requireNodeOf(server);
 
     try {
@@ -213,11 +211,9 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.settings': ['update'] },
-    );
+    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+      'server.settings': ['update'],
+    });
 
     const node = await requireNodeOf(server);
     // The STORED snapshot — a retry never picks up recipe edits either.
@@ -244,7 +240,12 @@ export const retryInstallFn = createServerFn({ method: 'POST' })
       });
       server.status = 'installing';
       await em.flush();
-      await logActivity({ event: 'server:retry_install', description: `Nouvelle tentative d’installation de « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
+      await logActivity({
+        event: 'server:retry_install',
+        description: `Nouvelle tentative d’installation de « ${server.name} »`,
+        actor: { id: user.id, name: user.name, email: user.email },
+        server: { id: server.id, name: server.name },
+      });
       return { id: server.id, status: 'installing' };
     } catch (err) {
       server.status = 'install_failed';
@@ -368,11 +369,9 @@ export const serverActionFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.power': [data.action] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.power': [data.action],
+    });
 
     // Suspended guard, limits sync, agent call, status writeback and the
     // activity log all live in the shared service — the schedule runner
@@ -390,17 +389,20 @@ export const reinstallServerFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.settings': ['update'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.settings': ['update'],
+    });
 
     // The STORED snapshot is sent — a recipe updated in the panel never
     // impacts an installed server; the explicit "reload recipe" action is
     // the propagation path.
     const result = await reinstallServerFromPanel(server);
-    await logActivity({ event: 'server:reinstall', description: `Réinstallation de « ${server.name} » lancée`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
+    await logActivity({
+      event: 'server:reinstall',
+      description: `Réinstallation de « ${server.name} » lancée`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
     return { id: server.id, status: 'installing', message: result.message };
   });
 
@@ -411,11 +413,9 @@ export const reloadRecipeFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.settings': ['update'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.settings': ['update'],
+    });
 
     // Fresh snapshot: the current recipe row (app + resolved runtimes),
     // current variable values kept — defaults only fill newly declared
@@ -423,7 +423,12 @@ export const reloadRecipeFn = createServerFn({ method: 'POST' })
     // variables first, then reinstalls from the settings page — the
     // agent is not touched here at all.
     const snapshot = await refreshServerRecipeSnapshot(server);
-    await logActivity({ event: 'server:reload_recipe', description: `Recette de « ${server.name} » rechargée depuis sa dernière version`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
+    await logActivity({
+      event: 'server:reload_recipe',
+      description: `Recette de « ${server.name} » rechargée depuis sa dernière version`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
     return {
       id: server.id,
       status: server.status as ServerStatusDb,
@@ -439,11 +444,9 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.variables': ['update'] },
-    );
+    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+      'server.variables': ['update'],
+    });
 
     // The SNAPSHOT definitions (app + required runtimes merged) — editing
     // JAVA_VERSION on a Minecraft server works through the merged set.
@@ -495,7 +498,12 @@ export const updateServerVariablesFn = createServerFn({ method: 'POST' })
 
     server.variables = variables;
     await em.flush();
-    await logActivity({ event: 'server:variables', description: `Variables de « ${server.name} » mises à jour`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name } });
+    await logActivity({
+      event: 'server:variables',
+      description: `Variables de « ${server.name} » mises à jour`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+    });
 
     return { id: server.id, variables };
   });
@@ -507,11 +515,9 @@ export const sendCommandFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.console': ['command'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.console': ['command'],
+    });
     const node = await requireNodeOf(server);
 
     try {
@@ -609,18 +615,14 @@ function allocationPickerDto(allocation: {
  */
 export const listServerAllocationsFn = createServerFn({ method: 'POST' })
   .validator(
-    serverAllocationsList.querySchema.and(
-      serverAllocationActionSchema.pick({ serverId: true }),
-    ),
+    serverAllocationsList.querySchema.and(serverAllocationActionSchema.pick({ serverId: true })),
   )
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.network': ['read'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.network': ['read'],
+    });
     const em = orm.em;
 
     const qb = listQueryBuilder(em, Allocation, serverAllocationsList);
@@ -650,11 +652,9 @@ export const listServerFreeAllocationsFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.network': ['read'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.network': ['read'],
+    });
     const em = orm.em;
 
     const free = await em.find(Allocation, { nodeId: server.nodeId, serverId: null });
@@ -667,14 +667,18 @@ export const addServerAllocationFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.network': ['update'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.network': ['update'],
+    });
 
     const allocation = await claimServerAllocation(server, data.allocationId);
-    await logActivity({ event: 'server:allocation_add', description: `Allocation ${allocation.ip}:${allocation.port} ajoutée à « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'server:allocation_add',
+      description: `Allocation ${allocation.ip}:${allocation.port} ajoutée à « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });
 
@@ -687,14 +691,18 @@ export const removeServerAllocationFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.network': ['update'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.network': ['update'],
+    });
 
     const allocation = await releaseServerAllocation(server, data.allocationId);
-    await logActivity({ event: 'server:allocation_remove', description: `Allocation ${allocation.ip}:${allocation.port} retirée de « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'server:allocation_remove',
+      description: `Allocation ${allocation.ip}:${allocation.port} retirée de « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });
 
@@ -707,13 +715,17 @@ export const setPrimaryServerAllocationFn = createServerFn({ method: 'POST' })
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { server } = await loadServerWithPermission(
-      data.serverId,
-      user,
-      { 'server.network': ['update'] },
-    );
+    const { server } = await loadServerWithPermission(data.serverId, user, {
+      'server.network': ['update'],
+    });
 
     const allocation = await promoteServerAllocation(server, data.allocationId);
-    await logActivity({ event: 'server:allocation_primary', description: `Allocation ${allocation.ip}:${allocation.port} définie principale sur « ${server.name} »`, actor: { id: user.id, name: user.name, email: user.email }, server: { id: server.id, name: server.name }, properties: { allocationId: allocation.id } });
+    await logActivity({
+      event: 'server:allocation_primary',
+      description: `Allocation ${allocation.ip}:${allocation.port} définie principale sur « ${server.name} »`,
+      actor: { id: user.id, name: user.name, email: user.email },
+      server: { id: server.id, name: server.name },
+      properties: { allocationId: allocation.id },
+    });
     return { id: allocation.id };
   });

@@ -1,7 +1,8 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+
 import { RegisterForm } from '~/components/auth/register-form';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { signUp } from '~/lib/auth-client';
 import { getBrandingFn } from '~/server/functions/settings';
 import type { RegisterDto } from '~/validators/auth';
@@ -40,12 +41,11 @@ function RegisterPage() {
           <CardHeader>
             <CardTitle>Inscriptions désactivées</CardTitle>
             <CardDescription>
-              La création de compte public est actuellement fermée par un
-              administrateur du panel.
+              La création de compte public est actuellement fermée par un administrateur du panel.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Déjà un compte ?{' '}
               <Link to="/login" className="text-primary underline-offset-4 hover:underline">
                 Se connecter
@@ -72,11 +72,9 @@ function RegisterPage() {
             pending={mutation.isPending}
           />
 
-          {mutation.isError && (
-            <p className="text-sm text-destructive">{mutation.error.message}</p>
-          )}
+          {mutation.isError && <p className="text-destructive text-sm">{mutation.error.message}</p>}
 
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-center text-sm">
             Déjà un compte ?{' '}
             <Link to="/login" className="text-primary underline-offset-4 hover:underline">
               Se connecter

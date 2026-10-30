@@ -1,17 +1,25 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from '@tanstack/react-form';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
 import { ArrowLeft, Save } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { readFileFn, saveFileFn } from '~/server/functions/files';
-import { saveFileFormSchema } from '~/validators/files';
 import { ErrorState } from '~/components/error/error-state';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '~/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { Skeleton } from '~/components/ui/skeleton';
+import { readFileFn, saveFileFn } from '~/server/functions/files';
+import { saveFileFormSchema } from '~/validators/files';
+
 import { CodeEditor } from './code-editor';
 import { formatSize } from './format-size';
 
@@ -72,7 +80,7 @@ export function FileEditor({
           </CardDescription>
         </div>
         {query.data && (
-          <span className="shrink-0 text-xs text-muted-foreground">
+          <span className="text-muted-foreground shrink-0 text-xs">
             {formatSize(query.data.size)}
           </span>
         )}
@@ -172,7 +180,7 @@ function SaveFileForm({
             {pending ? 'Enregistrement…' : 'Enregistrer'}
           </Button>
         ) : (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Lecture seule — tu n’as pas la permission de modifier ce fichier.
           </p>
         )}
@@ -185,9 +193,10 @@ function SaveFileForm({
             ) : null
           }
         </form.Subscribe>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <p className="ml-auto text-xs text-muted-foreground">
-          Édition réservée aux fichiers texte (txt, ini, properties, yml, yaml, xml, json) — max 1 Mo
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        <p className="text-muted-foreground ml-auto text-xs">
+          Édition réservée aux fichiers texte (txt, ini, properties, yml, yaml, xml, json) — max 1
+          Mo
         </p>
       </CardFooter>
     </form>

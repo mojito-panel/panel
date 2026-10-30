@@ -9,8 +9,9 @@ import {
   type BrandingSettings,
   type SettingKey,
 } from '~/lib/settings';
-import { orm } from './orm';
+
 import { decryptSecret, encryptSecret } from './crypto';
+import { orm } from './orm';
 
 /**
  * Settings resolution service (server-only — like session.ts, a plain module

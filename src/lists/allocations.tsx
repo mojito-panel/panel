@@ -1,4 +1,5 @@
 import { Star, Trash2 } from 'lucide-react';
+
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
 import {
@@ -45,7 +46,7 @@ export interface ServerAllocationsContext {
 /** Chip shown on the primary allocation (source of SERVER_PORT / SERVER_IP). */
 function PrimaryChip() {
   return (
-    <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+    <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-xs">
       Principale
     </span>
   );
@@ -91,7 +92,7 @@ export const serverAllocationsList = defineList<ServerAllocationRow, ServerAlloc
             Définir principale
           </Button>
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-muted-foreground text-xs">—</span>
         ),
     },
     actions: {
@@ -238,8 +239,7 @@ export const nodeAllocationsList = defineList<NodeAllocationRow, NodeAllocations
       pinned: true,
       cell: (allocation, context) =>
         // A picker renders this list without a page — nothing to act on.
-        !context ? null :
-        allocation.serverId === null ? (
+        !context ? null : allocation.serverId === null ? (
           <div className="flex items-center justify-end gap-2">
             {context.servers.length > 0 && (
               <Select

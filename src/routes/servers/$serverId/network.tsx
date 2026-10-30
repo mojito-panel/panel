@@ -1,9 +1,24 @@
-import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
+import { useForm } from '@tanstack/react-form';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute, stripSearchParams, useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { useState } from 'react';
-import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
+
+import { ConfirmDialog } from '~/components/confirm-dialog';
+import { DataTable } from '~/components/data-table/data-table';
+import { Button } from '~/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { hasServerPermissions } from '~/lib/permissions';
+import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
+import { mergeQuery, type ListQuery } from '~/lists/define';
 import {
   getServerFn,
   listServerAllocationsFn,
@@ -13,26 +28,6 @@ import {
   setPrimaryServerAllocationFn,
 } from '~/server/functions/servers';
 import { serverAllocationActionSchema } from '~/validators/server';
-import { hasServerPermissions } from '~/lib/permissions';
-import { DataTable } from '~/components/data-table/data-table';
-import { mergeQuery, type ListQuery } from '~/lists/define';
-import { serverAllocationsList, type ServerAllocationRow } from '~/lists/allocations';
-import { Button } from '~/components/ui/button';
-import { ConfirmDialog } from '~/components/confirm-dialog';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '~/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
 
 export const Route = createFileRoute('/servers/$serverId/network')({
   // Same schema as the server function: the route validates the URL, the
@@ -85,8 +80,7 @@ function ServerNetworkPage() {
   };
 
   const add = useMutation({
-    mutationFn: (allocationId: string) =>
-      addAllocation({ data: { serverId, allocationId } }),
+    mutationFn: (allocationId: string) => addAllocation({ data: { serverId, allocationId } }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Allocation ajoutée');
@@ -95,8 +89,7 @@ function ServerNetworkPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (allocationId: string) =>
-      removeAllocation({ data: { serverId, allocationId } }),
+    mutationFn: (allocationId: string) => removeAllocation({ data: { serverId, allocationId } }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Allocation retirée — elle retourne dans le pool du node');
@@ -105,8 +98,7 @@ function ServerNetworkPage() {
   });
 
   const primary = useMutation({
-    mutationFn: (allocationId: string) =>
-      setPrimary({ data: { serverId, allocationId } }),
+    mutationFn: (allocationId: string) => setPrimary({ data: { serverId, allocationId } }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Allocation principale mise à jour — appliquée au prochain démarrage');
@@ -135,9 +127,8 @@ function ServerNetworkPage() {
         <CardHeader>
           <CardTitle>Allocations</CardTitle>
           <CardDescription>
-            Ports réseau affectés à ce serveur. L’allocation principale fournit
-            SERVER_PORT et SERVER_IP — un changement s’applique au prochain
-            démarrage.
+            Ports réseau affectés à ce serveur. L’allocation principale fournit SERVER_PORT et
+            SERVER_IP — un changement s’applique au prochain démarrage.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -165,8 +156,7 @@ function ServerNetworkPage() {
         <CardHeader>
           <CardTitle>Ajouter une allocation</CardTitle>
           <CardDescription>
-            Réclame un port libre dans le pool du node (Pelican : « Add
-            allocation »).
+            Réclame un port libre dans le pool du node (Pelican : « Add allocation »).
           </CardDescription>
         </CardHeader>
         {canEdit ? (
@@ -199,7 +189,7 @@ function ServerNetworkPage() {
                       </SelectContent>
                     </Select>
                     {field.state.meta.errors.length > 0 && (
-                      <p className="text-sm text-destructive">
+                      <p className="text-destructive text-sm">
                         {field.state.meta.errors[0]?.message}
                       </p>
                     )}
@@ -211,15 +201,15 @@ function ServerNetworkPage() {
               </Button>
             </form>
             {free.length === 0 && !freeQuery.isPending && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Aucune allocation libre sur ce node — un administrateur doit en
-                créer dans la page du node.
+              <p className="text-muted-foreground mt-2 text-sm">
+                Aucune allocation libre sur ce node — un administrateur doit en créer dans la page
+                du node.
               </p>
             )}
           </CardContent>
         ) : (
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Tu n’as pas la permission de modifier le réseau de ce serveur.
             </p>
           </CardContent>

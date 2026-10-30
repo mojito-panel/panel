@@ -1,10 +1,12 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { withOrmContext } from '../middleware';
-import { orm } from '../orm';
+
 import { User } from '~/db/entities';
 import { auth } from '~/lib/auth';
 import { usernameSchema } from '~/validators/auth';
+
+import { withOrmContext } from '../middleware';
+import { orm } from '../orm';
 import { HttpError } from '../session';
 
 /**
@@ -29,12 +31,10 @@ const FIRST_ADMIN_LOCK_KEY = 20261027;
 /** True while no account exists — fetched in __root.tsx's beforeLoad (SSR). */
 export const getSetupStatusFn = createServerFn({ method: 'GET' })
   .middleware([withOrmContext])
-  .handler(
-  async (): Promise<{ needsSetup: boolean }> => {
+  .handler(async (): Promise<{ needsSetup: boolean }> => {
     const count = await orm.em.count(User, {});
     return { needsSetup: count === 0 };
-  },
-);
+  });
 
 // ─── First admin creation ────────────────────────────────────────────────────
 

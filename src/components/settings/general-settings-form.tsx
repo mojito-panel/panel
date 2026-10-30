@@ -1,7 +1,10 @@
+import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useServerFn } from '@tanstack/react-start';
-import { useForm } from '@tanstack/react-form';
 import { toast } from 'sonner';
+
+import { Button } from '~/components/ui/button';
+import { Input } from '~/components/ui/input';
 import { updateGeneralSettingsFn } from '~/server/functions/settings';
 import {
   updateGeneralSettingsSchema,
@@ -9,8 +12,7 @@ import {
   type GeneralSettingsDto,
   type UpdateGeneralSettingsDto,
 } from '~/validators/settings';
-import { Button } from '~/components/ui/button';
-import { Input } from '~/components/ui/input';
+
 import { SettingFieldShell, SettingSwitchRow } from './fields';
 
 /**

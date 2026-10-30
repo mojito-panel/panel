@@ -1,4 +1,5 @@
 import { Plus } from 'lucide-react';
+
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -11,9 +12,10 @@ import {
 } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
+import { newVariableValue, type RecipeVariableValue } from '~/validators/recipe-editor';
+
 import { CollapseCard, FieldShell, ItemActions, TagsInput } from './fields';
 import type { RecipeForm } from './recipe-editor';
-import { newVariableValue, type RecipeVariableValue } from '~/validators/recipe-editor';
 
 /**
  * Tab « Variables » — Pelican's Egg Variables tab: collapsible cards
@@ -120,9 +122,7 @@ function VariableCard({
         <CollapseCard
           title={variable?.name || 'Nouvelle variable'}
           subtitle={variable?.env ? `{{${variable.env}}}` : undefined}
-          actions={
-            <ItemActions onMoveUp={onMoveUp} onMoveDown={onMoveDown} onRemove={onRemove} />
-          }
+          actions={<ItemActions onMoveUp={onMoveUp} onMoveDown={onMoveDown} onRemove={onRemove} />}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <form.Field name={v.name}>
@@ -227,9 +227,7 @@ function VariableCard({
                       value={String(defaultField.state.value)}
                       onChange={(e) =>
                         defaultField.handleChange(
-                          variable?.type === 'number'
-                            ? Number(e.target.value)
-                            : e.target.value,
+                          variable?.type === 'number' ? Number(e.target.value) : e.target.value,
                         )
                       }
                       onBlur={defaultField.handleBlur}

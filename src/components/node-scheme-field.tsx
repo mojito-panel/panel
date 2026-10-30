@@ -1,4 +1,5 @@
 import { cn } from 'cn';
+
 import { Button } from '~/components/ui/button';
 import type { NodeScheme } from '~/validators/node';
 
@@ -31,11 +32,7 @@ export function NodeSchemeField({
   disabled?: boolean;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-labelledby={id}
-      className="grid gap-2 sm:grid-cols-3"
-    >
+    <div role="radiogroup" aria-labelledby={id} className="grid gap-2 sm:grid-cols-3">
       {OPTIONS.map((option) => {
         const selected = value === option.value;
         return (

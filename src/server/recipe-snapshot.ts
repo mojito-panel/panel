@@ -2,11 +2,12 @@ import '@tanstack/react-start/server-only';
 import type { Recipe as RecipeContract, RecipeVariable } from '~/contract';
 import { Recipe } from '~/db/entities';
 import type { IServer } from '~/db/types';
-import { orm } from './orm';
-import { normalizeStoredRecipe } from '~/lib/stored-recipe';
 import { mergeVariableDefinitions } from '~/lib/recipe-merge';
-import { resolveRuntimeRecipes } from './runtimes';
+import { normalizeStoredRecipe } from '~/lib/stored-recipe';
+
+import { orm } from './orm';
 import { canonicalRecipeHash } from './registry-entries';
+import { resolveRuntimeRecipes } from './runtimes';
 
 /**
  * Per-server recipe snapshot (self-contained server side).
@@ -51,14 +52,14 @@ export async function buildRecipeSnapshot(
   const app = structuredClone(
     normalizeStoredRecipe((recipeJson ?? {}) as Record<string, unknown>),
   ) as RecipeContract;
-  const runtimes = (await resolveRuntimeRecipes(recipeJson)).map(
-    (runtime) => structuredClone(runtime),
+  const runtimes = (await resolveRuntimeRecipes(recipeJson)).map((runtime) =>
+    structuredClone(runtime),
   ) as Record<string, unknown>[];
 
   // The runtime recipes are normalized (v4) but still carry their own
   // variable declarations — the merge needs them before they leave.
   const runtimeVariables: RecipeVariable[][] = runtimes.map(
-    (runtime) => ((runtime.variables as RecipeVariable[] | undefined) ?? []),
+    (runtime) => (runtime.variables as RecipeVariable[] | undefined) ?? [],
   );
   const recipe = {
     ...app,
@@ -136,13 +137,15 @@ export async function recipeGraphHash(
   const slugs = await runtimeSlugs(recipeJson);
   const rows = slugs.length > 0 ? await em.find(Recipe, { slug: { $in: slugs } }) : [];
 
-  const app = normalizeStoredRecipe((recipeJson ?? {}) as Record<string, unknown>) as RecipeContract;
+  const app = normalizeStoredRecipe(
+    (recipeJson ?? {}) as Record<string, unknown>,
+  ) as RecipeContract;
   const runtimes = rows.map((row) => normalizeStoredRecipe(row.json as Record<string, unknown>));
   const recipe = {
     ...app,
     variables: mergeVariableDefinitions(
       app.variables ?? [],
-      runtimes.map((runtime) => ((runtime.variables as RecipeVariable[] | undefined) ?? [])),
+      runtimes.map((runtime) => (runtime.variables as RecipeVariable[] | undefined) ?? []),
     ),
   };
   return recipeGraphHashOf(recipe, runtimes);
@@ -196,9 +199,7 @@ export async function isRecipeSnapshotOutdated(
  * re-snapshotted, not served — the snapshot is what the agent installs
  * with, so a malformed one has to fail closed.
  */
-export function isServerRecipeSnapshot(
-  stored: unknown,
-): stored is ServerRecipeSnapshot {
+export function isServerRecipeSnapshot(stored: unknown): stored is ServerRecipeSnapshot {
   if (!stored || typeof stored !== 'object') return false;
   const document = stored as { recipe?: unknown; runtimes?: unknown };
   if (!document.recipe || typeof document.recipe !== 'object') return false;

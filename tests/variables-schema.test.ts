@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { makeUpdateServerVariablesSchema } from '../src/validators/server';
+
 import type { RecipeVariable } from '~/contract';
+
+import { makeUpdateServerVariablesSchema } from '../src/validators/server';
 
 /** Builds a recipe variable definition with sensible defaults. */
 const variable = (overrides: Partial<RecipeVariable> = {}): RecipeVariable => ({
   env: 'TEST_VAR',
   name: 'Test',
   type: 'string',
-  default_value: "default",
+  default_value: 'default',
   user_viewable: true,
   user_editable: true,
   sort: 0,
