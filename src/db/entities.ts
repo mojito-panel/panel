@@ -354,8 +354,8 @@ export const Backup = defineEntity({
 /**
  * Scheduled task chain of a server (Pelican "Schedules" tab): a cron
  * expression evaluated in the schedule's own timezone, plus an ordered
- * list of `schedule_task` rows (power actions / console commands with a
- * delay after the previous task).
+ * list of `schedule_task` rows (power actions / console commands / backups
+ * with a delay after the previous task).
  *
  * Trigger semantics mirror Pelican: `next_run_at` is COMPUTED AND
  * PERSISTED at write/claim time (never evaluated on the fly), the
@@ -405,7 +405,7 @@ export const ScheduleTask = defineEntity({
     scheduleId: p.string().fieldName('schedule_id'),
     /** Execution order within the chain — 1..n, renumbered on every edit. */
     sequenceId: p.integer().fieldName('sequence_id'),
-    /** 'power' (payload: start/stop/restart/kill) | 'command' (payload: the console line). */
+    /** 'power' (payload: start/stop/restart/kill) | 'command' (payload: the console line) | 'backup' (payload: ''). */
     action: p.string().length(16),
     payload: p.text(),
     /** Delay in seconds after the previous task (0-900). */

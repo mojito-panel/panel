@@ -355,11 +355,13 @@ export async function agentCreateBackup(
   node: INode,
   serverId: string,
   body: { backupId: string; include?: string[] },
+  options: { signal?: AbortSignal } = {},
 ): Promise<BackupOperationStatus> {
   return agentCall(node, `/servers/${serverId}/backups`, {
     method: 'POST',
     body,
     schema: backupOperationStatusSchema,
+    signal: options.signal,
   });
 }
 
@@ -368,9 +370,11 @@ export async function agentGetBackupStatus(
   node: INode,
   serverId: string,
   backupId: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<BackupOperationStatus> {
   return agentCall(node, `/servers/${serverId}/backups/${backupId}`, {
     schema: backupOperationStatusSchema,
+    signal: options.signal,
   });
 }
 

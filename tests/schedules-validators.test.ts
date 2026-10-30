@@ -75,6 +75,26 @@ describe('schedule validators', () => {
     expect(emptyCommand.success).toBe(false);
   });
 
+  it('accepts a backup task with an empty payload, rejects a payload on it', () => {
+    const ok = createScheduleSchema.safeParse({
+      ...BASE,
+      serverId: 's',
+      tasks: [
+        { action: 'power', payload: 'stop', timeOffset: 0, continueOnFailure: false },
+        { action: 'backup', payload: '', timeOffset: 30, continueOnFailure: true },
+        { action: 'power', payload: 'start', timeOffset: 60, continueOnFailure: false },
+      ],
+    });
+    expect(ok.success).toBe(true);
+
+    const withPayload = createScheduleSchema.safeParse({
+      ...BASE,
+      serverId: 's',
+      tasks: [{ action: 'backup', payload: 'full', timeOffset: 0, continueOnFailure: false }],
+    });
+    expect(withPayload.success).toBe(false);
+  });
+
   it('keeps isActive on the edit form and update wire schemas', () => {
     expect(scheduleEditFormSchema.safeParse(BASE).success).toBe(true);
 

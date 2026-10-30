@@ -42,26 +42,36 @@ interface ScheduleDetail {
   onlyWhenOnline: boolean;
   lastRunAt: Date | null;
   nextRunAt: Date | null;
-  tasks: { id: string; sequenceId: number; action: 'power' | 'command'; payload: string; timeOffset: number; continueOnFailure: boolean }[];
+  tasks: { id: string; sequenceId: number; action: 'power' | 'command' | 'backup'; payload: string; timeOffset: number; continueOnFailure: boolean }[];
 }
 
 /** Task rows → the form's discriminated task union (payload cast is validated server-side). */
 function toFormTasks(tasks: ScheduleDetail['tasks']): ScheduleEditFormDto['tasks'] {
-  return tasks.map((task) =>
-    task.action === 'power'
-      ? {
-          action: 'power',
-          payload: task.payload as 'start' | 'stop' | 'restart' | 'kill',
-          timeOffset: task.timeOffset,
-          continueOnFailure: task.continueOnFailure,
-        }
-      : {
-          action: 'command',
-          payload: task.payload,
-          timeOffset: task.timeOffset,
-          continueOnFailure: task.continueOnFailure,
-        },
-  );
+  return tasks.map((task) => {
+    if (task.action === 'power') {
+      return {
+        action: 'power' as const,
+        payload: task.payload as 'start' | 'stop' | 'restart' | 'kill',
+        timeOffset: task.timeOffset,
+        continueOnFailure: task.continueOnFailure,
+      };
+    }
+    if (task.action === 'backup') {
+      // A backup task stores an empty payload (the wire schema is a literal).
+      return {
+        action: 'backup' as const,
+        payload: '',
+        timeOffset: task.timeOffset,
+        continueOnFailure: task.continueOnFailure,
+      };
+    }
+    return {
+      action: 'command' as const,
+      payload: task.payload,
+      timeOffset: task.timeOffset,
+      continueOnFailure: task.continueOnFailure,
+    };
+  });
 }
 
 function ServerScheduleDetailPage() {

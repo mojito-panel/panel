@@ -6,7 +6,9 @@ import { isValidCron, isValidTimezone } from '~/lib/cron';
  *
  * The cron is a 5-field unix expression stored as ONE string (validated
  * by croner, previewed by `cronToHuman`); the timezone is per-schedule
- * (IANA) and evaluated at next-run computation time.
+ * (IANA) and evaluated at next-run computation time. Tasks are power
+ * actions, console commands or backups (a backup task carries no payload
+ * and WAITS for the archive before the next task fires).
  */
 
 /** Schedule name — free-form label (never interpolated into configs). */
@@ -53,6 +55,13 @@ export const scheduleTaskSchema = z.discriminatedUnion('action', [
       .trim()
       .min(1, 'La commande est vide')
       .max(191, 'La commande doit faire au plus 191 caractères'),
+    timeOffset: taskTimeOffsetField,
+    continueOnFailure: z.boolean(),
+  }),
+  z.object({
+    action: z.literal('backup'),
+    /** No payload — the archive contents come from the server's recipe snapshot. */
+    payload: z.literal(''),
     timeOffset: taskTimeOffsetField,
     continueOnFailure: z.boolean(),
   }),

@@ -2,22 +2,15 @@ import { z } from 'zod';
 import { createServerFn } from '@tanstack/react-start';
 import { withOrmContext } from '../middleware';
 import { Backup, Node } from '~/db/entities';
-import type { IBackup, INode } from '~/db/types';
-import type { BackupOperationStatus } from '~/contract';
+import type { IBackup } from '~/db/types';
 import { serverBackupsList } from '~/lists/backups';
 import { listQueryBuilder, runListQuery } from '~/server/list/query';
 import { requireUser, HttpError, loadServerWithPermission } from '../session';
 import { signBackupDownloadToken } from '../jwt';
 import { decryptSecret } from '../crypto';
 import { logActivity } from '../activity';
-import { serverRecipeSnapshot } from '../recipe-snapshot';
-import {
-  agentCreateBackup,
-  agentGetBackupStatus,
-  agentRestoreBackup,
-  agentDeleteBackup,
-  AgentError,
-} from '../agent/client';
+import { createBackup, syncActiveBackups, type BackupStatusDb } from '../backups';
+import { agentRestoreBackup, agentDeleteBackup, AgentError } from '../agent/client';
 import {
   createBackupSchema,
   restoreBackupSchema,
@@ -32,10 +25,6 @@ import { isHttpsScheme } from '~/validators/node';
  * The agent cannot call the panel back — the list query SYNCS the rows of
  * in-flight operations by polling the agent, exactly like install statuses.
  */
-
-type BackupStatusDb = 'pending' | 'running' | 'restoring' | 'completed' | 'failed';
-
-const ACTIVE_STATUSES: BackupStatusDb[] = ['pending', 'running', 'restoring'];
 
 function toDto(backup: IBackup) {
   return {
@@ -59,48 +48,6 @@ function agentHttpError(action: string, err: AgentError): HttpError {
     return new HttpError(err.statusCode, err.message);
   }
   return new HttpError(502, `${action} refusée par l'agent : ${err.message}`);
-}
-
-/**
- * Syncs every ACTIVE row with the agent's registry state. A 404 (agent
- * restarted, or the operation never started there) marks the row failed —
- * consistent with the "no frozen history" boot-restore philosophy. A
- * network failure leaves the row untouched (transient).
- */
-async function syncActiveBackups(
-  node: INode | null,
-  serverId: string,
-  rows: IBackup[],
-): Promise<void> {
-  const active = rows.filter((row) => ACTIVE_STATUSES.includes(row.status as BackupStatusDb));
-  if (active.length === 0 || !node) return;
-
-  for (const row of active) {
-    try {
-      const status = await agentGetBackupStatus(node, serverId, row.id);
-      applyOperationStatus(row, status);
-    } catch (err) {
-      if (err instanceof AgentError && err.statusCode === 404) {
-        row.status = 'failed';
-        row.error = 'Opération interrompue (agent redémarré ou injoignable)';
-        row.completedAt = new Date();
-      }
-      // Other errors (network…) — transient, the row stays as-is
-    }
-  }
-}
-
-/** Applies a polled agent status onto a panel row. */
-function applyOperationStatus(row: IBackup, status: BackupOperationStatus): void {
-  if (status.status === 'running') {
-    row.status = status.operation === 'restore' ? 'restoring' : 'running';
-    return;
-  }
-  row.status = status.status === 'completed' ? 'completed' : 'failed';
-  row.sizeBytes = status.sizeBytes || row.sizeBytes;
-  row.checksum = status.checksum ?? row.checksum;
-  row.error = status.error;
-  row.completedAt = status.finishedAt ? new Date(status.finishedAt) : new Date();
 }
 
 // ─── List (with in-flight status sync) ───────────────────────────────────────
@@ -131,8 +78,7 @@ export const listBackupsFn = createServerFn({ method: 'POST' })
 
     // Sync needs every ACTIVE row of the server, not just the requested page.
     const all = await em.find(Backup, { serverId: server.id });
-    const node = await em.findOne(Node, { id: server.nodeId });
-    await syncActiveBackups(node, server.id, all);
+    await syncActiveBackups(server, all);
     await em.flush();
 
     // `loadServerWithPermission` types its em loosely; the shared builder wants
@@ -157,68 +103,24 @@ export const listBackupsFn = createServerFn({ method: 'POST' })
     };
   });
 
-// ─── Creation (limit check → row → agent order) ───────────────────────────────
+// ─── Creation (service: limit check → row → agent order) ─────────────────────
 
 export const createBackupFn = createServerFn({ method: 'POST' })
   .validator(createBackupSchema)
   .middleware([withOrmContext])
   .handler(async ({ data }) => {
     const user = await requireUser();
-    const { em, server } = await loadServerWithPermission(data.serverId, user, {
+    const { server } = await loadServerWithPermission(data.serverId, user, {
       'server.backups': ['create'],
     });
 
-    // Pelican semantics: backup_limit counts the non-failed backups,
-    // 0 disables backups entirely
-    if (server.backupLimit <= 0) {
-      throw new HttpError(403, 'Les sauvegardes sont désactivées sur ce serveur');
-    }
-    const rows = await em.find(Backup, { serverId: server.id });
-    const activeCount = rows.filter((row) => row.status !== 'failed').length;
-    if (activeCount >= server.backupLimit) {
-      throw new HttpError(
-        409,
-        `Limite de sauvegardes atteinte (${server.backupLimit}) — supprime une ancienne sauvegarde`,
-      );
-    }
-
-    const node = await em.findOne(Node, { id: server.nodeId });
-    if (!node) throw new HttpError(500, 'Node introuvable');
-
-    // The recipe SNAPSHOT declares the archive contents (glob include
-    // patterns) — the stored document is what the agent installed, not the
-    // (possibly edited-since) live recipe row. When no snapshot exists,
-    // serverRecipeSnapshot backfills one from the recipe row: same result
-    // as the previous live-row read.
-    const snapshot = await serverRecipeSnapshot(server);
-    const include = snapshot.recipe.backup?.include;
-
-    const backup = em.create(Backup, {
-      serverId: server.id,
-      name: data.name?.trim() || `Sauvegarde du ${new Date().toLocaleString('fr-FR')}`,
-      status: 'pending',
-      sizeBytes: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    em.persist(backup);
-    const backupId = backup.id; // generated by the entity's onCreate
-    await em.flush();
-
+    // Policy (backup_limit), row + agent order live in the shared service —
+    // the schedules runner takes the same path for its `backup` tasks.
+    let backup: IBackup;
     try {
-      await agentCreateBackup(node, server.id, {
-        backupId,
-        include,
-      });
-      backup.status = 'running';
-      await em.flush();
+      backup = await createBackup(server, { name: data.name });
     } catch (err) {
-      // The agent refused the order — the row is pure noise, drop it
-      em.remove(backup);
-      await em.flush();
-      if (err instanceof AgentError) {
-        throw agentHttpError('Création', err);
-      }
+      if (err instanceof AgentError) throw agentHttpError('Création', err);
       throw err;
     }
 

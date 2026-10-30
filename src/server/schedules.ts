@@ -10,6 +10,7 @@ import { logActivity } from './activity';
 import { getQueue, startQueue } from './queue';
 import { executeServerAction, requireNodeOf } from './servers';
 import { agentGetServer, agentSendCommand } from './agent/client';
+import { BACKUP_MAX_WAIT_MS, createBackup, waitForBackupCompletion } from './backups';
 
 /**
  * Schedules service (Pelican "Schedules" parity, server-only):
@@ -42,15 +43,16 @@ const TICK_INTERVAL_MS = 30_000;
 
 /**
  * Longest a legitimate chain can run: 10 tasks × (900 s of offset + the
- * 30 s bound on each agent call) = 9300 s ≈ 2.6 h — the 3 h bound stays
- * above it, so the sweeper only releases DEAD claims.
+ * 30 s bound on each agent call + a `backup` task's wait for the archive,
+ * BACKUP_MAX_WAIT_MS) = 10 × 1530 s ≈ 4.3 h — the 5 h bound stays above
+ * it, so the sweeper only releases DEAD claims.
  */
-const STUCK_CHAIN_MS = 3 * 60 * 60 * 1000;
+const STUCK_CHAIN_MS = 5 * 60 * 60 * 1000;
 
 /**
  * Bound on every agent call the runner makes (online gate, power actions,
- * console commands) — a hung agent connection must never stall a task job
- * past its `expireInSeconds` window without a clean failure.
+ * console commands, backup ordering/polling) — a hung agent connection
+ * must never stall a task job without a clean failure.
  */
 const AGENT_CALL_TIMEOUT_MS = 30_000;
 
@@ -58,6 +60,10 @@ const AGENT_CALL_TIMEOUT_MS = 30_000;
  * Task job options — Pelican semantics: no retries (a failed task ends or
  * continues per `continue_on_failure`, it is never re-attempted), and a
  * bounded active window so a crashed handler expires instead of hanging.
+ * A `backup` task's handler may outlive `expireInSeconds` (it polls the
+ * archive up to BACKUP_MAX_WAIT_MS): the job then shows as expired, but
+ * the handler still queues the next task and the claim sweeper bounds the
+ * chain — no occurrence can double-fire.
  */
 const TASK_JOB_OPTIONS = { retryLimit: 0, expireInSeconds: 120 } as const;
 
@@ -69,7 +75,7 @@ interface ScheduleTaskJobData {
 
 /** A task as submitted by the create/update server functions (validated by the caller). */
 export interface ScheduleTaskInput {
-  action: 'power' | 'command';
+  action: 'power' | 'command' | 'backup';
   payload: string;
   timeOffset: number;
   continueOnFailure: boolean;
@@ -423,6 +429,23 @@ async function runScheduleTask(data: ScheduleTaskJobData): Promise<void> {
       await executeServerAction(server, task.payload as ServerAction, {
         signal: AbortSignal.timeout(AGENT_CALL_TIMEOUT_MS),
       });
+    } else if (task.action === 'backup') {
+      // stop → backup → start: the archive must be DONE before the next
+      // task fires, so this task waits out the operation (bounded by
+      // BACKUP_MAX_WAIT_MS — on timeout the task fails per
+      // continue_on_failure, but the backup itself keeps running on the
+      // agent and the backups list syncs the row).
+      const node = await requireNodeOf(server);
+      const backup = await createBackup(server, {
+        name: `Sauvegarde planifiée « ${schedule.name} »`.slice(0, 128),
+      });
+      await logActivity({
+        event: 'backup:create',
+        description: `Sauvegarde « ${backup.name} » créée par la planification « ${schedule.name} » sur « ${server.name} »`,
+        server: { id: server.id, name: server.name },
+        properties: { backupId: backup.id, scheduleId: schedule.id, trigger: 'schedule' },
+      });
+      await waitForBackupCompletion(node, server.id, backup);
     } else {
       const node = await requireNodeOf(server);
       await agentSendCommand(node, server.id, task.payload, {

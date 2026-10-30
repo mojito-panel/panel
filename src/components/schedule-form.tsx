@@ -138,18 +138,29 @@ function TaskRow({
                   <Label>Type</Label>
                   <Select
                     value={field.state.value}
-                    onValueChange={(next) => next !== null && field.handleChange(next)}
+                    onValueChange={(next) => {
+                      if (next === null) return;
+                      field.handleChange(next);
+                      // A backup task carries no payload — clear it so the
+                      // wire schema (payload literal '') validates.
+                      if (next === 'backup') form.setFieldValue(`${base}.payload`, '');
+                    }}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Type">
                         {(current: string | null) =>
-                          current === 'command' ? 'Commande' : 'Alimentation'
+                          current === 'command'
+                            ? 'Commande'
+                            : current === 'backup'
+                              ? 'Sauvegarde'
+                              : 'Alimentation'
                         }
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="power">Alimentation</SelectItem>
                       <SelectItem value="command">Commande</SelectItem>
+                      <SelectItem value="backup">Sauvegarde</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -183,6 +194,11 @@ function TaskRow({
                       </Select>
                       <FieldError errors={field.state.meta.errors} />
                     </div>
+                  ) : action === 'backup' ? (
+                    <p className="flex h-9 items-center text-sm text-muted-foreground">
+                      Sauvegarde du serveur (contenu défini par la recette) — attendue avant la
+                      tâche suivante.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       <Label>Commande console</Label>

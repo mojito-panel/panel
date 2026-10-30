@@ -21,9 +21,9 @@ import {
 
 /**
  * Schedules (≈ Pelican's "Schedules" tab): cron-triggered task chains
- * (power actions / console commands with delays). The runner, the claim
- * semantics and the pg-boss chain live in `src/server/schedules.ts` —
- * these handlers only resolve permissions and persist.
+ * (power actions / console commands / backups, with delays). The runner,
+ * the claim semantics and the pg-boss chain live in `src/server/schedules.ts`
+ * — these handlers only resolve permissions and persist.
  */
 
 /** Serializable task row of the detail payload (MikroORM Opt values normalized). */
@@ -31,7 +31,7 @@ function taskDto(task: Awaited<ReturnType<typeof findScheduleTasks>>[number]) {
   return {
     id: task.id,
     sequenceId: Number(task.sequenceId),
-    action: task.action as 'power' | 'command',
+    action: task.action as 'power' | 'command' | 'backup',
     payload: task.payload,
     timeOffset: Number(task.timeOffset ?? 0),
     continueOnFailure: Boolean(task.continueOnFailure),
